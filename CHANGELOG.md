@@ -6,6 +6,12 @@ All notable changes to Empy Studio are documented here.
 
 ### Added
 
+- transactional Plugin Package Manager
+- local, HTTP, HTTPS, file URL, and GitHub Release source resolution
+- versioned Plugin Store with inventory, locks, and transaction journals
+- install, upgrade, rollback, remove, list, and status operations
+- complete Package Manager CLI and end-to-end lifecycle test
+
 - stable Plugin SDK contracts and manifest validation
 - `.empy-plugin` artifact format with SHA-256 integrity records
 - metadata-only plugin discovery
