@@ -7,7 +7,7 @@ from typing import Any
 
 
 def run_command(item: dict[str, Any], cwd: str | None = None) -> dict[str, Any]:
-    result = subprocess.run(item["command"], cwd=cwd, text=True, capture_output=True, shell=True)
+    result = subprocess.run(item["command"], cwd=cwd, text=True, capture_output=True, shell=True, check=False)
     return {
         "id": item["id"],
         "type": "command",
