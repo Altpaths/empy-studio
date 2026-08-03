@@ -1,0 +1,12 @@
+{
+  "request_id": "REQ-001",
+  "text": "Add a responsive landing page and redesign login without changing authentication logic. Deliver a verified release.",
+  "write_scope": {
+    "frontend": [
+      "public/index.html",
+      "public/login.html",
+      "public/assets/product.css"
+    ],
+    "backend": []
+  }
+}

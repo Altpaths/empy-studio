@@ -1,0 +1,6 @@
+{
+  "project_id": "sample-finance-app",
+  "name": "Sample Finance App",
+  "status": "active",
+  "vault": ".empy/vault"
+}

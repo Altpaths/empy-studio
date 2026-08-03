@@ -1,0 +1,20 @@
+{
+  "cwd": ".",
+  "checks": [
+    {
+      "id": "python",
+      "type": "command",
+      "command": "python --version"
+    },
+    {
+      "id": "readme",
+      "type": "file",
+      "path": "README.md"
+    },
+    {
+      "id": "production_auth",
+      "type": "external",
+      "reason": "Requires the deployed application and production credentials"
+    }
+  ]
+}

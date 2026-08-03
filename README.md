@@ -1,0 +1,143 @@
+# Empy Studio
+
+**A lightweight operating layer for coding agents — from an incomplete project to a bounded, verified, synchronized release.**
+
+Empy Studio was created for a practical problem: giving a coding agent a half-finished project should not require repeating the full history, scanning the whole repository for every task, approving every small step, or manually merging disconnected outputs.
+
+Empy Studio keeps the durable context small and explicit:
+
+```text
+Project + Project Vault + Request
+                ↓
+        bounded task graph
+                ↓
+      scoped agent execution
+                ↓
+       verification and sync
+                ↓
+        complete release
+```
+
+## Why it exists
+
+Coding agents are capable, but project work becomes expensive and unreliable when context is repeatedly reconstructed. Common failure modes include:
+
+- repeated discovery and re-uploading;
+- unnecessary repository-wide scanning;
+- unrelated file changes;
+- parallel agents editing the same file;
+- UI implementation before visual decisions are locked;
+- tests reported without execution evidence;
+- patches that never become a synchronized release.
+
+Empy Studio addresses these failures with a small set of enforceable contracts.
+
+## What it provides
+
+- **Project Vault** — a persistent baseline, project map, decisions, and release history.
+- **Task orchestration** — dependency-aware tasks and execution waves.
+- **File ownership** — one write owner per file in each wave.
+- **Agent-neutral contracts** — usable with Codex or another coding-agent host.
+- **Quality gates** — design, security, QA, synchronization, and release checks.
+- **Runtime verification** — command, artifact, and external-check status tracking.
+- **Validated learning** — reusable patterns are promoted only after evidence.
+- **Complete delivery** — one synchronized release package by default.
+
+## Designed to stay small
+
+Empy Studio is intentionally not an all-purpose agent framework. A capability belongs in the core only when it measurably reduces:
+
+- token consumption;
+- repeated work;
+- delivery risk;
+- context reconstruction;
+- merge and release friction.
+
+Everything else should remain optional.
+
+## Quick start
+
+Requirements: Python 3.10+
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+pytest
+```
+
+Inspect the CLI:
+
+```bash
+empy --help
+```
+
+Create an execution plan:
+
+```bash
+empy plan   --project examples/project.json   --request examples/request.json
+```
+
+Merge validated learning:
+
+```bash
+empy learn   --graph examples/graph.json   --sprint examples/sprint.json
+```
+
+Run local and external-aware verification:
+
+```bash
+empy verify   --manifest examples/runtime-manifest.json
+```
+
+## How to use it with a coding agent
+
+Place Empy Studio's operating files in the project root or provide them to the primary coding-agent session. The primary agent should:
+
+1. load `EMPY.md` and `AGENTS.md`;
+2. create or load the Project Vault;
+3. produce one bounded plan;
+4. assign exact read and write scopes;
+5. collect handoffs;
+6. run verification;
+7. synchronize the project;
+8. deliver one complete release.
+
+The host executes model-driven work; Empy Studio controls scope, evidence, continuity, and release discipline.
+
+## Repository structure
+
+```text
+src/empy_studio/    Core orchestration, learning, verification, and CLI
+examples/           Minimal input examples
+tests/              Automated tests
+docs/               Architecture, setup, and threat model
+.github/            CI and contribution templates
+EMPY.md             Operating principles for humans and agents
+AGENTS.md            Agent execution contract
+```
+
+## Status
+
+**v0.1.0 — Developer Preview**
+
+The current release provides a working CLI, task-graph generation, ownership-conflict detection, evidence-backed learning, and runtime-aware verification. Public interfaces may evolve before v1.0.
+
+## Principles and documentation
+
+- [Operating principles](EMPY.md)
+- [Architecture](docs/architecture.md)
+- [Getting started](docs/getting-started.md)
+- [Threat model](docs/threat-model.md)
+- [Roadmap](ROADMAP.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
+
+## Author
+
+**Azadeh Sharifi**  
+[empy.ir](https://empy.ir)
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).

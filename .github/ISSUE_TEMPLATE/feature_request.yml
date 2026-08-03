@@ -1,0 +1,20 @@
+name: Feature request
+description: Propose a focused capability
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    attributes:
+      label: Problem
+      description: What concrete workflow or risk is not addressed?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Evidence and validation plan
+      description: How will we prove the feature improves a real project outcome?

@@ -1,0 +1,26 @@
+name: Bug report
+description: Report reproducible incorrect behavior
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: textarea
+    attributes:
+      label: Description
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproduction
+      description: Minimal commands, JSON inputs, and output.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Empy Studio version
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Environment
+      description: Python version and operating system.

@@ -1,0 +1,35 @@
+{
+  "sprint_id": "SPRINT-001",
+  "project_id": "sample-finance-app",
+  "lessons": [
+    {
+      "statement": "Significant UI work should lock visual direction before implementation.",
+      "scope": "global",
+      "validated": true,
+      "evidence_count": 2,
+      "tags": [
+        "ui",
+        "quality-gate"
+      ]
+    },
+    {
+      "statement": "Keep an immutable source archive as the project baseline.",
+      "scope": "global",
+      "validated": true,
+      "evidence_count": 2,
+      "tags": [
+        "vault",
+        "baseline"
+      ]
+    },
+    {
+      "statement": "Use navy for this project's primary brand color.",
+      "scope": "project",
+      "validated": true,
+      "evidence_count": 1,
+      "tags": [
+        "brand"
+      ]
+    }
+  ]
+}
