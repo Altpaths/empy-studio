@@ -1,0 +1,61 @@
+{
+  "capabilities": [
+    {
+      "capability_id": "engineering",
+      "weight": 1.0
+    },
+    {
+      "capability_id": "python",
+      "aliases": ["py"],
+      "implies": ["engineering"],
+      "weight": 2.0
+    },
+    {
+      "capability_id": "testing",
+      "requires": ["engineering"],
+      "weight": 1.5
+    }
+  ],
+  "agents": [
+    {
+      "agent_id": "generalist",
+      "name": "Generalist",
+      "capabilities": ["python", "testing"],
+      "adapter": "command"
+    },
+    {
+      "agent_id": "python-specialist",
+      "name": "Python Specialist",
+      "capabilities": ["python"],
+      "adapter": "command"
+    }
+  ],
+  "profiles": [
+    {
+      "agent_id": "generalist",
+      "capacity": 2,
+      "priority": 1,
+      "cost": 2.0,
+      "reliability": 0.95
+    },
+    {
+      "agent_id": "python-specialist",
+      "capacity": 1,
+      "priority": 2,
+      "cost": 1.0,
+      "reliability": 0.98
+    }
+  ],
+  "tasks": [
+    {
+      "task_id": "implement",
+      "title": "Implement Python module",
+      "required_capabilities": ["py"]
+    },
+    {
+      "task_id": "verify",
+      "title": "Implement and test",
+      "required_capabilities": ["python", "testing"]
+    }
+  ]
+}

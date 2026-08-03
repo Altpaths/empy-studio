@@ -52,5 +52,8 @@ class AgentRegistry:
         )
         return candidates[0]
 
+    def all(self) -> list[AgentSpec]:
+        return [self._agents[key] for key in sorted(self._agents)]
+
     def describe(self) -> list[dict[str, Any]]:
         return [asdict(self._agents[key]) for key in sorted(self._agents)]

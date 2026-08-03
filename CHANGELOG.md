@@ -6,6 +6,10 @@ All notable changes to Empy Studio are documented here.
 
 ### Added
 
+- Capability Graph and explainable Agent Scheduler
+- capability aliases, implications, and prerequisites
+- capacity, priority, reliability, and cost-aware ranking
+
 - host-neutral Multi-Agent Runtime
 - capability-based Agent Registry
 - dependency DAG, handoffs, retries, timeout, and failure propagation
@@ -31,6 +35,10 @@ All notable changes to Empy Studio are documented here.
 ## [0.1.0] — Developer Preview
 
 ### Added
+
+- Capability Graph and explainable Agent Scheduler
+- capability aliases, implications, and prerequisites
+- capacity, priority, reliability, and cost-aware ranking
 
 - host-neutral Multi-Agent Runtime
 - capability-based Agent Registry

@@ -11,6 +11,7 @@ from .agent_adapters import AgentAdapter
 from .agent_contracts import AgentInput, AgentOutput, RuntimeTask
 from .agent_memory import AgentMemoryStore
 from .agent_registry import AgentRegistry
+from .agent_scheduler import AgentScheduler
 from .execution_graph import execution_waves, validate_graph
 
 
@@ -22,11 +23,13 @@ class MultiAgentRuntime:
         adapters: dict[str, AgentAdapter],
         state_root: str | Path,
         memory_root: str | Path,
+        scheduler: AgentScheduler | None = None,
     ) -> None:
         self.registry = registry
         self.adapters = adapters
         self.state_root = Path(state_root)
         self.memory = AgentMemoryStore(memory_root)
+        self.scheduler = scheduler
 
     def _save(self, state: dict[str, Any]) -> None:
         self.state_root.mkdir(parents=True, exist_ok=True)
@@ -80,7 +83,12 @@ class MultiAgentRuntime:
                     continue
 
                 try:
-                    agent = self.registry.select(task)
+                    if self.scheduler is None:
+                        agent = self.registry.select(task)
+                        scheduling = None
+                    else:
+                        scheduling = self.scheduler.select(task, self.registry.all())
+                        agent = self.registry.get(scheduling.agent_id)
                 except (KeyError, ValueError) as exc:
                     task_state["status"] = "failed"
                     task_state["error"] = str(exc)
@@ -114,6 +122,8 @@ class MultiAgentRuntime:
 
                 task_state["status"] = "running"
                 task_state["agent_id"] = agent.agent_id
+                if scheduling is not None:
+                    task_state["scheduling"] = scheduling.to_dict()
                 task_state["wave"] = wave_index
                 self._save(state)
 

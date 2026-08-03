@@ -49,3 +49,5 @@ Features that do not reduce context, repeated work, risk, or delivery friction w
 - Agent memory and handoffs ✅
 - Plugin SDK
 - release synchronization and distribution
+
+- Capability Graph and Agent Scheduler ✅

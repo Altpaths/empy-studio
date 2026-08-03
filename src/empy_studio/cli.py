@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 
+from .capability_cli import build_schedule
 from .common import emit, load_json
 from .context import build_context
 from .done import evaluate_done
@@ -103,6 +104,22 @@ def build_parser() -> argparse.ArgumentParser:
     runtime_run.add_argument("--output-root", required=True)
     runtime_run.add_argument("--output")
 
+
+    capabilities_parser = sub.add_parser(
+        "capabilities",
+        help="Plan agent assignment from a capability graph",
+    )
+    capabilities_sub = capabilities_parser.add_subparsers(
+        dest="capabilities_command",
+        required=True,
+    )
+    capabilities_plan = capabilities_sub.add_parser(
+        "plan",
+        help="Score and select agents for manifest tasks",
+    )
+    capabilities_plan.add_argument("--manifest", required=True)
+    capabilities_plan.add_argument("--output")
+
     return parser
 
 
@@ -124,6 +141,8 @@ def main() -> None:
             ),
             args.output,
         )
+    elif args.command == "capabilities" and args.capabilities_command == "plan":
+        emit(build_schedule(args.manifest), args.output)
     elif args.command == "runtime" and args.runtime_command == "run":
         emit(run_manifest(args.manifest, args.output_root), args.output)
     elif args.command == "verify":
