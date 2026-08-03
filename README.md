@@ -34,7 +34,7 @@ Empy Studio addresses these failures with a small set of enforceable contracts.
 
 ## What it provides
 
-- **Project Vault** — a persistent baseline, project map, decisions, and release history.
+- **Project Vault** — a working persistent baseline with source snapshot, manifest, decisions, tickets, and release history.
 - **Task orchestration** — dependency-aware tasks and execution waves.
 - **File ownership** — one write owner per file in each wave.
 - **Agent-neutral contracts** — usable with Codex or another coding-agent host.
@@ -70,6 +70,16 @@ Inspect the CLI:
 
 ```bash
 empy --help
+```
+
+Create a persistent Project Vault:
+
+```bash
+empy vault init \
+  --project-root /path/to/project \
+  --vault /path/to/empy-vaults/project-id \
+  --project-id project-id \
+  --name "Project Name"
 ```
 
 Create an execution plan:
@@ -127,6 +137,7 @@ The current release provides a working CLI, task-graph generation, ownership-con
 
 - [Operating principles](EMPY.md)
 - [Architecture](docs/architecture.md)
+- [Project Vault](docs/project-vault.md)
 - [Getting started](docs/getting-started.md)
 - [Threat model](docs/threat-model.md)
 - [Roadmap](ROADMAP.md)

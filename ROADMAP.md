@@ -11,13 +11,19 @@ Empy Studio follows a narrow roadmap: make agent-assisted product delivery easie
 - agent-neutral CLI
 - operating and contribution contracts
 
-## v0.2 — Project Vault workflow
+## v0.2 — Project continuity and delivery
 
-- vault initialization
-- baseline manifest
-- project map generation
-- durable decision and release records
+### Completed
+
+- Project Vault initialization
+- baseline source snapshot and file manifest
+- durable identity, decision, ticket, and release records
+- Vault status verification
+
+### Next
+
 - context-package generation for worker agents
+- synchronized release builder
 
 ## v0.3 — Release workflow
 

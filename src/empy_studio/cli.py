@@ -6,6 +6,7 @@ from .common import emit, load_json
 from .learning import merge
 from .orchestrator import create_plan
 from .verifier import verify
+from .vault import initialize_vault, vault_status
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -25,6 +26,22 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser = sub.add_parser("verify", help="Run local checks and preserve external checks as pending")
     verify_parser.add_argument("--manifest", required=True)
     verify_parser.add_argument("--output")
+
+    vault = sub.add_parser("vault", help="Create and inspect a persistent Project Vault")
+    vault_sub = vault.add_subparsers(dest="vault_command", required=True)
+
+    vault_init = vault_sub.add_parser("init", help="Create a Project Vault and baseline snapshot")
+    vault_init.add_argument("--project-root", required=True)
+    vault_init.add_argument("--vault", required=True)
+    vault_init.add_argument("--project-id", required=True)
+    vault_init.add_argument("--name", required=True)
+    vault_init.add_argument("--no-snapshot", action="store_true")
+    vault_init.add_argument("--force", action="store_true")
+    vault_init.add_argument("--output")
+
+    vault_status_parser = vault_sub.add_parser("status", help="Inspect a Project Vault")
+    vault_status_parser.add_argument("--vault", required=True)
+    vault_status_parser.add_argument("--output")
     return parser
 
 
@@ -34,8 +51,22 @@ def main() -> None:
         emit(create_plan(load_json(args.project), load_json(args.request)), args.output)
     elif args.command == "learn":
         emit(merge(load_json(args.graph), load_json(args.sprint)), args.output)
-    else:
+    elif args.command == "verify":
         emit(verify(load_json(args.manifest)), args.output)
+    elif args.vault_command == "init":
+        emit(
+            initialize_vault(
+                project_root=args.project_root,
+                vault_root=args.vault,
+                project_id=args.project_id,
+                project_name=args.name,
+                snapshot=not args.no_snapshot,
+                force=args.force,
+            ),
+            args.output,
+        )
+    else:
+        emit(vault_status(args.vault), args.output)
 
 
 if __name__ == "__main__":
