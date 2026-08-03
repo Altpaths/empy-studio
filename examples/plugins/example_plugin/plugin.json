@@ -1,0 +1,17 @@
+{
+  "plugin_id": "example-plugin",
+  "name": "Empy Example Plugin",
+  "version": "1.0.0",
+  "empy_requires": ">=0.1.0",
+  "entrypoint": "example_plugin:Plugin",
+  "hooks": [
+    "agent",
+    "adapter",
+    "validator",
+    "context_provider"
+  ],
+  "description": "Reference implementation of all Plugin SDK hooks.",
+  "capabilities": [
+    "example"
+  ]
+}

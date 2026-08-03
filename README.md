@@ -179,6 +179,23 @@ empy capabilities plan --manifest examples/capabilities.json
 The scheduler integrates with the Multi-Agent Runtime and records why each
 agent was selected.
 
+## Plugin SDK
+
+Empy Studio plugins are provider-independent `.empy-plugin` artifacts with:
+
+- validated manifests and compatibility requirements;
+- SHA-256 integrity records;
+- optional signature metadata;
+- metadata-only discovery;
+- isolated loading;
+- atomic runtime-hook registration.
+
+```bash
+empy plugin inspect   --package example-plugin.empy-plugin   --empy-version 1.0.0
+```
+
+See `docs/plugin-sdk.md` for the complete architecture and contract.
+
 ## Status
 
 **v0.1.0 — Developer Preview**

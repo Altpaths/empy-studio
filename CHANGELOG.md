@@ -6,6 +6,13 @@ All notable changes to Empy Studio are documented here.
 
 ### Added
 
+- stable Plugin SDK contracts and manifest validation
+- `.empy-plugin` artifact format with SHA-256 integrity records
+- metadata-only plugin discovery
+- isolated plugin loading
+- atomic agent, adapter, validator, and context-provider registration
+- sample plugin and Plugin CLI commands
+
 - Capability Graph and explainable Agent Scheduler
 - capability aliases, implications, and prerequisites
 - capacity, priority, reliability, and cost-aware ranking

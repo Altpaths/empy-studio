@@ -9,6 +9,11 @@ from .done import evaluate_done
 from .environment import bootstrap, doctor, validate
 from .learning import merge
 from .orchestrator import create_plan
+from .plugin_cli import (
+    discover_plugins,
+    inspect_plugin_package,
+    validate_installed_plugin,
+)
 from .release import build_release
 from .runtime_cli import run_manifest
 from .vault import initialize_vault, vault_status
@@ -120,6 +125,58 @@ def build_parser() -> argparse.ArgumentParser:
     capabilities_plan.add_argument("--manifest", required=True)
     capabilities_plan.add_argument("--output")
 
+    plugin_parser = sub.add_parser(
+        "plugin",
+        help="Discover, inspect, and validate Empy Studio plugins",
+    )
+    plugin_sub = plugin_parser.add_subparsers(
+        dest="plugin_command",
+        required=True,
+    )
+
+    plugin_discover = plugin_sub.add_parser(
+        "discover",
+        help="Discover installed plugins without importing code",
+    )
+    plugin_discover.add_argument(
+        "--root",
+        action="append",
+        required=True,
+    )
+    plugin_discover.add_argument(
+        "--empy-version",
+        required=True,
+    )
+    plugin_discover.add_argument("--output")
+
+    plugin_inspect = plugin_sub.add_parser(
+        "inspect",
+        help="Verify and inspect an .empy-plugin artifact",
+    )
+    plugin_inspect.add_argument(
+        "--package",
+        required=True,
+    )
+    plugin_inspect.add_argument(
+        "--empy-version",
+        required=True,
+    )
+    plugin_inspect.add_argument("--output")
+
+    plugin_validate = plugin_sub.add_parser(
+        "validate",
+        help="Validate an installed plugin directory",
+    )
+    plugin_validate.add_argument(
+        "--plugin-root",
+        required=True,
+    )
+    plugin_validate.add_argument(
+        "--empy-version",
+        required=True,
+    )
+    plugin_validate.add_argument("--output")
+
     return parser
 
 
@@ -145,6 +202,30 @@ def main() -> None:
         emit(build_schedule(args.manifest), args.output)
     elif args.command == "runtime" and args.runtime_command == "run":
         emit(run_manifest(args.manifest, args.output_root), args.output)
+    elif args.command == "plugin" and args.plugin_command == "discover":
+        emit(
+            discover_plugins(
+                args.root,
+                args.empy_version,
+            ),
+            args.output,
+        )
+    elif args.command == "plugin" and args.plugin_command == "inspect":
+        emit(
+            inspect_plugin_package(
+                args.package,
+                args.empy_version,
+            ),
+            args.output,
+        )
+    elif args.command == "plugin" and args.plugin_command == "validate":
+        emit(
+            validate_installed_plugin(
+                args.plugin_root,
+                args.empy_version,
+            ),
+            args.output,
+        )
     elif args.command == "verify":
         emit(verify(load_json(args.manifest)), args.output)
     elif args.command == "doctor":
