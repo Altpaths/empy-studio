@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 from empy_studio.learning import merge
@@ -170,3 +171,24 @@ def test_context_builder_respects_explicit_files(tmp_path: Path) -> None:
     )
     assert result["selected_files"][0]["path"] == "special.py"
     assert result["selected_files"][0]["reason"] == "explicit"
+
+
+def test_doctor_reports_python_and_repository(tmp_path: Path) -> None:
+    from empy_studio.environment import doctor
+
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+    result = doctor(tmp_path)
+    checks = {item["id"]: item for item in result["checks"]}
+    assert checks["python"]["status"] == "pass"
+    assert checks["git_repository"]["status"] == "pass"
+    assert result["health_score"] > 0
+
+
+def test_bootstrap_dry_run_selects_commands(tmp_path: Path) -> None:
+    from empy_studio.environment import bootstrap
+
+    result = bootstrap(tmp_path, dry_run=True, python_executable=sys.executable)
+    assert result["status"] == "planned"
+    assert result["commands"][0][1:3] == ["-m", "venv"]
+    assert result["commands"][-1][-2:] == ["-e", "."]

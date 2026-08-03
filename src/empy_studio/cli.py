@@ -4,6 +4,7 @@ import argparse
 
 from .common import emit, load_json
 from .context import build_context
+from .environment import bootstrap, doctor, validate
 from .learning import merge
 from .orchestrator import create_plan
 from .vault import initialize_vault, vault_status
@@ -11,7 +12,10 @@ from .verifier import verify
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="empy", description="Govern AI-assisted product development from request to verified release.")
+    parser = argparse.ArgumentParser(
+        prog="empy",
+        description="Govern AI-assisted product development from request to verified release.",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     plan = sub.add_parser("plan", help="Create a bounded multi-agent task graph")
@@ -53,6 +57,27 @@ def build_parser() -> argparse.ArgumentParser:
     context_build.add_argument("--max-bytes", type=int, default=64000)
     context_build.add_argument("--include", action="append", default=[])
     context_build.add_argument("--output")
+
+    doctor_parser = sub.add_parser("doctor", help="Inspect the local development environment")
+    doctor_parser.add_argument("--project-root", default=".")
+    doctor_parser.add_argument("--vault")
+    doctor_parser.add_argument("--output")
+
+    bootstrap_parser = sub.add_parser(
+        "bootstrap",
+        help="Create a compatible virtual environment and install Empy Studio",
+    )
+    bootstrap_parser.add_argument("--project-root", default=".")
+    bootstrap_parser.add_argument("--venv", default=".venv")
+    bootstrap_parser.add_argument("--dev", action="store_true")
+    bootstrap_parser.add_argument("--python")
+    bootstrap_parser.add_argument("--dry-run", action="store_true")
+    bootstrap_parser.add_argument("--output")
+
+    validate_parser = sub.add_parser("validate", help="Run Ruff, MyPy, and Pytest before delivery")
+    validate_parser.add_argument("--project-root", default=".")
+    validate_parser.add_argument("--fix", action="store_true")
+    validate_parser.add_argument("--output")
     return parser
 
 
@@ -64,6 +89,21 @@ def main() -> None:
         emit(merge(load_json(args.graph), load_json(args.sprint)), args.output)
     elif args.command == "verify":
         emit(verify(load_json(args.manifest)), args.output)
+    elif args.command == "doctor":
+        emit(doctor(args.project_root, args.vault), args.output)
+    elif args.command == "bootstrap":
+        emit(
+            bootstrap(
+                project_root=args.project_root,
+                venv_dir=args.venv,
+                include_dev=args.dev,
+                python_executable=args.python,
+                dry_run=args.dry_run,
+            ),
+            args.output,
+        )
+    elif args.command == "validate":
+        emit(validate(args.project_root, args.fix), args.output)
     elif args.command == "vault" and args.vault_command == "init":
         emit(
             initialize_vault(

@@ -6,6 +6,10 @@ All notable changes to Empy Studio are documented here.
 
 ### Added
 
+- Environment Doctor (`empy doctor`)
+- Bootstrap workflow (`empy bootstrap`)
+- Local quality validation (`empy validate`)
+
 - persistent Project Vault baseline and source snapshot
 - task-specific Context Builder with explicit byte budget and token estimate
 

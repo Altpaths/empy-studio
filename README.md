@@ -150,6 +150,7 @@ The current release provides a working CLI, task-graph generation, ownership-con
 - [Context Builder](docs/context-builder.md)
 - [Project Vault](docs/project-vault.md)
 - [Getting started](docs/getting-started.md)
+- [Environment setup](docs/environment.md)
 - [Threat model](docs/threat-model.md)
 - [Roadmap](ROADMAP.md)
 - [Contributing](CONTRIBUTING.md)
