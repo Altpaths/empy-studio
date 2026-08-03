@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 
 from .common import emit, load_json
+from .context import build_context
 from .learning import merge
 from .orchestrator import create_plan
 from .verifier import verify
@@ -42,6 +43,16 @@ def build_parser() -> argparse.ArgumentParser:
     vault_status_parser = vault_sub.add_parser("status", help="Inspect a Project Vault")
     vault_status_parser.add_argument("--vault", required=True)
     vault_status_parser.add_argument("--output")
+
+    context = sub.add_parser("context", help="Build a small, task-specific agent context package")
+    context_sub = context.add_subparsers(dest="context_command", required=True)
+    context_build = context_sub.add_parser("build", help="Select relevant files from a Project Vault")
+    context_build.add_argument("--vault", required=True)
+    context_build.add_argument("--request", required=True)
+    context_build.add_argument("--output-dir", required=True)
+    context_build.add_argument("--max-bytes", type=int, default=64000)
+    context_build.add_argument("--include", action="append", default=[])
+    context_build.add_argument("--output")
     return parser
 
 
@@ -53,7 +64,7 @@ def main() -> None:
         emit(merge(load_json(args.graph), load_json(args.sprint)), args.output)
     elif args.command == "verify":
         emit(verify(load_json(args.manifest)), args.output)
-    elif args.vault_command == "init":
+    elif args.command == "vault" and args.vault_command == "init":
         emit(
             initialize_vault(
                 project_root=args.project_root,
@@ -65,8 +76,19 @@ def main() -> None:
             ),
             args.output,
         )
-    else:
+    elif args.command == "vault":
         emit(vault_status(args.vault), args.output)
+    else:
+        emit(
+            build_context(
+                vault_root=args.vault,
+                request_path=args.request,
+                output_dir=args.output_dir,
+                max_bytes=args.max_bytes,
+                explicit_files=args.include,
+            ),
+            args.output,
+        )
 
 
 if __name__ == "__main__":

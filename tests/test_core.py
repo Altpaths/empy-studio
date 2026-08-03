@@ -95,3 +95,78 @@ def test_project_vault_rejects_invalid_project_id(tmp_path: Path) -> None:
             project_id="Bad Project ID",
             project_name="Bad",
         )
+
+
+def test_context_builder_selects_relevant_files_within_budget(tmp_path: Path) -> None:
+    import json
+
+    from empy_studio.context import build_context
+    from empy_studio.vault import initialize_vault
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "login.py").write_text("def login():\n    return True\n", encoding="utf-8")
+    (project / "payments.py").write_text("def charge():\n    return True\n", encoding="utf-8")
+    (project / "README.md").write_text("sample project\n", encoding="utf-8")
+
+    vault = tmp_path / "vault"
+    initialize_vault(
+        project_root=project,
+        vault_root=vault,
+        project_id="context-demo",
+        project_name="Context Demo",
+    )
+    request = tmp_path / "request.json"
+    request.write_text(
+        json.dumps({
+            "request_id": "REQ-CONTEXT-1",
+            "text": "Review the login flow",
+            "agent": "security",
+        }),
+        encoding="utf-8",
+    )
+
+    output = tmp_path / "context-package"
+    result = build_context(
+        vault_root=vault,
+        request_path=request,
+        output_dir=output,
+        max_bytes=4_096,
+    )
+
+    selected = [item["path"] for item in result["selected_files"]]
+    assert "login.py" in selected
+    assert (output / "files" / "login.py").exists()
+    assert (output / "CONTEXT.md").exists()
+    assert result["used_bytes"] <= 4_096
+    assert result["estimated_tokens"] > 0
+
+
+def test_context_builder_respects_explicit_files(tmp_path: Path) -> None:
+    import json
+
+    from empy_studio.context import build_context
+    from empy_studio.vault import initialize_vault
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "a.py").write_text("A = 1\n", encoding="utf-8")
+    (project / "special.py").write_text("SPECIAL = 1\n", encoding="utf-8")
+    vault = tmp_path / "vault"
+    initialize_vault(
+        project_root=project,
+        vault_root=vault,
+        project_id="explicit-demo",
+        project_name="Explicit Demo",
+    )
+    request = tmp_path / "request.json"
+    request.write_text(json.dumps({"request_id": "R2", "text": "Unrelated task"}), encoding="utf-8")
+
+    result = build_context(
+        vault_root=vault,
+        request_path=request,
+        output_dir=tmp_path / "context",
+        explicit_files=["special.py"],
+    )
+    assert result["selected_files"][0]["path"] == "special.py"
+    assert result["selected_files"][0]["reason"] == "explicit"

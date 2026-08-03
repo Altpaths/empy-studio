@@ -6,6 +6,9 @@ All notable changes to Empy Studio are documented here.
 
 ### Added
 
+- persistent Project Vault baseline and source snapshot
+- task-specific Context Builder with explicit byte budget and token estimate
+
 - executable Project Vault initialization and status commands
 - filtered baseline source snapshots
 - file manifests with SHA-256 checksums
@@ -14,6 +17,9 @@ All notable changes to Empy Studio are documented here.
 ## [0.1.0] — Developer Preview
 
 ### Added
+
+- persistent Project Vault baseline and source snapshot
+- task-specific Context Builder with explicit byte budget and token estimate
 
 - dependency-aware task planning
 - execution waves

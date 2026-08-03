@@ -22,7 +22,7 @@ Empy Studio follows a narrow roadmap: make agent-assisted product delivery easie
 
 ### Next
 
-- context-package generation for worker agents
+- context-package generation for worker agents ✅
 - synchronized release builder
 
 ## v0.3 — Release workflow

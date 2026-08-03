@@ -100,6 +100,16 @@ Run local and external-aware verification:
 empy verify   --manifest examples/runtime-manifest.json
 ```
 
+Build a compact context package:
+
+```bash
+empy context build \
+  --vault ./project_vaults/my-project \
+  --request ./request.json \
+  --output-dir ./context/worker-1 \
+  --max-bytes 64000
+```
+
 ## How to use it with a coding agent
 
 Place Empy Studio's operating files in the project root or provide them to the primary coding-agent session. The primary agent should:
@@ -137,6 +147,7 @@ The current release provides a working CLI, task-graph generation, ownership-con
 
 - [Operating principles](EMPY.md)
 - [Architecture](docs/architecture.md)
+- [Context Builder](docs/context-builder.md)
 - [Project Vault](docs/project-vault.md)
 - [Getting started](docs/getting-started.md)
 - [Threat model](docs/threat-model.md)
