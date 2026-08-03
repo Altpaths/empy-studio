@@ -41,3 +41,11 @@ Empy Studio follows a narrow roadmap: make agent-assisted product delivery easie
 - reliable upgrade and migration guidance
 
 Features that do not reduce context, repeated work, risk, or delivery friction will remain outside the core.
+
+## v1.0 runtime foundation
+
+- Multi-Agent Runtime ✅
+- Agent Registry and capability matching ✅
+- Agent memory and handoffs ✅
+- Plugin SDK
+- release synchronization and distribution

@@ -1,0 +1,49 @@
+{
+  "run_id": "example-runtime-run",
+  "shared_context": {
+    "product_goal": "Ship a verified example"
+  },
+  "adapters": {
+    "example-command": {
+      "command": [
+        "python3",
+        "examples/agents/pass_agent.py",
+        "{input}",
+        "{output}"
+      ]
+    }
+  },
+  "agents": [
+    {
+      "agent_id": "planner",
+      "name": "Planner",
+      "capabilities": ["planning", "scope"],
+      "adapter": "example-command",
+      "max_attempts": 2,
+      "timeout_seconds": 10
+    },
+    {
+      "agent_id": "builder",
+      "name": "Builder",
+      "capabilities": ["implementation", "testing"],
+      "adapter": "example-command",
+      "max_attempts": 1,
+      "timeout_seconds": 10
+    }
+  ],
+  "tasks": [
+    {
+      "task_id": "plan",
+      "title": "Create the bounded plan",
+      "required_capabilities": ["planning"],
+      "acceptance_criteria": ["Plan exists"]
+    },
+    {
+      "task_id": "build",
+      "title": "Implement and test",
+      "required_capabilities": ["implementation", "testing"],
+      "depends_on": ["plan"],
+      "acceptance_criteria": ["Implementation exists", "Tests pass"]
+    }
+  ]
+}

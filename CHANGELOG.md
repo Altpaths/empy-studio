@@ -6,6 +6,12 @@ All notable changes to Empy Studio are documented here.
 
 ### Added
 
+- host-neutral Multi-Agent Runtime
+- capability-based Agent Registry
+- dependency DAG, handoffs, retries, timeout, and failure propagation
+- persistent per-agent memory and run state
+- command adapter contract and runtime example
+
 - Definition of Done validation
 - synchronized Release Builder
 - versioned ZIP, manifest, SHA-256, and release notes
@@ -25,6 +31,12 @@ All notable changes to Empy Studio are documented here.
 ## [0.1.0] — Developer Preview
 
 ### Added
+
+- host-neutral Multi-Agent Runtime
+- capability-based Agent Registry
+- dependency DAG, handoffs, retries, timeout, and failure propagation
+- persistent per-agent memory and run state
+- command adapter contract and runtime example
 
 - Definition of Done validation
 - synchronized Release Builder
