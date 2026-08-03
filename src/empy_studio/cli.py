@@ -9,6 +9,7 @@ from .environment import bootstrap, doctor, validate
 from .learning import merge
 from .orchestrator import create_plan
 from .release import build_release
+from .runtime_cli import run_manifest
 from .vault import initialize_vault, vault_status
 from .verifier import verify
 
@@ -94,6 +95,14 @@ def build_parser() -> argparse.ArgumentParser:
     release_build_parser.add_argument("--skip-done-check", action="store_true")
     release_build_parser.add_argument("--output")
 
+
+    runtime_parser = sub.add_parser("runtime", help="Execute a host-neutral multi-agent run")
+    runtime_sub = runtime_parser.add_subparsers(dest="runtime_command", required=True)
+    runtime_run = runtime_sub.add_parser("run", help="Run agents from a JSON manifest")
+    runtime_run.add_argument("--manifest", required=True)
+    runtime_run.add_argument("--output-root", required=True)
+    runtime_run.add_argument("--output")
+
     return parser
 
 
@@ -115,6 +124,8 @@ def main() -> None:
             ),
             args.output,
         )
+    elif args.command == "runtime" and args.runtime_command == "run":
+        emit(run_manifest(args.manifest, args.output_root), args.output)
     elif args.command == "verify":
         emit(verify(load_json(args.manifest)), args.output)
     elif args.command == "doctor":

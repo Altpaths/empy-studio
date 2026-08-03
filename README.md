@@ -154,6 +154,19 @@ empy release build
 
 The builder creates a versioned ZIP, JSON manifest, SHA-256 checksum, and release notes. It does not create a Git tag or publish remotely without a separate explicit action.
 
+
+## Multi-Agent Runtime
+
+Run a dependency-aware set of bounded agents:
+
+```bash
+empy runtime run   --manifest examples/runtime.json   --output-root .empy-runtime
+```
+
+The runtime selects agents by capability, preserves task handoffs, isolates agent
+memory, applies retries and subprocess timeouts, and records complete run state.
+It remains provider-neutral: model execution is supplied through adapters.
+
 ## Status
 
 **v0.1.0 — Developer Preview**
