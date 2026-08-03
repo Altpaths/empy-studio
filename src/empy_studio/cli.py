@@ -12,6 +12,10 @@ from .codex_cli import (
 )
 from .common import emit, load_json
 from .context import build_context
+from .distribution_cli import (
+    register_distribution_parser,
+    run_distribution_command,
+)
 from .done import evaluate_done
 from .environment import bootstrap, doctor, validate
 from .learning import merge
@@ -373,6 +377,8 @@ def build_parser() -> argparse.ArgumentParser:
     codex_status.add_argument("--manifest", required=True)
     codex_status.add_argument("--output")
 
+    register_distribution_parser(sub)
+
     return parser
 
 
@@ -562,6 +568,11 @@ def main() -> None:
                 args.manifest,
                 args.artifact_index,
             ),
+            args.output,
+        )
+    elif args.command == "distribution":
+        emit(
+            run_distribution_command(args),
             args.output,
         )
     elif args.command == "verify":

@@ -103,3 +103,15 @@ The core is operational and tested. Public interfaces may change before v1.0.
 - added CI publication guard
 - added partial-publication rollback metadata
 - added Release Manager CLI and end-to-end tests
+
+### Distribution and Installer
+
+- added macOS ARM64 and x86_64 installers
+- added Linux ARM64 and x86_64 installers
+- added Windows x86_64 PowerShell installer
+- added environment and Python preflight
+- added SHA-256 package verification
+- added installer-state based uninstallers
+- added GitHub Release distribution synchronization
+- added direct download link maps preserving GitHub asset counters
+- added Distribution CLI and end-to-end tests

@@ -260,3 +260,14 @@ verification, latest-release policy, and rollback metadata.
 ```
 
 See `docs/release-manager-v1.md`.
+
+## Distribution and Installer
+
+Empy Studio generates verified standalone installers for macOS, Linux, and
+Windows, plus matching uninstallers and direct GitHub Release download maps.
+
+```bash
+./.venv/bin/empy distribution --help
+```
+
+See `docs/distribution-installer-v1.md`.
