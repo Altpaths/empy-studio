@@ -16,7 +16,7 @@ class AgentScheduleProfile:
     reliability: float = 1.0
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AgentScheduleProfile":
+    def from_dict(cls, data: dict[str, Any]) -> AgentScheduleProfile:
         return cls(
             agent_id=str(data["agent_id"]),
             capacity=max(1, int(data.get("capacity", 1))),

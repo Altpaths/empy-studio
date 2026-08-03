@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -14,7 +14,7 @@ class Capability:
     description: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Capability":
+    def from_dict(cls, data: dict[str, Any]) -> Capability:
         return cls(
             capability_id=str(data["capability_id"]),
             aliases=tuple(str(item) for item in data.get("aliases", [])),
