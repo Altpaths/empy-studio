@@ -79,3 +79,14 @@ All notable changes to Empy Studio are documented here.
 ### Status
 
 The core is operational and tested. Public interfaces may change before v1.0.
+
+### Codex Workflow Adapter
+
+- added bounded Codex task contracts and run manifests
+- added AGENTS.md and prompt materialization
+- added Codex environment diagnosis
+- added non-interactive `codex exec` adapter
+- added JSONL evidence preservation
+- added session resume and evidence indexing
+- added runtime dispatch, manual fallback, and CLI commands
+- added end-to-end lifecycle coverage
