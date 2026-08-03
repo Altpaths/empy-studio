@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-import tomllib  # type: ignore[import-untyped]
+import tomli as tomllib
 
 Severity = Literal[
     "info",
