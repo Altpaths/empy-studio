@@ -167,6 +167,18 @@ The runtime selects agents by capability, preserves task handoffs, isolates agen
 memory, applies retries and subprocess timeouts, and records complete run state.
 It remains provider-neutral: model execution is supplied through adapters.
 
+## Capability Graph
+
+Plan explainable agent assignments from aliases, prerequisites, capacity,
+priority, reliability, and cost:
+
+```bash
+empy capabilities plan --manifest examples/capabilities.json
+```
+
+The scheduler integrates with the Multi-Agent Runtime and records why each
+agent was selected.
+
 ## Status
 
 **v0.1.0 — Developer Preview**
