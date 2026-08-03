@@ -235,3 +235,15 @@ The current release provides a working CLI, task-graph generation, ownership-con
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+## Codex Workflow Adapter
+
+Empy Studio supports bounded, evidence-backed Codex workflows with
+materialized run instructions, environment diagnosis, non-interactive
+execution, resumable sessions, manual fallback, and CLI management.
+
+```bash
+./.venv/bin/empy codex --help
+```
+
+See `docs/codex-workflow-adapter-v1.md` for the complete architecture.

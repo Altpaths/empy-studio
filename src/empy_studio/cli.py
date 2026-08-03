@@ -3,6 +3,13 @@ from __future__ import annotations
 import argparse
 
 from .capability_cli import build_schedule
+from .codex_cli import (
+    codex_doctor_command,
+    codex_manual_command,
+    codex_resume_command,
+    codex_run_command,
+    codex_status_command,
+)
 from .common import emit, load_json
 from .context import build_context
 from .done import evaluate_done
@@ -236,6 +243,41 @@ def build_parser() -> argparse.ArgumentParser:
     plugin_status.add_argument("--store", required=True)
     plugin_status.add_argument("--output")
 
+    codex_parser = sub.add_parser(
+        "codex",
+        help="Diagnose and run bounded Codex workflows",
+    )
+    codex_sub = codex_parser.add_subparsers(
+        dest="codex_command",
+        required=True,
+    )
+
+    codex_doctor = codex_sub.add_parser("doctor")
+    codex_doctor.add_argument("--manifest", required=True)
+    codex_doctor.add_argument("--codex-executable", default="codex")
+    codex_doctor.add_argument("--output")
+
+    codex_run = codex_sub.add_parser("run")
+    codex_run.add_argument("--manifest", required=True)
+    codex_run.add_argument("--codex-executable", default="codex")
+    codex_run.add_argument("--no-manual-fallback", action="store_true")
+    codex_run.add_argument("--output")
+
+    codex_resume = codex_sub.add_parser("resume")
+    codex_resume.add_argument("--manifest", required=True)
+    codex_resume.add_argument("--prompt", required=True)
+    codex_resume.add_argument("--codex-executable", default="codex")
+    codex_resume.add_argument("--output")
+
+    codex_manual = codex_sub.add_parser("manual")
+    codex_manual.add_argument("--manifest", required=True)
+    codex_manual.add_argument("--reason", required=True)
+    codex_manual.add_argument("--output")
+
+    codex_status = codex_sub.add_parser("status")
+    codex_status.add_argument("--manifest", required=True)
+    codex_status.add_argument("--output")
+
     return parser
 
 
@@ -330,6 +372,45 @@ def main() -> None:
     elif args.command == "plugin" and args.plugin_command == "status":
         emit(
             plugin_status_command(args.store),
+            args.output,
+        )
+    elif args.command == "codex" and args.codex_command == "doctor":
+        emit(
+            codex_doctor_command(
+                args.manifest,
+                args.codex_executable,
+            ),
+            args.output,
+        )
+    elif args.command == "codex" and args.codex_command == "run":
+        emit(
+            codex_run_command(
+                args.manifest,
+                args.codex_executable,
+                args.no_manual_fallback,
+            ),
+            args.output,
+        )
+    elif args.command == "codex" and args.codex_command == "resume":
+        emit(
+            codex_resume_command(
+                args.manifest,
+                args.prompt,
+                args.codex_executable,
+            ),
+            args.output,
+        )
+    elif args.command == "codex" and args.codex_command == "manual":
+        emit(
+            codex_manual_command(
+                args.manifest,
+                args.reason,
+            ),
+            args.output,
+        )
+    elif args.command == "codex" and args.codex_command == "status":
+        emit(
+            codex_status_command(args.manifest),
             args.output,
         )
     elif args.command == "verify":
