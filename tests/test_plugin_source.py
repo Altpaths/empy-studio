@@ -5,7 +5,12 @@ import json
 import urllib.error
 from email.message import Message
 from pathlib import Path
-from typing import Any, Self
+from typing import Any
+
+try:
+    from typing import Self
+except ImportError:  # Python 3.10
+    from typing_extensions import Self
 
 import pytest
 
