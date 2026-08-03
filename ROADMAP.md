@@ -57,3 +57,5 @@ Features that do not reduce context, repeated work, risk, or delivery friction w
 - Plugin Package Manager ✅
 
 - Codex Workflow Adapter ✅
+
+- Release Manager + GitHub Release Sync ✅

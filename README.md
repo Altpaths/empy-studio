@@ -247,3 +247,16 @@ execution, resumable sessions, manual fallback, and CLI management.
 ```
 
 See `docs/codex-workflow-adapter-v1.md` for the complete architecture.
+
+## Release Manager
+
+Empy Studio includes a controlled Release Manager with Semantic Versioning,
+changelog validation, deterministic archives, Artifact Index and SHA-256,
+controlled tags, GitHub Actions guards, GitHub Release synchronization, asset
+verification, latest-release policy, and rollback metadata.
+
+```bash
+./.venv/bin/empy release --help
+```
+
+See `docs/release-manager-v1.md`.

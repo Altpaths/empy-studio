@@ -30,6 +30,13 @@ from .plugin_manager_cli import (
     upgrade_plugin_command,
 )
 from .release import build_release
+from .release_cli import (
+    release_build_command,
+    release_inspect_command,
+    release_publish_command,
+    release_tag_command,
+    release_validate_command,
+)
 from .runtime_cli import run_manifest
 from .vault import initialize_vault, vault_status
 from .verifier import verify
@@ -107,14 +114,102 @@ def build_parser() -> argparse.ArgumentParser:
     done_parser.add_argument("--project-root", default=".")
     done_parser.add_argument("--output")
 
-    release_parser = sub.add_parser("release", help="Build a verified release")
-    release_subparsers = release_parser.add_subparsers(dest="release_command", required=True)
-    release_build_parser = release_subparsers.add_parser("build", help="Build release artifacts")
-    release_build_parser.add_argument("--project-root", default=".")
-    release_build_parser.add_argument("--output-dir", default="releases")
-    release_build_parser.add_argument("--version")
-    release_build_parser.add_argument("--skip-done-check", action="store_true")
-    release_build_parser.add_argument("--output")
+    release_parser = sub.add_parser(
+        "release",
+        help="Build and publish controlled releases",
+    )
+    release_sub = release_parser.add_subparsers(
+        dest="release_command",
+        required=True,
+    )
+
+    release_validate = release_sub.add_parser("validate")
+    release_validate.add_argument("--manifest", required=True)
+    release_validate.add_argument("--changelog", required=True)
+    release_validate.add_argument("--output")
+
+    release_build = release_sub.add_parser("build")
+    release_build.add_argument("--manifest", required=True)
+    release_build.add_argument("--source-root", required=True)
+    release_build.add_argument(
+        "--include",
+        action="append",
+        required=True,
+    )
+    release_build.add_argument("--changelog", required=True)
+    release_build.add_argument("--output-dir", required=True)
+    release_build.add_argument("--output")
+
+    release_tag = release_sub.add_parser("tag")
+    release_tag.add_argument("--manifest", required=True)
+    release_tag.add_argument(
+        "--repository-root",
+        required=True,
+    )
+    release_tag.add_argument(
+        "--expected-branch",
+        default="main",
+    )
+    release_tag.add_argument("--push", action="store_true")
+    release_tag.add_argument("--remote", default="origin")
+    release_tag.add_argument("--output")
+
+    release_publish = release_sub.add_parser("publish")
+    release_publish.add_argument("--manifest", required=True)
+    release_publish.add_argument(
+        "--artifact-index",
+        required=True,
+    )
+    release_publish.add_argument(
+        "--release-notes",
+        required=True,
+    )
+    release_publish.add_argument(
+        "--repository-root",
+        required=True,
+    )
+    release_publish.add_argument(
+        "--repository",
+        required=True,
+    )
+    release_publish.add_argument(
+        "--token-env",
+        default="GITHUB_TOKEN",
+    )
+    release_publish.add_argument(
+        "--rollback-dir",
+        required=True,
+    )
+    release_publish.add_argument(
+        "--expected-branch",
+        default="main",
+    )
+    release_publish.add_argument(
+        "--workflow-name",
+        default="CI",
+    )
+    release_publish.add_argument(
+        "--target-commitish",
+        default="main",
+    )
+    release_publish.add_argument(
+        "--latest-strategy",
+        choices=("auto", "always", "never", "legacy"),
+        default="auto",
+    )
+    release_publish.add_argument(
+        "--draft",
+        action="store_true",
+    )
+    release_publish.add_argument("--output")
+
+    release_inspect = release_sub.add_parser("inspect")
+    release_inspect.add_argument("--manifest", required=True)
+    release_inspect.add_argument(
+        "--artifact-index",
+        required=True,
+    )
+    release_inspect.add_argument("--output")
 
 
     runtime_parser = sub.add_parser("runtime", help="Execute a host-neutral multi-agent run")
@@ -411,6 +506,62 @@ def main() -> None:
     elif args.command == "codex" and args.codex_command == "status":
         emit(
             codex_status_command(args.manifest),
+            args.output,
+        )
+    elif args.command == "release" and args.release_command == "validate":
+        emit(
+            release_validate_command(
+                args.manifest,
+                args.changelog,
+            ),
+            args.output,
+        )
+    elif args.command == "release" and args.release_command == "build":
+        emit(
+            release_build_command(
+                args.manifest,
+                args.source_root,
+                args.include,
+                args.changelog,
+                args.output_dir,
+            ),
+            args.output,
+        )
+    elif args.command == "release" and args.release_command == "tag":
+        emit(
+            release_tag_command(
+                args.manifest,
+                args.repository_root,
+                args.expected_branch,
+                args.push,
+                args.remote,
+            ),
+            args.output,
+        )
+    elif args.command == "release" and args.release_command == "publish":
+        emit(
+            release_publish_command(
+                args.manifest,
+                args.artifact_index,
+                args.release_notes,
+                args.repository_root,
+                args.repository,
+                args.token_env,
+                args.rollback_dir,
+                args.expected_branch,
+                args.workflow_name,
+                args.target_commitish,
+                args.latest_strategy,
+                args.draft,
+            ),
+            args.output,
+        )
+    elif args.command == "release" and args.release_command == "inspect":
+        emit(
+            release_inspect_command(
+                args.manifest,
+                args.artifact_index,
+            ),
             args.output,
         )
     elif args.command == "verify":
