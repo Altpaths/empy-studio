@@ -81,11 +81,11 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument("--fix", action="store_true")
     validate_parser.add_argument("--output")
 
-    done_parser = subparsers.add_parser("done", help="Evaluate the Definition of Done")
+    done_parser = sub.add_parser("done", help="Evaluate the Definition of Done")
     done_parser.add_argument("--project-root", default=".")
     done_parser.add_argument("--output")
 
-    release_parser = subparsers.add_parser("release", help="Build a verified release")
+    release_parser = sub.add_parser("release", help="Build a verified release")
     release_subparsers = release_parser.add_subparsers(dest="release_command", required=True)
     release_build_parser = release_subparsers.add_parser("build", help="Build release artifacts")
     release_build_parser.add_argument("--project-root", default=".")
