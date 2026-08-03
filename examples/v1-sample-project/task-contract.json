@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "task_id": "v1-sample-summary",
+  "title": "Create a controlled customer-request summary",
+  "objective": "Produce a concise structured summary from the supplied request.",
+  "constraints": [
+    "No network access",
+    "No modification outside the output directory",
+    "Do not invent facts absent from the request"
+  ],
+  "acceptance_criteria": [
+    "result.json exists",
+    "evidence.json exists",
+    "The result contains objective, constraints, and next_action",
+    "The evidence identifies all source files"
+  ]
+}

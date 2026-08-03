@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "task_id": "rc-real-project-scenario",
+  "title": "Generate controlled scenario evidence",
+  "objective": "Validate the Empy Studio runtime and evidence path.",
+  "constraints": [
+    "No network access",
+    "No modification outside the output directory",
+    "Produce result.json and evidence.json"
+  ],
+  "acceptance_criteria": [
+    "Runtime command exits successfully",
+    "Expected output files exist",
+    "Evidence report records the command"
+  ]
+}

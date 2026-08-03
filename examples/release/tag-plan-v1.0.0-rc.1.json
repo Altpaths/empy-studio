@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "repository_root": ".",
+  "branch": "release/v1.0.0-rc",
+  "commit_sha": "<exact-commit-sha>",
+  "candidate_version": "1.0.0-rc.1",
+  "candidate_tag": "v1.0.0-rc.1",
+  "stable_version": "1.0.0",
+  "stable_tag": "v1.0.0",
+  "annotated": true,
+  "push_remote": "origin",
+  "create_candidate_tag": true,
+  "create_stable_tag": false
+}

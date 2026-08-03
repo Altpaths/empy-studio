@@ -1,0 +1,9 @@
+{
+  "repository": "Altpaths/empy-studio",
+  "channel": "prerelease",
+  "candidate_path": "dist/release/release-candidate.json",
+  "tag_plan_path": "dist/release/tag-plan.json",
+  "asset_plan_path": "dist/release/release-assets.json",
+  "release_notes_path": "examples/release/release-notes-v1.0.0-rc.1.md",
+  "output_path": "dist/release/publication-plan.json"
+}

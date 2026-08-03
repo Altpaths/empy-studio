@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "run_id": "rc-real-project-scenario",
+  "tasks": [
+    {
+      "id": "generate-evidence",
+      "title": "Generate scenario evidence",
+      "capability": "documentation",
+      "input": {
+        "agents_file": "AGENTS.md",
+        "task_contract": "task-contract.json"
+      },
+      "expected_outputs": [
+        "result.json",
+        "evidence.json"
+      ]
+    }
+  ]
+}
