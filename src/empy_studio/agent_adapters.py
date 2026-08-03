@@ -80,7 +80,7 @@ class CommandAdapter:
             try:
                 data = json.loads(output_path.read_text(encoding="utf-8"))
                 if not isinstance(data, dict):
-                    raise ValueError("Output must be a JSON object")
+                    raise TypeError("Output must be a JSON object")
                 return AgentOutput.from_dict(data)
             except (json.JSONDecodeError, ValueError) as exc:
                 return AgentOutput(status="failed", error=f"Invalid agent output: {exc}")

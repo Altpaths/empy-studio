@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 TaskStatus = Literal["pending", "ready", "running", "passed", "failed", "blocked", "skipped"]
 
@@ -17,7 +17,7 @@ class AgentSpec:
     description: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AgentSpec":
+    def from_dict(cls, data: dict[str, Any]) -> AgentSpec:
         return cls(
             agent_id=str(data["agent_id"]),
             name=str(data.get("name", data["agent_id"])),
@@ -41,7 +41,7 @@ class RuntimeTask:
     failure_policy: Literal["stop", "continue", "block_dependents"] = "block_dependents"
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "RuntimeTask":
+    def from_dict(cls, data: dict[str, Any]) -> RuntimeTask:
         return cls(
             task_id=str(data["task_id"]),
             title=str(data.get("title", data["task_id"])),
@@ -83,12 +83,12 @@ class AgentOutput:
     error: str | None = None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AgentOutput":
+    def from_dict(cls, data: dict[str, Any]) -> AgentOutput:
         status = str(data.get("status", "failed"))
         if status not in {"passed", "failed"}:
             raise ValueError("Agent output status must be 'passed' or 'failed'")
         return cls(
-            status=status,
+            status=cast(Literal["passed", "failed"], status),
             result=dict(data.get("result", {})),
             evidence=list(data.get("evidence", [])),
             memory_updates=dict(data.get("memory_updates", {})),

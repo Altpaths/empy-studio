@@ -19,7 +19,7 @@ class AgentMemoryStore:
             return {"agent_id": agent_id, "revision": 0, "data": {}, "history": []}
         value = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
-            raise ValueError(f"Invalid memory file for agent {agent_id}")
+            raise TypeError(f"Invalid memory file for agent {agent_id}")
         return value
 
     def update(

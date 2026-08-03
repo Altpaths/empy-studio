@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -123,7 +122,7 @@ class MultiAgentRuntime:
                     started = time.monotonic()
                     try:
                         output = adapter.execute(payload, agent.timeout_seconds)
-                    except Exception as exc:  # Adapter boundary: preserve run state.
+                    except Exception as exc:  # noqa: BLE001 — adapter boundary preserves run state.
                         output = AgentOutput(status="failed", error=f"Adapter error: {exc}")
                     elapsed = round(time.monotonic() - started, 6)
                     task_state["attempts"].append({
@@ -169,5 +168,5 @@ class MultiAgentRuntime:
 def load_runtime_tasks(data: dict[str, Any]) -> list[RuntimeTask]:
     raw_tasks = data.get("tasks", [])
     if not isinstance(raw_tasks, list):
-        raise ValueError("'tasks' must be a list")
+        raise TypeError("'tasks' must be a list")
     return [RuntimeTask.from_dict(item) for item in raw_tasks]
