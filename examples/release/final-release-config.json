@@ -1,0 +1,14 @@
+{
+  "release_root": "dist/release",
+  "expected_outputs": [
+    "release-candidate-final.json",
+    "publication-handoff.json",
+    "final-release-report.json"
+  ],
+  "publication_policy": {
+    "execute_handoff_automatically": false,
+    "require_clean_working_tree": true,
+    "require_green_ci": true,
+    "require_exact_commit_sha": true
+  }
+}

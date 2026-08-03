@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "product": "Empy Studio",
+  "candidate_version": "1.0.0-rc.1",
+  "target_version": "1.0.0",
+  "branch": "release/v1.0.0-rc",
+  "commit_sha": null,
+  "gates": [
+    {
+      "name": "clean_environment",
+      "required": true,
+      "status": "pending",
+      "summary": "Release gate clean_environment has not been evaluated",
+      "evidence": []
+    }
+  ],
+  "metadata": {}
+}
