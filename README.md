@@ -196,6 +196,18 @@ empy plugin inspect   --package example-plugin.empy-plugin   --empy-version 1.0.
 
 See `docs/plugin-sdk.md` for the complete architecture and contract.
 
+## Plugin Package Manager
+
+Empy Studio installs verified `.empy-plugin` artifacts into a transactional,
+versioned Store with source resolution, upgrade, rollback, removal, listing,
+health inspection, and CLI management.
+
+```bash
+empy plugin install   --source example.empy-plugin   --store ~/.local/share/empy-studio/plugins   --empy-version 1.0.0
+```
+
+See `docs/plugin-package-manager-v1.md` for the complete architecture.
+
 ## Status
 
 **v0.1.0 — Developer Preview**

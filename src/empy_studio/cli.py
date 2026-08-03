@@ -14,6 +14,14 @@ from .plugin_cli import (
     inspect_plugin_package,
     validate_installed_plugin,
 )
+from .plugin_manager_cli import (
+    install_plugin_command,
+    list_plugins_command,
+    plugin_status_command,
+    remove_plugin_command,
+    rollback_plugin_command,
+    upgrade_plugin_command,
+)
 from .release import build_release
 from .runtime_cli import run_manifest
 from .vault import initialize_vault, vault_status
@@ -177,6 +185,57 @@ def build_parser() -> argparse.ArgumentParser:
     )
     plugin_validate.add_argument("--output")
 
+    plugin_install = plugin_sub.add_parser(
+        "install",
+        help="Install a verified plugin package",
+    )
+    plugin_install.add_argument("--source", required=True)
+    plugin_install.add_argument("--store", required=True)
+    plugin_install.add_argument("--empy-version", required=True)
+    plugin_install.add_argument("--output")
+
+    plugin_upgrade = plugin_sub.add_parser(
+        "upgrade",
+        help="Install and activate a newer plugin version",
+    )
+    plugin_upgrade.add_argument("--source", required=True)
+    plugin_upgrade.add_argument("--store", required=True)
+    plugin_upgrade.add_argument("--empy-version", required=True)
+    plugin_upgrade.add_argument("--output")
+
+    plugin_rollback = plugin_sub.add_parser(
+        "rollback",
+        help="Activate an already-installed plugin version",
+    )
+    plugin_rollback.add_argument("--plugin-id", required=True)
+    plugin_rollback.add_argument("--version", required=True)
+    plugin_rollback.add_argument("--store", required=True)
+    plugin_rollback.add_argument("--output")
+
+    plugin_remove = plugin_sub.add_parser(
+        "remove",
+        help="Remove a plugin or one installed version",
+    )
+    plugin_remove.add_argument("--plugin-id", required=True)
+    plugin_remove.add_argument("--version")
+    plugin_remove.add_argument("--replacement-version")
+    plugin_remove.add_argument("--store", required=True)
+    plugin_remove.add_argument("--output")
+
+    plugin_list = plugin_sub.add_parser(
+        "list",
+        help="List installed plugins and versions",
+    )
+    plugin_list.add_argument("--store", required=True)
+    plugin_list.add_argument("--output")
+
+    plugin_status = plugin_sub.add_parser(
+        "status",
+        help="Inspect Plugin Store health",
+    )
+    plugin_status.add_argument("--store", required=True)
+    plugin_status.add_argument("--output")
+
     return parser
 
 
@@ -224,6 +283,53 @@ def main() -> None:
                 args.plugin_root,
                 args.empy_version,
             ),
+            args.output,
+        )
+    elif args.command == "plugin" and args.plugin_command == "install":
+        emit(
+            install_plugin_command(
+                args.source,
+                args.store,
+                args.empy_version,
+            ),
+            args.output,
+        )
+    elif args.command == "plugin" and args.plugin_command == "upgrade":
+        emit(
+            upgrade_plugin_command(
+                args.source,
+                args.store,
+                args.empy_version,
+            ),
+            args.output,
+        )
+    elif args.command == "plugin" and args.plugin_command == "rollback":
+        emit(
+            rollback_plugin_command(
+                args.plugin_id,
+                args.version,
+                args.store,
+            ),
+            args.output,
+        )
+    elif args.command == "plugin" and args.plugin_command == "remove":
+        emit(
+            remove_plugin_command(
+                args.plugin_id,
+                args.store,
+                version=args.version,
+                replacement_version=args.replacement_version,
+            ),
+            args.output,
+        )
+    elif args.command == "plugin" and args.plugin_command == "list":
+        emit(
+            list_plugins_command(args.store),
+            args.output,
+        )
+    elif args.command == "plugin" and args.plugin_command == "status":
+        emit(
+            plugin_status_command(args.store),
             args.output,
         )
     elif args.command == "verify":

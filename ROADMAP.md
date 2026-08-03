@@ -53,3 +53,5 @@ Features that do not reduce context, repeated work, risk, or delivery friction w
 - Capability Graph and Agent Scheduler ✅
 
 - Plugin SDK ✅
+
+- Plugin Package Manager ✅
