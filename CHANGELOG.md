@@ -6,6 +6,10 @@ All notable changes to Empy Studio are documented here.
 
 ### Added
 
+- Definition of Done validation
+- synchronized Release Builder
+- versioned ZIP, manifest, SHA-256, and release notes
+
 - Environment Doctor (`empy doctor`)
 - Bootstrap workflow (`empy bootstrap`)
 - Local quality validation (`empy validate`)
@@ -21,6 +25,10 @@ All notable changes to Empy Studio are documented here.
 ## [0.1.0] — Developer Preview
 
 ### Added
+
+- Definition of Done validation
+- synchronized Release Builder
+- versioned ZIP, manifest, SHA-256, and release notes
 
 - persistent Project Vault baseline and source snapshot
 - task-specific Context Builder with explicit byte budget and token estimate

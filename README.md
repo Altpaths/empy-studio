@@ -137,6 +137,23 @@ EMPY.md             Operating principles for humans and agents
 AGENTS.md            Agent execution contract
 ```
 
+
+## Definition of Done and release building
+
+Evaluate completion criteria:
+
+```bash
+empy done
+```
+
+Build a synchronized release:
+
+```bash
+empy release build
+```
+
+The builder creates a versioned ZIP, JSON manifest, SHA-256 checksum, and release notes. It does not create a Git tag or publish remotely without a separate explicit action.
+
 ## Status
 
 **v0.1.0 — Developer Preview**

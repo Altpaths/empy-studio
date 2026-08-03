@@ -4,9 +4,11 @@ import argparse
 
 from .common import emit, load_json
 from .context import build_context
+from .done import evaluate_done
 from .environment import bootstrap, doctor, validate
 from .learning import merge
 from .orchestrator import create_plan
+from .release import build_release
 from .vault import initialize_vault, vault_status
 from .verifier import verify
 
@@ -78,6 +80,20 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument("--project-root", default=".")
     validate_parser.add_argument("--fix", action="store_true")
     validate_parser.add_argument("--output")
+
+    done_parser = subparsers.add_parser("done", help="Evaluate the Definition of Done")
+    done_parser.add_argument("--project-root", default=".")
+    done_parser.add_argument("--output")
+
+    release_parser = subparsers.add_parser("release", help="Build a verified release")
+    release_subparsers = release_parser.add_subparsers(dest="release_command", required=True)
+    release_build_parser = release_subparsers.add_parser("build", help="Build release artifacts")
+    release_build_parser.add_argument("--project-root", default=".")
+    release_build_parser.add_argument("--output-dir", default="releases")
+    release_build_parser.add_argument("--version")
+    release_build_parser.add_argument("--skip-done-check", action="store_true")
+    release_build_parser.add_argument("--output")
+
     return parser
 
 
@@ -87,6 +103,18 @@ def main() -> None:
         emit(create_plan(load_json(args.project), load_json(args.request)), args.output)
     elif args.command == "learn":
         emit(merge(load_json(args.graph), load_json(args.sprint)), args.output)
+    elif args.command == "done":
+        emit(evaluate_done(args.project_root), args.output)
+    elif args.command == "release" and args.release_command == "build":
+        emit(
+            build_release(
+                args.project_root,
+                output_dir=args.output_dir,
+                version=args.version,
+                skip_done_check=args.skip_done_check,
+            ),
+            args.output,
+        )
     elif args.command == "verify":
         emit(verify(load_json(args.manifest)), args.output)
     elif args.command == "doctor":
