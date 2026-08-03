@@ -6,8 +6,8 @@ from .common import emit, load_json
 from .context import build_context
 from .learning import merge
 from .orchestrator import create_plan
-from .verifier import verify
 from .vault import initialize_vault, vault_status
+from .verifier import verify
 
 
 def build_parser() -> argparse.ArgumentParser:
