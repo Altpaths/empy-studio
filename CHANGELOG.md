@@ -90,3 +90,16 @@ The core is operational and tested. Public interfaces may change before v1.0.
 - added session resume and evidence indexing
 - added runtime dispatch, manual fallback, and CLI commands
 - added end-to-end lifecycle coverage
+
+### Release Manager
+
+- added Semantic Version and Release Manifest contracts
+- added changelog validation
+- added deterministic release archive construction
+- added Artifact Index, SHA-256, size, and media-type verification
+- added controlled annotated Git tags
+- added GitHub Release creation and asset synchronization
+- added latest-release strategy
+- added CI publication guard
+- added partial-publication rollback metadata
+- added Release Manager CLI and end-to-end tests
