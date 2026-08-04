@@ -1,0 +1,29 @@
+{
+  "ticket": 14,
+  "title": "Verification Pipeline in UI",
+  "status": "complete",
+  "goal": "Run real project verification and display evidence inside the product.",
+  "implementation": [
+    "existing verifier-compatible command execution semantics",
+    "project-aware tests, build, and lint mapping",
+    "streamed stdout and stderr",
+    "persistent verification reports and evidence",
+    "Desktop Tests, Build, Lint, and Evidence panels",
+    "Finalize gate blocked by any verification failure"
+  ],
+  "deliverables": [
+    "Tests panel",
+    "Build panel",
+    "Lint panel",
+    "Evidence panel"
+  ],
+  "definition_of_done": {
+    "real_tests_execute": true,
+    "stdout_stderr_visible_in_ui": true,
+    "failure_blocks_finalize": true
+  },
+  "validation": {
+    "tests": "469 passed",
+    "compileall": "passed"
+  }
+}

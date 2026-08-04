@@ -1,5 +1,12 @@
 ## Unreleased
 
+### Ticket 14 — Verification Pipeline in UI
+
+- Added project-aware verification mapping for Python, Laravel, Node, Rust, Go, and explicit `.empy/verification.json` manifests.
+- Added streamed stdout and stderr for Tests, Build, and Lint panels inside Desktop.
+- Added durable verification reports and per-check evidence files.
+- Added a real Finalize gate that remains blocked until every verification check passes.
+
 ### Ticket 13 completion — Conflict UI
 
 - Added a dedicated Desktop Sync workspace for persisted Sync Reports.

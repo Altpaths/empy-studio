@@ -1,0 +1,8 @@
+{
+  "ticket": 14,
+  "title": "Verification Pipeline in UI",
+  "base_commit": "3a7ec8a",
+  "panels": ["Tests", "Build", "Lint", "Evidence"],
+  "gate": "Failure prevents Finalize",
+  "test_count": 469
+}

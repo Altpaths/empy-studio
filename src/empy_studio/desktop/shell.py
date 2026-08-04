@@ -43,6 +43,11 @@ from empy_studio.drivers import (
     DriverRegistry,
     default_driver_registry,
 )
+from empy_studio.verification_pipeline import (
+    VerificationEvent,
+    VerificationReport,
+    VerificationRuntime,
+)
 
 from .agent_dispatcher_workspace_adapter import (
     AgentDispatcherWorkspaceAdapter,
@@ -70,6 +75,11 @@ from .task_workspace_adapter import (
 from .token_budget_workspace_adapter import (
     TokenBudgetWorkspaceAdapter,
 )
+from .verification_controller import (
+    VerificationController,
+    VerificationControllerFailure,
+)
+from .verification_workspace_adapter import VerificationWorkspaceAdapter
 from .workspace_adapter import (
     DesktopWorkspaceAdapter,
 )
@@ -104,6 +114,11 @@ NAVIGATION = (
         description="Review sync reports and resolve file conflicts.",
     ),
     NavigationItem(
+        key="verification",
+        label="Verification",
+        description="Run tests, build, lint, and review evidence.",
+    ),
+    NavigationItem(
         key="settings",
         label="Settings",
         description="Workspace and driver settings.",
@@ -128,6 +143,8 @@ class EmpyDesktopShell:
         dispatcher_store: AgentDispatcherWorkspaceAdapter | None = None,
         execution_store: CodexExecutionWorkspaceAdapter | None = None,
         sync_store: SyncWorkspaceAdapter | None = None,
+        verification_store: VerificationWorkspaceAdapter | None = None,
+        verification_controller: VerificationController | None = None,
         driver_registry: DriverRegistry | None = None,
         driver_settings_store: DriverSettingsWorkspaceAdapter | None = None,
         driver_manager: DriverManager | None = None,
@@ -187,6 +204,10 @@ class EmpyDesktopShell:
             )
         )
         self.sync_store = sync_store or SyncWorkspaceAdapter(self.workspace_path)
+        self.verification_store = verification_store or VerificationWorkspaceAdapter(self.workspace_path)
+        self.verification_controller = verification_controller or VerificationController(
+            VerificationRuntime(), self.verification_store
+        )
         self.driver_registry = driver_registry or default_driver_registry()
         self.driver_settings_store = (
             driver_settings_store
@@ -220,6 +241,10 @@ class EmpyDesktopShell:
         self.current_run_graph: AgentRunGraph | None = None
         self.current_codex_run: CodexGraphExecution | None = None
         self.current_sync_id: str | None = None
+        self.current_verification: VerificationReport | None = None
+        self.verification_views: dict[str, tk.Text] = {}
+        self.verification_status_var: tk.StringVar | None = None
+        self.verification_finalize_button: ttk.Button | None = None
         self.selected_conflict_id: str | None = None
         self.sync_manual_view: tk.Text | None = None
         self.codex_status_var: tk.StringVar | None = None
@@ -416,6 +441,9 @@ class EmpyDesktopShell:
         self.codex_status_var = None
         self.codex_log_view = None
         self.codex_cancel_button = None
+        self.verification_views = {}
+        self.verification_status_var = None
+        self.verification_finalize_button = None
 
     def show_page(
         self,
@@ -433,6 +461,8 @@ class EmpyDesktopShell:
             self._render_sync_reports()
         elif key == "sync-detail":
             self._render_sync_detail()
+        elif key == "verification":
+            self._render_verification()
         elif key == "settings":
             self._render_driver_settings()
         elif key == "project-home":
@@ -2026,6 +2056,146 @@ class EmpyDesktopShell:
     def _open_codex_run(self, run: CodexGraphExecution) -> None:
         self.current_codex_run = run
         self.show_page("codex-run")
+
+
+    def _render_verification(self) -> None:
+        ttk.Label(self.page, text="Verification", style="Title.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            self.page,
+            text="Run the project-mapped tests, build, and lint commands. Stdout, stderr, and durable evidence stay visible inside Empy.",
+            style="Body.TLabel",
+            wraplength=840,
+        ).pack(anchor="w", pady=(0, 16))
+
+        controls = ttk.Frame(self.page, style="Content.TFrame")
+        controls.pack(fill="x", pady=(0, 12))
+        status = self.current_verification.status if self.current_verification is not None else "not run"
+        self.verification_status_var = tk.StringVar(value=f"Status: {status}")
+        ttk.Label(controls, textvariable=self.verification_status_var, style="CardTitle.TLabel").pack(side="left")
+        ttk.Button(
+            controls,
+            text="Run Verification",
+            style="Primary.TButton",
+            command=self._start_verification,
+        ).pack(side="right", padx=(8, 0))
+        self.verification_finalize_button = ttk.Button(
+            controls,
+            text="Finalize",
+            style="Secondary.TButton",
+            command=self._finalize_verification,
+        )
+        self.verification_finalize_button.pack(side="right")
+
+        notebook = ttk.Notebook(self.page)
+        notebook.pack(fill="both", expand=True)
+        for key, label in (("tests", "Tests"), ("build", "Build"), ("lint", "Lint"), ("evidence", "Evidence")):
+            frame = ttk.Frame(notebook, style="Content.TFrame", padding=8)
+            view = tk.Text(frame, wrap="word", borderwidth=1, relief="solid", font=("Menlo", 10))
+            view.pack(fill="both", expand=True)
+            notebook.add(frame, text=label)
+            self.verification_views[key] = view
+
+        report = self.current_verification
+        if report is None and self.current_project is not None:
+            reports = self.verification_store.list_reports(str(self.current_project.descriptor.root))
+            report = reports[0] if reports else None
+            self.current_verification = report
+        if report is not None:
+            self._display_verification_report(report)
+        else:
+            self.verification_views["evidence"].insert(
+                "end",
+                "No verification evidence is available for the selected project.\n",
+            )
+        self._update_finalize_state()
+
+    def _start_verification(self) -> None:
+        if self.current_project is None:
+            messagebox.showerror("Project required", "Open a project before running verification.")
+            return
+        if self.verification_controller.running:
+            return
+        self.current_verification = None
+        for view in self.verification_views.values():
+            view.delete("1.0", "end")
+        if self.verification_status_var is not None:
+            self.verification_status_var.set("Status: running")
+        self._update_finalize_state()
+        try:
+            self.verification_controller.start(self.current_project)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Unable to run verification", str(exc))
+            return
+        self.root.after(100, self._poll_verification)
+
+    def _poll_verification(self) -> None:
+        terminal = False
+        for message in self.verification_controller.drain():
+            if isinstance(message, VerificationEvent):
+                view = self.verification_views.get(message.category)
+                if view is not None:
+                    prefix = "STDERR" if message.stream == "stderr" else "STDOUT"
+                    view.insert("end", f"[{prefix}] {message.text}")
+                    view.see("end")
+            elif isinstance(message, VerificationReport):
+                terminal = True
+                self.current_verification = message
+                self._display_verification_report(message)
+                if self.verification_status_var is not None:
+                    self.verification_status_var.set(f"Status: {message.status}")
+                self._update_finalize_state()
+            elif isinstance(message, VerificationControllerFailure):
+                terminal = True
+                if self.verification_status_var is not None:
+                    self.verification_status_var.set("Status: failed")
+                self._update_finalize_state()
+                messagebox.showerror("Verification failed", message.message)
+        if self.verification_controller.running or not terminal:
+            self.root.after(100, self._poll_verification)
+
+    def _display_verification_report(self, report: VerificationReport) -> None:
+        for result in report.results:
+            view = self.verification_views.get(result.check.category)
+            if view is not None:
+                view.insert(
+                    "end",
+                    f"\n{result.check.label}: {result.status.upper()} (exit {result.returncode})\n",
+                )
+                view.see("end")
+        evidence = self.verification_views.get("evidence")
+        if evidence is not None:
+            evidence.delete("1.0", "end")
+            evidence.insert(
+                "end",
+                f"Verification ID: {report.verification_id}\n"
+                f"Project: {report.project_root}\n"
+                f"Status: {report.status}\n"
+                f"Finalize allowed: {report.finalize_allowed}\n"
+                f"Evidence path: {report.evidence_path}\n"
+                f"Finalized at: {report.finalized_at or 'not finalized'}\n",
+            )
+
+    def _update_finalize_state(self) -> None:
+        if self.verification_finalize_button is None:
+            return
+        allowed = self.current_verification is not None and self.current_verification.finalize_allowed
+        if allowed:
+            self.verification_finalize_button.state(["!disabled"])
+        else:
+            self.verification_finalize_button.state(["disabled"])
+
+    def _finalize_verification(self) -> None:
+        report = self.current_verification
+        if report is None:
+            return
+        try:
+            self.current_verification = self.verification_store.finalize(report.verification_id)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Finalize blocked", str(exc))
+            return
+        self._display_verification_report(self.current_verification)
+        self._update_finalize_state()
+        messagebox.showinfo("Verification finalized", "All verification gates passed and evidence was finalized.")
 
     def _render_runs(self) -> None:
         ttk.Label(

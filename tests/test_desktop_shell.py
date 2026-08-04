@@ -9,6 +9,7 @@ def test_desktop_navigation_contract() -> None:
         "projects",
         "runs",
         "sync",
+        "verification",
         "settings",
     )
 
@@ -66,3 +67,12 @@ def test_desktop_exposes_sync_conflict_ui() -> None:
     assert hasattr(EmpyDesktopShell, "_render_sync_detail")
     assert hasattr(EmpyDesktopShell, "_resolve_selected_conflict")
     assert hasattr(EmpyDesktopShell, "_apply_current_sync")
+
+
+def test_desktop_exposes_verification_pipeline_ui() -> None:
+    from empy_studio.desktop.shell import EmpyDesktopShell
+
+    assert "verification" in tuple(item.key for item in NAVIGATION)
+    assert hasattr(EmpyDesktopShell, "_render_verification")
+    assert hasattr(EmpyDesktopShell, "_start_verification")
+    assert hasattr(EmpyDesktopShell, "_finalize_verification")
