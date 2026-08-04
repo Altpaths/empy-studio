@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-04T19:42:00+00:00",
+  "product": "Empy Studio",
+  "master_plan_position": {
+    "phase": 4,
+    "ticket": 12,
+    "title": "Driver Abstraction & Settings",
+    "status": "implemented",
+    "next_ticket": 13
+  },
+  "dependency": {
+    "ticket": 11,
+    "title": "Codex Driver Productionization",
+    "required": true
+  },
+  "delivered": [
+    "provider-independent driver models in core",
+    "driver registry, factories, manager, and capability matrix",
+    "persisted default provider, enabled state, executable, and credential mode",
+    "desktop Driver Settings page",
+    "honest disabled and unavailable provider states",
+    "Codex adapter mapped into the generic inspection contract",
+    "registered but unimplemented Claude and Gemini provider slots"
+  ],
+  "definition_of_done": {
+    "core_imports_without_codex": "passed",
+    "driver_is_replaceable": "passed",
+    "unavailable_state_is_visible": "passed"
+  },
+  "explicitly_not_included": [
+    "Claude production execution",
+    "Gemini production execution",
+    "patch synchronization",
+    "conflict resolution",
+    "verification pipeline UI"
+  ],
+  "validation": {
+    "pytest_expected": "449 passed",
+    "compileall_expected": "passed",
+    "local_ci_gate": [
+      "ruff check .",
+      "mypy src",
+      "pytest -q",
+      "compileall -q src",
+      "git diff --check"
+    ]
+  }
+}

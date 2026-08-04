@@ -6,6 +6,11 @@ All notable changes to Empy Studio are documented here.
 
 ### Added
 
+- provider-neutral Driver Registry, Driver Manager, and persisted Driver Settings
+- desktop capability matrix with honest available, disabled, and unavailable states
+- replaceable default-provider selection without credential-secret persistence
+- registered Codex, Claude, and Gemini provider slots with Codex as the implemented runtime
+
 - production Codex CLI driver with installation and authentication preflight
 - non-interactive JSONL execution with per-node session and command evidence
 - dependency-ordered execution of approved Agent Run Graph nodes

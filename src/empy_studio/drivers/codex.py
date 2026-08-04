@@ -16,6 +16,7 @@ from empy_studio.core import (
     DriverCapabilities,
     DriverExecutionRequest,
     DriverExecutionResult,
+    DriverInspection,
     DriverStatus,
 )
 
@@ -171,12 +172,14 @@ class CodexDriver(BaseDriver):
         *,
         executable: str = "codex",
         artifact_root: str | Path | None = None,
+        enabled: bool = True,
         command_runner: CommandRunner | None = None,
         process_factory: ProcessFactory | None = None,
         monotonic: Clock = time.monotonic,
         sleep: Sleeper = time.sleep,
     ) -> None:
         self.requested_executable = executable
+        self.enabled = enabled
         self.artifact_root = (
             Path(artifact_root).expanduser().resolve()
             if artifact_root is not None
@@ -201,8 +204,12 @@ class CodexDriver(BaseDriver):
         self._installation: CodexInstallation | None = None
 
     @property
-    def name(self) -> str:
+    def provider_id(self) -> str:
         return "codex"
+
+    @property
+    def display_name(self) -> str:
+        return "Codex"
 
     def capabilities(self) -> DriverCapabilities:
         return DriverCapabilities(
@@ -216,7 +223,52 @@ class CodexDriver(BaseDriver):
     def status(self) -> DriverStatus:
         return self._status
 
+    def inspect(self, *, refresh: bool = False) -> DriverInspection:
+        if not self.enabled:
+            inspection = DriverInspection(
+                provider_id=self.provider_id,
+                display_name=self.display_name,
+                availability="disabled",
+                implemented=True,
+                enabled=False,
+                executable=self.requested_executable,
+                version=None,
+                authenticated=False,
+                message="Codex is disabled in Empy Studio settings.",
+                remediation="Enable Codex in Settings before running a graph.",
+            )
+            inspection.validate()
+            return inspection
+        installation = self.inspect_installation(refresh=refresh)
+        inspection = DriverInspection(
+            provider_id=self.provider_id,
+            display_name=self.display_name,
+            availability=installation.availability,
+            implemented=True,
+            enabled=True,
+            executable=installation.executable,
+            version=installation.version,
+            authenticated=installation.authenticated,
+            message=installation.message,
+            remediation=installation.remediation,
+        )
+        inspection.validate()
+        return inspection
+
     def inspect_installation(self, *, refresh: bool = False) -> CodexInstallation:
+        if not self.enabled:
+            installation = CodexInstallation(
+                availability="unavailable",
+                executable=self.requested_executable,
+                version=None,
+                authenticated=False,
+                message="Codex is disabled in Empy Studio settings.",
+                remediation="Enable Codex in Settings before running a graph.",
+            )
+            installation.validate()
+            self._installation = installation
+            self._status = "unavailable"
+            return installation
         if self._installation is not None and not refresh:
             return self._installation
 

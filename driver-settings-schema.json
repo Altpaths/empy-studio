@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Empy Studio Driver Settings",
+  "type": "object",
+  "required": ["schema_version", "default_provider", "providers"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "default_provider": {"type": "string", "minLength": 1},
+    "providers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "provider_id",
+          "enabled",
+          "executable",
+          "credential_mode",
+          "credential_environment_variable"
+        ],
+        "properties": {
+          "provider_id": {"type": "string", "minLength": 1},
+          "enabled": {"type": "boolean"},
+          "executable": {"type": ["string", "null"]},
+          "credential_mode": {
+            "enum": ["cli_login", "environment", "none"]
+          },
+          "credential_environment_variable": {
+            "type": ["string", "null"]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

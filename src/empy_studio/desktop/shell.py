@@ -14,6 +14,9 @@ from empy_studio.core import (
     BudgetPreset,
     ContextSelection,
     DefaultProjectService,
+    DriverConfiguration,
+    DriverInspection,
+    DriverSettings,
     ExecutionPlan,
     ProductTask,
     ProjectDescriptor,
@@ -36,6 +39,9 @@ from empy_studio.drivers import (
     CodexGraphExecution,
     CodexGraphRuntime,
     CodexProgressEvent,
+    DriverManager,
+    DriverRegistry,
+    default_driver_registry,
 )
 
 from .agent_dispatcher_workspace_adapter import (
@@ -50,6 +56,9 @@ from .codex_execution_workspace_adapter import (
 )
 from .context_workspace_adapter import (
     ContextWorkspaceAdapter,
+)
+from .driver_settings_workspace_adapter import (
+    DriverSettingsWorkspaceAdapter,
 )
 from .plan_workspace_adapter import (
     PlanWorkspaceAdapter,
@@ -97,7 +106,7 @@ NAVIGATION = (
 
 
 class EmpyDesktopShell:
-    """Desktop product shell through Ticket 11."""
+    """Desktop product shell through Ticket 12."""
 
     def __init__(
         self,
@@ -112,6 +121,9 @@ class EmpyDesktopShell:
         budget_store: TokenBudgetWorkspaceAdapter | None = None,
         dispatcher_store: AgentDispatcherWorkspaceAdapter | None = None,
         execution_store: CodexExecutionWorkspaceAdapter | None = None,
+        driver_registry: DriverRegistry | None = None,
+        driver_settings_store: DriverSettingsWorkspaceAdapter | None = None,
+        driver_manager: DriverManager | None = None,
         codex_driver: CodexDriver | None = None,
         execution_controller: CodexExecutionController | None = None,
     ) -> None:
@@ -167,19 +179,27 @@ class EmpyDesktopShell:
                 self.workspace_path
             )
         )
-        selected_driver = codex_driver or CodexDriver(
-            artifact_root=self.execution_store.run_root
-        )
-        self.execution_controller = (
-            execution_controller
-            or CodexExecutionController(
-                runtime=CodexGraphRuntime(
-                    driver=selected_driver,
-                    run_root=self.execution_store.run_root,
-                ),
-                store=self.execution_store,
+        self.driver_registry = driver_registry or default_driver_registry()
+        self.driver_settings_store = (
+            driver_settings_store
+            or DriverSettingsWorkspaceAdapter(
+                self.workspace_path,
+                self.driver_registry,
             )
         )
+        loaded_driver_settings = self.driver_settings_store.load()
+        self.driver_manager = (
+            driver_manager
+            or DriverManager(
+                registry=self.driver_registry,
+                settings=loaded_driver_settings,
+                artifact_root=self.execution_store.run_root,
+            )
+        )
+        self._injected_codex_driver = codex_driver
+        self._injected_execution_controller = execution_controller
+        self.execution_controller: CodexExecutionController | None = None
+        self._configure_selected_execution_controller()
         self.current_project: (
             ProjectDetection | None
         ) = None
@@ -195,12 +215,43 @@ class EmpyDesktopShell:
         self.codex_log_view: tk.Text | None = None
         self.codex_cancel_button: ttk.Button | None = None
         self.budget_preset_var: tk.StringVar | None = None
+        self.driver_default_var: tk.StringVar | None = None
+        self.driver_enabled_vars: dict[str, tk.BooleanVar] = {}
+        self.driver_executable_vars: dict[str, tk.StringVar] = {}
+        self.driver_status_labels: dict[str, ttk.Label] = {}
         self.selected_template: TaskKind = "custom"
 
         self._configure_window()
         self._configure_styles()
         self._build_layout()
         self.show_page("home")
+
+    def _configure_selected_execution_controller(self) -> None:
+        if self._injected_execution_controller is not None:
+            self.execution_controller = self._injected_execution_controller
+            return
+        selected_driver = (
+            self._injected_codex_driver
+            if self._injected_codex_driver is not None
+            else self.driver_manager.driver()
+        )
+        if not isinstance(selected_driver, CodexDriver):
+            self.execution_controller = None
+            return
+        self.execution_controller = CodexExecutionController(
+            runtime=CodexGraphRuntime(
+                driver=selected_driver,
+                run_root=self.execution_store.run_root,
+            ),
+            store=self.execution_store,
+        )
+
+    def _selected_driver_inspection(
+        self,
+        *,
+        refresh: bool = False,
+    ) -> DriverInspection:
+        return self.driver_manager.driver().inspect(refresh=refresh)
 
     def _configure_window(self) -> None:
         self.root.title("Empy Studio")
@@ -333,7 +384,7 @@ class EmpyDesktopShell:
         )
         ttk.Label(
             self.sidebar,
-            text="Ticket 11 · Codex Driver",
+            text="Ticket 12 · Driver Settings",
             style="SidebarCaption.TLabel",
         ).pack(anchor="w", padx=22)
 
@@ -368,12 +419,7 @@ class EmpyDesktopShell:
         elif key == "runs":
             self._render_runs()
         elif key == "settings":
-            self._render_placeholder(
-                title="Settings",
-                text=(
-                    "Multi-provider driver settings are planned for Ticket 12."
-                ),
-            )
+            self._render_driver_settings()
         elif key == "project-home":
             self._render_project_home()
         elif key == "task-intake":
@@ -1662,7 +1708,7 @@ class EmpyDesktopShell:
             ).pack(side="left")
         ttk.Button(
             run_controls,
-            text="Run Approved Graph with Codex",
+            text="Run Approved Graph",
             style="Primary.TButton",
             command=self._start_codex_run,
         ).pack(side="right")
@@ -1736,8 +1782,9 @@ class EmpyDesktopShell:
             self.page,
             text=(
                 f"{len(graph.protected_exclusions)} protected path(s) remain "
-                "outside every agent node. Codex runs only after explicit user "
-                "confirmation and stores progress, logs, session IDs, and mapped errors."
+                "outside every agent node. The selected driver runs only after "
+                "explicit user confirmation and stores progress, logs, session IDs, "
+                "and mapped errors when supported."
             ),
             style="Body.TLabel",
             wraplength=820,
@@ -1752,32 +1799,35 @@ class EmpyDesktopShell:
         ):
             messagebox.showerror(
                 "Run is not ready",
-                "Open an approved Agent Run Graph before starting Codex.",
-            )
-            return
-        if self.execution_controller.running:
-            messagebox.showinfo(
-                "Codex is already running",
-                "Wait for the active run to finish or cancel it from the Runs page.",
+                "Open an approved Agent Run Graph before starting a driver.",
             )
             return
 
-        installation = self.execution_controller.runtime.driver.inspect_installation(
-            refresh=True
-        )
-        if not installation.ready:
-            message = installation.message
-            if installation.remediation:
-                message = f"{message}\n\n{installation.remediation}"
-            messagebox.showerror("Codex is unavailable", message)
+        inspection = self._selected_driver_inspection(refresh=True)
+        controller = self.execution_controller
+        if controller is None or not inspection.ready:
+            message = inspection.message
+            if inspection.remediation:
+                message = f"{message}\n\n{inspection.remediation}"
+            messagebox.showerror(
+                f"{inspection.display_name} is unavailable",
+                message,
+            )
+            return
+        if controller.running:
+            messagebox.showinfo(
+                f"{inspection.display_name} is already running",
+                "Wait for the active run to finish or cancel it from Runs.",
+            )
             return
 
         confirmed = messagebox.askyesno(
-            "Run approved graph with Codex",
+            f"Run approved graph with {inspection.display_name}",
             (
-                f"Codex will execute {len(self.current_run_graph.nodes)} approved "
-                "node(s) in dependency order. It will not commit, push, merge, "
-                "tag, or publish. Continue?"
+                f"{inspection.display_name} will execute "
+                f"{len(self.current_run_graph.nodes)} approved node(s) in "
+                "dependency order. It will not commit, push, merge, tag, "
+                "or publish. Continue?"
             ),
         )
         if not confirmed:
@@ -1785,19 +1835,24 @@ class EmpyDesktopShell:
 
         self.current_codex_run = None
         try:
-            self.execution_controller.start(
+            controller.start(
                 graph=self.current_run_graph,
                 selection=self.current_context,
                 budget=self.current_budget,
                 project=self.current_project.descriptor,
             )
         except Exception as exc:  # noqa: BLE001
-            messagebox.showerror("Unable to start Codex", str(exc))
+            messagebox.showerror(
+                f"Unable to start {inspection.display_name}",
+                str(exc),
+            )
             return
         self.show_page("codex-run")
         self.root.after(150, self._poll_codex_execution)
 
     def _render_codex_run(self) -> None:
+        controller = self.execution_controller
+        running = controller is not None and controller.running
         ttk.Button(
             self.page,
             text="← Agent Run Graph",
@@ -1825,7 +1880,7 @@ class EmpyDesktopShell:
             self.current_codex_run.status
             if self.current_codex_run is not None
             else "running"
-            if self.execution_controller.running
+            if running
             else "not started"
         )
         self.codex_status_var = tk.StringVar(value=f"Status: {current_status}")
@@ -1841,7 +1896,7 @@ class EmpyDesktopShell:
             command=self._cancel_codex_run,
         )
         self.codex_cancel_button.pack(side="right")
-        if not self.execution_controller.running:
+        if not running:
             self.codex_cancel_button.state(["disabled"])
 
         log_frame = ttk.Frame(
@@ -1880,7 +1935,7 @@ class EmpyDesktopShell:
                     "end",
                     f"RUN ERROR: {self.current_codex_run.error_message}\n",
                 )
-        elif self.execution_controller.running:
+        elif running:
             self.codex_log_view.insert(
                 "end",
                 "Codex preflight passed. Waiting for the first execution event...\n",
@@ -1890,8 +1945,11 @@ class EmpyDesktopShell:
         self.codex_log_view.see("end")
 
     def _poll_codex_execution(self) -> None:
+        controller = self.execution_controller
+        if controller is None:
+            return
         terminal_received = False
-        for message in self.execution_controller.drain():
+        for message in controller.drain():
             if isinstance(message, CodexProgressEvent):
                 self._append_codex_event(message)
             elif isinstance(message, CodexGraphExecution):
@@ -1923,7 +1981,7 @@ class EmpyDesktopShell:
                     self.codex_cancel_button.state(["disabled"])
                 messagebox.showerror("Codex execution failed", message.message)
 
-        if self.execution_controller.running or not terminal_received:
+        if controller.running or not terminal_received:
             self.root.after(150, self._poll_codex_execution)
 
     def _append_codex_event(self, event: CodexProgressEvent) -> None:
@@ -1937,7 +1995,8 @@ class EmpyDesktopShell:
         self.codex_log_view.see("end")
 
     def _cancel_codex_run(self) -> None:
-        if not self.execution_controller.running:
+        controller = self.execution_controller
+        if controller is None or not controller.running:
             return
         confirmed = messagebox.askyesno(
             "Cancel Codex run",
@@ -1945,7 +2004,7 @@ class EmpyDesktopShell:
         )
         if not confirmed:
             return
-        self.execution_controller.cancel()
+        controller.cancel()
         if self.codex_status_var is not None:
             self.codex_status_var.set("Status: cancelling")
 
@@ -2154,6 +2213,214 @@ class EmpyDesktopShell:
             style="CardTitle.TLabel",
         ).pack(anchor="w", pady=(8, 0))
         return card
+
+    def _render_driver_settings(self) -> None:
+        settings = self.driver_manager.settings
+        inspections = {
+            item.provider_id: item
+            for item in self.driver_manager.inspections()
+        }
+        self.driver_enabled_vars = {}
+        self.driver_executable_vars = {}
+        self.driver_status_labels = {}
+
+        ttk.Label(
+            self.page,
+            text="Driver Settings",
+            style="Title.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            self.page,
+            text=(
+                "AI providers are replaceable drivers. Empy stores provider "
+                "configuration, executable paths, capability profiles, and "
+                "availability without storing credential secrets."
+            ),
+            style="Body.TLabel",
+            wraplength=850,
+        ).pack(anchor="w", pady=(0, 18))
+
+        top = ttk.Frame(self.page, style="Card.TFrame", padding=16)
+        top.pack(fill="x", pady=(0, 14))
+        ttk.Label(
+            top,
+            text="Default driver",
+            style="CardTitle.TLabel",
+        ).pack(side="left")
+        self.driver_default_var = tk.StringVar(
+            value=settings.default_provider
+        )
+        ttk.Combobox(
+            top,
+            textvariable=self.driver_default_var,
+            values=tuple(
+                item.provider_id
+                for item in self.driver_registry.definitions()
+            ),
+            state="readonly",
+            width=18,
+        ).pack(side="left", padx=14)
+        ttk.Button(
+            top,
+            text="Refresh Status",
+            style="Secondary.TButton",
+            command=self._refresh_driver_settings,
+        ).pack(side="right")
+
+        matrix = ttk.Frame(self.page, style="Content.TFrame")
+        matrix.pack(fill="both", expand=True)
+        for definition in self.driver_registry.definitions():
+            configuration = settings.configuration_for(
+                definition.provider_id
+            )
+            inspection = inspections[definition.provider_id]
+            card = ttk.Frame(
+                matrix,
+                style="Card.TFrame",
+                padding=16,
+            )
+            card.pack(fill="x", pady=6)
+
+            heading = ttk.Frame(card, style="Card.TFrame")
+            heading.pack(fill="x")
+            ttk.Label(
+                heading,
+                text=definition.display_name,
+                style="CardTitle.TLabel",
+            ).pack(side="left")
+            status_label = ttk.Label(
+                heading,
+                text=self._driver_status_text(inspection),
+                style="CardBody.TLabel",
+            )
+            status_label.pack(side="right")
+            self.driver_status_labels[definition.provider_id] = status_label
+
+            ttk.Label(
+                card,
+                text=definition.description,
+                style="CardBody.TLabel",
+                wraplength=790,
+            ).pack(anchor="w", pady=(6, 10))
+
+            options = ttk.Frame(card, style="Card.TFrame")
+            options.pack(fill="x")
+            enabled_var = tk.BooleanVar(value=configuration.enabled)
+            executable_var = tk.StringVar(
+                value=configuration.executable or ""
+            )
+            self.driver_enabled_vars[definition.provider_id] = enabled_var
+            self.driver_executable_vars[definition.provider_id] = executable_var
+            ttk.Checkbutton(
+                options,
+                text="Enabled",
+                variable=enabled_var,
+            ).pack(side="left")
+            ttk.Label(
+                options,
+                text="Executable",
+                style="CardBody.TLabel",
+            ).pack(side="left", padx=(20, 6))
+            ttk.Entry(
+                options,
+                textvariable=executable_var,
+                width=28,
+            ).pack(side="left")
+            ttk.Label(
+                options,
+                text=f"Credential: {configuration.credential_mode}",
+                style="CardBody.TLabel",
+            ).pack(side="right")
+
+            capability_names = definition.capabilities.enabled_names()
+            capability_text = (
+                ", ".join(capability_names)
+                if capability_names
+                else "No executable capabilities in this build"
+            )
+            ttk.Label(
+                card,
+                text=f"Capabilities: {capability_text}",
+                style="CardBody.TLabel",
+                wraplength=790,
+            ).pack(anchor="w", pady=(10, 0))
+
+        actions = ttk.Frame(self.page, style="Content.TFrame")
+        actions.pack(fill="x", pady=(14, 0))
+        ttk.Label(
+            actions,
+            text=(
+                "Credential secrets are never written to driver-settings.json. "
+                "CLI login or environment credentials remain provider-managed."
+            ),
+            style="Body.TLabel",
+            wraplength=650,
+        ).pack(side="left")
+        ttk.Button(
+            actions,
+            text="Save Driver Settings",
+            style="Primary.TButton",
+            command=self._save_driver_settings,
+        ).pack(side="right")
+
+    @staticmethod
+    def _driver_status_text(inspection: DriverInspection) -> str:
+        implementation = (
+            "implemented" if inspection.implemented else "not implemented"
+        )
+        return f"{inspection.availability} · {implementation}"
+
+    def _refresh_driver_settings(self) -> None:
+        try:
+            self.driver_manager.inspections(refresh=True)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Unable to inspect drivers", str(exc))
+            return
+        self.show_page("settings")
+
+    def _save_driver_settings(self) -> None:
+        if self.driver_default_var is None:
+            return
+        providers: list[DriverConfiguration] = []
+        current = self.driver_manager.settings
+        for definition in self.driver_registry.definitions():
+            previous = current.configuration_for(definition.provider_id)
+            executable = self.driver_executable_vars[
+                definition.provider_id
+            ].get().strip()
+            providers.append(
+                DriverConfiguration(
+                    provider_id=definition.provider_id,
+                    enabled=self.driver_enabled_vars[
+                        definition.provider_id
+                    ].get(),
+                    executable=executable or None,
+                    credential_mode=previous.credential_mode,
+                    credential_environment_variable=(
+                        previous.credential_environment_variable
+                    ),
+                )
+            )
+        settings = DriverSettings(
+            schema_version=1,
+            default_provider=self.driver_default_var.get(),
+            providers=tuple(providers),
+        )
+        try:
+            settings.validate()
+            self.driver_settings_store.save(settings)
+            self.driver_manager.replace_settings(settings)
+            self._injected_codex_driver = None
+            self._injected_execution_controller = None
+            self._configure_selected_execution_controller()
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Unable to save driver settings", str(exc))
+            return
+        messagebox.showinfo(
+            "Driver settings saved",
+            f"Default driver: {settings.default_provider}",
+        )
+        self.show_page("settings")
 
     def _render_placeholder(
         self,

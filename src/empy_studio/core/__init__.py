@@ -30,6 +30,14 @@ from .contracts import (
     ProjectService,
     WorkspaceStore,
 )
+from .driver_models import (
+    DriverAvailability,
+    DriverCapabilityEntry,
+    DriverConfiguration,
+    DriverCredentialMode,
+    DriverInspection,
+    DriverSettings,
+)
 from .planner import (
     ExecutionPlan,
     PlanStep,
@@ -90,9 +98,15 @@ __all__ = [
     "ContextPolicy",
     "ContextSelection",
     "DefaultProjectService",
+    "DriverAvailability",
     "DriverCapabilities",
+    "DriverCapabilityEntry",
+    "DriverConfiguration",
+    "DriverCredentialMode",
     "DriverExecutionRequest",
     "DriverExecutionResult",
+    "DriverInspection",
+    "DriverSettings",
     "DriverStatus",
     "ExecutionPlan",
     "FileOwnership",

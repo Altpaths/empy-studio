@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "generated_for_ticket": 12,
+  "providers": [
+    {
+      "provider_id": "codex",
+      "display_name": "Codex",
+      "implemented": true,
+      "capabilities": {
+        "planning": false,
+        "code_editing": true,
+        "verification": true,
+        "streaming": true,
+        "cancellation": true
+      }
+    },
+    {
+      "provider_id": "claude",
+      "display_name": "Claude",
+      "implemented": false,
+      "capabilities": {
+        "planning": false,
+        "code_editing": false,
+        "verification": false,
+        "streaming": false,
+        "cancellation": false
+      }
+    },
+    {
+      "provider_id": "gemini",
+      "display_name": "Gemini",
+      "implemented": false,
+      "capabilities": {
+        "planning": false,
+        "code_editing": false,
+        "verification": false,
+        "streaming": false,
+        "cancellation": false
+      }
+    }
+  ]
+}

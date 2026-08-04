@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "ticket": 12,
+  "title": "Driver Abstraction & Settings",
+  "dependency": 11,
+  "outputs": [
+    "Driver Settings",
+    "Capability Matrix"
+  ],
+  "new_modules": [
+    "src/empy_studio/core/driver_models.py",
+    "src/empy_studio/drivers/registry.py",
+    "src/empy_studio/desktop/driver_settings_workspace_adapter.py"
+  ],
+  "tests": [
+    "tests/test_driver_abstraction.py",
+    "tests/test_driver_settings_workspace_adapter.py"
+  ],
+  "next_ticket": 13
+}

@@ -6,17 +6,27 @@ from empy_studio.core import (
     DriverCapabilities,
     DriverExecutionRequest,
     DriverExecutionResult,
+    DriverInspection,
     DriverStatus,
 )
 
 
 class BaseDriver(ABC):
-    """Stable base class for provider-specific AI drivers."""
+    """Stable provider-independent base class for AI drivers."""
 
     @property
     @abstractmethod
-    def name(self) -> str:
+    def provider_id(self) -> str:
         raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def display_name(self) -> str:
+        raise NotImplementedError
+
+    @property
+    def name(self) -> str:
+        return self.provider_id
 
     @abstractmethod
     def capabilities(self) -> DriverCapabilities:
@@ -24,6 +34,10 @@ class BaseDriver(ABC):
 
     @abstractmethod
     def status(self) -> DriverStatus:
+        raise NotImplementedError
+
+    @abstractmethod
+    def inspect(self, *, refresh: bool = False) -> DriverInspection:
         raise NotImplementedError
 
     @abstractmethod
@@ -36,5 +50,5 @@ class BaseDriver(ABC):
     def cancel(self) -> None:
         """Cancel an active operation when supported."""
         raise NotImplementedError(
-            f"{self.name} does not support cancellation"
+            f"{self.display_name} does not support cancellation"
         )

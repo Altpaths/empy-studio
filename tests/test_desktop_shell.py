@@ -46,3 +46,12 @@ def test_desktop_exposes_codex_execution_runtime() -> None:
     assert hasattr(EmpyDesktopShell, "_render_codex_run")
     assert hasattr(EmpyDesktopShell, "_cancel_codex_run")
     assert hasattr(EmpyDesktopShell, "_render_runs")
+
+
+def test_desktop_exposes_driver_settings_and_capability_matrix() -> None:
+    from empy_studio.desktop.shell import EmpyDesktopShell
+
+    assert hasattr(EmpyDesktopShell, "_render_driver_settings")
+    assert hasattr(EmpyDesktopShell, "_save_driver_settings")
+    assert hasattr(EmpyDesktopShell, "_refresh_driver_settings")
+    assert hasattr(EmpyDesktopShell, "_selected_driver_inspection")

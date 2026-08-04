@@ -39,6 +39,25 @@ class DriverCapabilities:
     streaming: bool
     cancellation: bool
 
+    def enabled_names(self) -> tuple[str, ...]:
+        values = (
+            ("planning", self.planning),
+            ("code_editing", self.code_editing),
+            ("verification", self.verification),
+            ("streaming", self.streaming),
+            ("cancellation", self.cancellation),
+        )
+        return tuple(name for name, enabled in values if enabled)
+
+    def to_dict(self) -> dict[str, bool]:
+        return {
+            "planning": self.planning,
+            "code_editing": self.code_editing,
+            "verification": self.verification,
+            "streaming": self.streaming,
+            "cancellation": self.cancellation,
+        }
+
 
 @dataclass(frozen=True)
 class DriverExecutionRequest:
@@ -86,6 +105,14 @@ class DriverExecutionResult:
 
 
 class AIDriver(Protocol):
+    @property
+    def provider_id(self) -> str:
+        ...
+
+    @property
+    def display_name(self) -> str:
+        ...
+
     @property
     def name(self) -> str:
         ...
