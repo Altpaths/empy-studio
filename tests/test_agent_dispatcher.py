@@ -1,0 +1,252 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from empy_studio.core import (
+    AgentDefinition,
+    AgentRegistry,
+    DefaultProjectService,
+    ProductTask,
+    approve_execution_plan,
+    build_agent_run_graph,
+    build_context_selection,
+    build_token_budget,
+    default_agent_registry,
+    generate_execution_plan,
+    lock_token_budget,
+)
+
+
+def _prepared_inputs(
+    root: Path,
+    *,
+    rich_task: bool = True,
+):
+    (root / "composer.json").write_text(
+        '{"name":"demo/app"}\n',
+        encoding="utf-8",
+    )
+    (root / "resources" / "views").mkdir(parents=True)
+    (root / "resources" / "views" / "home.blade.php").write_text(
+        "<main>Home</main>\n",
+        encoding="utf-8",
+    )
+    (root / "app" / "Http" / "Controllers").mkdir(parents=True)
+    (root / "app" / "Http" / "Controllers" / "HomeController.php").write_text(
+        "<?php class HomeController {}\n",
+        encoding="utf-8",
+    )
+    (root / "app" / "Http" / "Middleware").mkdir(parents=True)
+    (root / "app" / "Http" / "Middleware" / "Authenticate.php").write_text(
+        "<?php class Authenticate {}\n",
+        encoding="utf-8",
+    )
+    (root / ".github" / "workflows").mkdir(parents=True)
+    (root / ".github" / "workflows" / "release.yml").write_text(
+        "name: release\n",
+        encoding="utf-8",
+    )
+    (root / "tests").mkdir()
+    (root / "tests" / "FeatureTest.php").write_text(
+        "<?php assert(true);\n",
+        encoding="utf-8",
+    )
+    (root / ".env").write_text("SECRET=protected\n", encoding="utf-8")
+
+    project = DefaultProjectService().detect(root)
+    if rich_task:
+        kind = "release"
+        title = "Update UI backend authentication and release workflow"
+        objective = (
+            "Implement frontend layout, backend route, authentication security, "
+            "tests, and release preparation"
+        )
+        requirements = (
+            "Update the homepage UI",
+            "Add backend controller behavior",
+            "Review authentication permissions",
+            "Prepare release workflow",
+            "Run tests",
+        )
+    else:
+        kind = "custom"
+        title = "Inspect project documentation"
+        objective = "Understand the current project and verify tests"
+        requirements = ("Read project markers", "Run tests")
+
+    task = ProductTask(
+        task_id="dispatch-task",
+        project_root=str(root.resolve()),
+        kind=kind,
+        title=title,
+        objective=objective,
+        requirements=requirements,
+        constraints=("Do not modify unrelated files",),
+        definition_of_done=("Requested scope is verified",),
+        status="ready_for_planning",
+    )
+    draft = generate_execution_plan(task=task, project=project)
+    plan = approve_execution_plan(draft, current_task=task)
+    selection = build_context_selection(
+        task=task,
+        project=project,
+        plan=plan,
+    )
+    budget = lock_token_budget(
+        build_token_budget(plan=plan, selection=selection)
+    )
+    return plan, selection, budget
+
+
+def test_dispatch_requires_locked_matching_inputs(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    plan, selection, locked = _prepared_inputs(root)
+    draft_budget = replace(locked, status="draft", locked_at=None)
+
+    with pytest.raises(ValueError, match="locked"):
+        build_agent_run_graph(
+            plan=plan,
+            selection=selection,
+            budget=draft_budget,
+        )
+
+    mismatched = replace(locked, selection_id="other")
+    with pytest.raises(ValueError, match="do not match"):
+        build_agent_run_graph(
+            plan=plan,
+            selection=selection,
+            budget=mismatched,
+        )
+
+
+def test_only_relevant_planned_agents_are_selected(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    plan, selection, budget = _prepared_inputs(root, rich_task=False)
+
+    graph = build_agent_run_graph(
+        plan=plan,
+        selection=selection,
+        budget=budget,
+    )
+
+    assert tuple(node.agent_role for node in graph.nodes) == (
+        "discovery",
+        "quality",
+    )
+    assert {node.agent_id for node in graph.nodes} == {
+        "discovery-agent",
+        "quality-agent",
+    }
+    assert len(graph.registry.agents) > len(graph.nodes)
+
+
+def test_capability_matching_rejects_unsatisfied_role(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    plan, selection, budget = _prepared_inputs(root, rich_task=False)
+    incomplete_registry = AgentRegistry(
+        agents=(
+            AgentDefinition(
+                agent_id="discovery-agent",
+                display_name="Discovery Agent",
+                role="discovery",
+                capabilities=(
+                    "inspect-project",
+                    "read-context",
+                    "bounded-execution",
+                ),
+                ownership_patterns=(),
+            ),
+        )
+    )
+
+    with pytest.raises(ValueError, match="quality"):
+        build_agent_run_graph(
+            plan=plan,
+            selection=selection,
+            budget=budget,
+            registry=incomplete_registry,
+        )
+
+
+def test_file_ownership_has_single_writer_and_protects_secrets(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    plan, selection, budget = _prepared_inputs(root)
+
+    graph = build_agent_run_graph(
+        plan=plan,
+        selection=selection,
+        budget=budget,
+    )
+
+    paths = [item.relative_path for item in graph.ownership]
+    assert len(paths) == len(set(paths))
+    assert ".env" in graph.protected_exclusions
+    assert ".env" not in paths
+    assert all(
+        len(
+            [
+                node
+                for node in graph.nodes
+                if item.relative_path in node.owned_files
+            ]
+        )
+        <= 1
+        for item in graph.ownership
+    )
+    assert all(
+        not node.owned_files
+        for node in graph.nodes
+        if node.agent_role in {"discovery", "quality"}
+    )
+
+
+def test_dependency_waves_preserve_plan_sequence(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    plan, selection, budget = _prepared_inputs(root)
+
+    graph = build_agent_run_graph(
+        plan=plan,
+        selection=selection,
+        budget=budget,
+    )
+    wave_by_node = {
+        node_id: index
+        for index, wave in enumerate(graph.waves, start=1)
+        for node_id in wave
+    }
+
+    assert len(graph.nodes) == len(plan.steps)
+    assert {node.step_id for node in graph.nodes} == {
+        step.step_id for step in plan.steps
+    }
+    assert all(
+        wave_by_node[dependency] < node.wave
+        for node in graph.nodes
+        for dependency in node.depends_on
+    )
+    assert all(node.token_limit > 0 for node in graph.nodes)
+
+
+def test_default_registry_is_deterministic() -> None:
+    first = default_agent_registry()
+    second = default_agent_registry()
+
+    assert first == second
+    assert {agent.role for agent in first.agents} == {
+        "discovery",
+        "frontend",
+        "backend",
+        "quality",
+        "security",
+        "release",
+    }

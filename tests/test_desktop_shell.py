@@ -30,3 +30,10 @@ def test_desktop_exposes_token_budget_panel() -> None:
     assert hasattr(EmpyDesktopShell, "_build_or_open_budget")
     assert hasattr(EmpyDesktopShell, "_render_token_budget")
     assert hasattr(EmpyDesktopShell, "_lock_token_budget")
+
+
+def test_desktop_exposes_agent_run_graph() -> None:
+    from empy_studio.desktop.shell import EmpyDesktopShell
+
+    assert hasattr(EmpyDesktopShell, "_build_or_open_agent_run_graph")
+    assert hasattr(EmpyDesktopShell, "_render_agent_run_graph")

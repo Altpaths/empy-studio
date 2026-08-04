@@ -1,0 +1,5 @@
+Ticket 10 — Agent Dispatcher
+PYTHONPATH=src python3 -m pytest -q
+426 passed
+python3 -m compileall -q src
+passed

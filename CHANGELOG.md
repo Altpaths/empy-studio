@@ -6,6 +6,12 @@ All notable changes to Empy Studio are documented here.
 
 ### Added
 
+- provider-neutral Agent Dispatcher and persistent Agent Run Graph
+- deterministic role and capability matching from approved plan steps
+- single-writer file ownership with explicit read-only access
+- dependency-aware execution waves and per-node token/context bindings
+- desktop Agent Run Graph preview without provider execution
+
 - pre-execution Token Budget Controller with economy, standard, and extended presets
 - visible planning, agent, retry, handoff, reserve, and total hard limits
 - immutable budget locking before execution and persistent budget workspace

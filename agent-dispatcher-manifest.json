@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "phase": 3,
+  "ticket": 10,
+  "title": "Agent Dispatcher",
+  "status": "implemented",
+  "core_module": "src/empy_studio/core/agent_dispatcher.py",
+  "desktop_adapter": "src/empy_studio/desktop/agent_dispatcher_workspace_adapter.py",
+  "desktop_route": "agent-run-graph",
+  "workspace_file": "agent-run-graphs.json",
+  "inputs": [
+    "approved execution plan",
+    "bounded context selection",
+    "locked token budget"
+  ],
+  "dispatcher_contracts": [
+    "agent registry",
+    "capability matching",
+    "single-writer file ownership",
+    "dependency execution waves",
+    "context and token binding"
+  ],
+  "explicit_exclusions": [
+    "AI provider invocation",
+    "Codex session execution",
+    "patch application",
+    "conflict resolution"
+  ],
+  "next_ticket": 11,
+  "validation": {
+    "pytest": "426 passed",
+    "compileall": "passed",
+    "tests": [
+      "tests/test_agent_dispatcher.py",
+      "tests/test_agent_dispatcher_workspace_adapter.py",
+      "tests/test_desktop_shell.py"
+    ]
+  }
+}

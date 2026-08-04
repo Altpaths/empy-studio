@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-04T17:57:08.113010+00:00",
+  "ticket": 10,
+  "title": "Agent Dispatcher",
+  "status": "implemented",
+  "test_result": {
+    "command": "PYTHONPATH=src python3 -m pytest -q",
+    "passed": 426,
+    "failed": 0,
+    "result": "passed"
+  },
+  "compile_result": {
+    "command": "python3 -m compileall -q src",
+    "result": "passed"
+  },
+  "definition_of_done": [
+    {
+      "requirement": "File ownership is explicit",
+      "evidence": "Every selected context path has one FileOwnership record and at most one writer.",
+      "tests": [
+        "test_file_ownership_has_single_writer_and_protects_secrets"
+      ]
+    },
+    {
+      "requirement": "Irrelevant agents do not run",
+      "evidence": "Matching is constrained to the exact approved plan role and capability set.",
+      "tests": [
+        "test_only_relevant_planned_agents_are_selected",
+        "test_capability_matching_rejects_unsatisfied_role"
+      ]
+    },
+    {
+      "requirement": "Dependency order is preserved",
+      "evidence": "Plan dependencies are converted to validated topological waves.",
+      "tests": [
+        "test_dependency_waves_preserve_plan_sequence"
+      ]
+    }
+  ],
+  "files": {
+    "src/empy_studio/core/agent_dispatcher.py": {
+      "sha256": "84c82337161acc51c6f794c3ae661fb74c41ba7788b3398a5907bafd8220776f",
+      "bytes": 24240
+    },
+    "src/empy_studio/desktop/agent_dispatcher_workspace_adapter.py": {
+      "sha256": "68e1619c759cf4b87b044f6d9a6c899116f4ed62016495316c65e13591cd4fe9",
+      "bytes": 8136
+    },
+    "src/empy_studio/core/__init__.py": {
+      "sha256": "000b6db5c3bf6b3ad417b9227dd79fcb5d2d825b660dbdf3e8730aaea33caf2d",
+      "bytes": 2733
+    },
+    "src/empy_studio/desktop/shell.py": {
+      "sha256": "a02e7004a763c33f49cb0046a46a90bfa016c27bb93d3b5f957e73159974d06e",
+      "bytes": 56870
+    },
+    "tests/test_agent_dispatcher.py": {
+      "sha256": "ab45adb373c727eaf803a426938ee4e84968c12a3572ed56533c83139960c443",
+      "bytes": 7239
+    },
+    "tests/test_agent_dispatcher_workspace_adapter.py": {
+      "sha256": "36b7b38b4423bf943fb1842f5441c4d97784d2acc8ddaf487c41d2efb8eda328",
+      "bytes": 2506
+    },
+    "tests/test_desktop_shell.py": {
+      "sha256": "da18062d2d806c858dab1425d6a4fd767989df07dd9a3f3a7215f175b12b5c99",
+      "bytes": 1250
+    },
+    "docs/agent-dispatcher.md": {
+      "sha256": "5c6d58651933a425d833468ee99e81e04325a4fdfdd2f9ec04ab6e5f14dd26d2",
+      "bytes": 2843
+    },
+    "docs/consolidated-checkpoint-ticket-10.md": {
+      "sha256": "3a05979d7df94c3b2e31ec661a2398e11062c6fd5845495bda1bee1f2f799c3e",
+      "bytes": 1209
+    },
+    "agent-dispatcher-manifest.json": {
+      "sha256": "3ec0581d074f5ce39b86edbbad021e738db01badc2c9d26d9e03b2230e0280f1",
+      "bytes": 1036
+    }
+  },
+  "scope_boundary": {
+    "included": [
+      "registry",
+      "matching",
+      "ownership",
+      "sequencing",
+      "persistence",
+      "desktop preview"
+    ],
+    "excluded": [
+      "provider execution",
+      "Codex sessions",
+      "patch application",
+      "conflict resolution"
+    ]
+  }
+}

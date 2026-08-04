@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-04T17:57:08.113010+00:00",
+  "product": "Empy Studio",
+  "master_plan_position": {
+    "phase": 3,
+    "ticket": 10,
+    "title": "Agent Dispatcher",
+    "status": "implemented",
+    "next_ticket": 11
+  },
+  "dependency": {
+    "ticket": 9,
+    "title": "Token Budget Controller",
+    "required": true
+  },
+  "delivered": [
+    "provider-neutral agent registry",
+    "role and capability matching",
+    "Agent Run Graph",
+    "single-writer file ownership",
+    "read-only access records",
+    "dependency-aware execution waves",
+    "persistent agent-run-graphs.json workspace",
+    "desktop Agent Run Graph preview"
+  ],
+  "definition_of_done": {
+    "file_ownership_is_explicit": "passed",
+    "irrelevant_agents_are_not_selected": "passed",
+    "dependency_order_is_preserved": "passed"
+  },
+  "explicitly_not_included": [
+    "Codex Driver production execution",
+    "provider calls",
+    "patch synchronization",
+    "conflict resolution"
+  ],
+  "validation": {
+    "pytest_expected": "426 passed",
+    "compileall_expected": "passed",
+    "local_ci_gate": [
+      "ruff check .",
+      "mypy src",
+      "pytest -q",
+      "compileall -q src"
+    ]
+  }
+}

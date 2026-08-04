@@ -10,6 +10,7 @@ from typing import cast
 
 from empy_studio.core import (
     TASK_TEMPLATES,
+    AgentRunGraph,
     BudgetPreset,
     ContextSelection,
     DefaultProjectService,
@@ -20,6 +21,7 @@ from empy_studio.core import (
     TaskKind,
     TokenBudget,
     approve_execution_plan,
+    build_agent_run_graph,
     build_context_selection,
     build_product_task,
     build_token_budget,
@@ -30,6 +32,9 @@ from empy_studio.core import (
     template_by_key,
 )
 
+from .agent_dispatcher_workspace_adapter import (
+    AgentDispatcherWorkspaceAdapter,
+)
 from .context_workspace_adapter import (
     ContextWorkspaceAdapter,
 )
@@ -79,7 +84,7 @@ NAVIGATION = (
 
 
 class EmpyDesktopShell:
-    """Desktop product shell through Ticket 9."""
+    """Desktop product shell through Ticket 10."""
 
     def __init__(
         self,
@@ -92,6 +97,7 @@ class EmpyDesktopShell:
         plan_store: PlanWorkspaceAdapter | None = None,
         context_store: ContextWorkspaceAdapter | None = None,
         budget_store: TokenBudgetWorkspaceAdapter | None = None,
+        dispatcher_store: AgentDispatcherWorkspaceAdapter | None = None,
     ) -> None:
         self.root = root
         self.workspace_path = (
@@ -133,6 +139,12 @@ class EmpyDesktopShell:
                 self.workspace_path
             )
         )
+        self.dispatcher_store = (
+            dispatcher_store
+            or AgentDispatcherWorkspaceAdapter(
+                self.workspace_path
+            )
+        )
         self.current_project: (
             ProjectDetection | None
         ) = None
@@ -142,6 +154,7 @@ class EmpyDesktopShell:
         self.current_plan: ExecutionPlan | None = None
         self.current_context: ContextSelection | None = None
         self.current_budget: TokenBudget | None = None
+        self.current_run_graph: AgentRunGraph | None = None
         self.budget_preset_var: tk.StringVar | None = None
         self.selected_template: TaskKind = "custom"
 
@@ -281,7 +294,7 @@ class EmpyDesktopShell:
         )
         ttk.Label(
             self.sidebar,
-            text="Ticket 9 · Token Budget Controller",
+            text="Ticket 10 · Agent Dispatcher",
             style="SidebarCaption.TLabel",
         ).pack(anchor="w", padx=22)
 
@@ -337,6 +350,8 @@ class EmpyDesktopShell:
             self._render_context_preview()
         elif key == "token-budget":
             self._render_token_budget()
+        elif key == "agent-run-graph":
+            self._render_agent_run_graph()
         else:
             raise KeyError(key)
 
@@ -1384,6 +1399,19 @@ class EmpyDesktopShell:
                 ),
                 style="Body.TLabel",
             ).pack(side="left")
+            existing_graph = self.dispatcher_store.get_for_budget(
+                budget.budget_id
+            )
+            ttk.Button(
+                controls,
+                text=(
+                    "Open Agent Run Graph"
+                    if existing_graph is not None
+                    else "Build Agent Run Graph"
+                ),
+                style="Primary.TButton",
+                command=self._build_or_open_agent_run_graph,
+            ).pack(side="right")
 
         notebook = ttk.Notebook(self.page)
         notebook.pack(fill="both", expand=True)
@@ -1433,7 +1461,7 @@ class EmpyDesktopShell:
             text=(
                 "Budget is visible before execution. Retry and handoff counts "
                 "are finite, so an infinite loop cannot be authorized. "
-                "No agent has been dispatched; Agent Dispatcher is Ticket 10."
+                "A locked budget can now be converted to an Agent Run Graph."
             ),
             style="Body.TLabel",
             wraplength=820,
@@ -1492,9 +1520,173 @@ class EmpyDesktopShell:
             return
         messagebox.showinfo(
             "Run limits locked",
-            "Token limits are frozen and ready for Ticket 10: Agent Dispatcher.",
+            "Token limits are frozen and ready for Agent Dispatcher.",
         )
         self.show_page("token-budget")
+
+    def _build_or_open_agent_run_graph(self) -> None:
+        if (
+            self.current_plan is None
+            or self.current_context is None
+            or self.current_budget is None
+        ):
+            return
+        existing = self.dispatcher_store.get_for_budget(
+            self.current_budget.budget_id
+        )
+        if existing is not None:
+            self.current_run_graph = existing
+            self.show_page("agent-run-graph")
+            return
+        try:
+            graph = build_agent_run_graph(
+                plan=self.current_plan,
+                selection=self.current_context,
+                budget=self.current_budget,
+            )
+            self.dispatcher_store.save_graph(graph)
+            self.current_run_graph = graph
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror(
+                "Unable to build Agent Run Graph",
+                str(exc),
+            )
+            return
+        self.show_page("agent-run-graph")
+
+    def _render_agent_run_graph(self) -> None:
+        if (
+            self.current_run_graph is None
+            and self.current_budget is not None
+        ):
+            self.current_run_graph = self.dispatcher_store.get_for_budget(
+                self.current_budget.budget_id
+            )
+        if self.current_run_graph is None:
+            self.show_page("token-budget")
+            return
+
+        graph = self.current_run_graph
+        ttk.Button(
+            self.page,
+            text="← Token Budget",
+            style="Secondary.TButton",
+            command=partial(self.show_page, "token-budget"),
+        ).pack(anchor="w", pady=(0, 18))
+        ttk.Label(
+            self.page,
+            text="Agent Run Graph",
+            style="Title.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            self.page,
+            text=(
+                "Only agents required by the approved plan are assigned. "
+                "Every node has bounded context, a locked token limit, "
+                "single-writer file ownership, and dependency ordering."
+            ),
+            style="Body.TLabel",
+            wraplength=820,
+        ).pack(anchor="w", pady=(0, 14))
+
+        summary = ttk.Frame(self.page, style="Content.TFrame")
+        summary.pack(fill="x", pady=(0, 14))
+        self._metadata_card(
+            summary,
+            "Assigned agents",
+            str(len({node.agent_id for node in graph.nodes})),
+        ).pack(side="left", fill="both", expand=True, padx=(0, 6))
+        self._metadata_card(
+            summary,
+            "Run nodes",
+            str(len(graph.nodes)),
+        ).pack(side="left", fill="both", expand=True, padx=6)
+        self._metadata_card(
+            summary,
+            "Execution waves",
+            str(len(graph.waves)),
+        ).pack(side="left", fill="both", expand=True, padx=6)
+        self._metadata_card(
+            summary,
+            "Owned files",
+            str(sum(item.owner_agent_id is not None for item in graph.ownership)),
+        ).pack(side="left", fill="both", expand=True, padx=(6, 0))
+
+        notebook = ttk.Notebook(self.page)
+        notebook.pack(fill="both", expand=True)
+
+        graph_tab = ttk.Frame(
+            notebook,
+            style="Content.TFrame",
+            padding=12,
+        )
+        notebook.add(graph_tab, text="Execution order")
+        graph_view = tk.Text(
+            graph_tab,
+            wrap="word",
+            borderwidth=1,
+            relief="solid",
+            font=("Menlo", 11),
+        )
+        graph_view.pack(fill="both", expand=True)
+        node_by_id = {node.node_id: node for node in graph.nodes}
+        for wave_number, wave in enumerate(graph.waves, start=1):
+            graph_view.insert("end", f"WAVE {wave_number}\n")
+            for node_id in wave:
+                node = node_by_id[node_id]
+                dependencies = ", ".join(node.depends_on) or "none"
+                graph_view.insert(
+                    "end",
+                    (
+                        f"  {node.node_id} · {node.agent_id} "
+                        f"({node.agent_role})\n"
+                        f"    Step: {node.title}\n"
+                        f"    Depends on: {dependencies}\n"
+                        f"    Token limit: {node.token_limit:,}\n"
+                        f"    Owns: {len(node.owned_files)} file(s) · "
+                        f"Reads: {len(node.read_only_files)} file(s)\n\n"
+                    ),
+                )
+        graph_view.configure(state="disabled")
+
+        ownership_tab = ttk.Frame(
+            notebook,
+            style="Content.TFrame",
+            padding=12,
+        )
+        notebook.add(ownership_tab, text="File ownership")
+        ownership_view = tk.Text(
+            ownership_tab,
+            wrap="word",
+            borderwidth=1,
+            relief="solid",
+            font=("Menlo", 11),
+        )
+        ownership_view.pack(fill="both", expand=True)
+        for item in graph.ownership:
+            owner = item.owner_agent_id or "READ ONLY"
+            readers = ", ".join(item.reader_agent_ids) or "none"
+            ownership_view.insert(
+                "end",
+                (
+                    f"{item.relative_path}\n"
+                    f"  Owner: {owner}\n"
+                    f"  Readers: {readers}\n"
+                    f"  Reason: {item.reason}\n\n"
+                ),
+            )
+        ownership_view.configure(state="disabled")
+
+        ttk.Label(
+            self.page,
+            text=(
+                f"{len(graph.protected_exclusions)} protected path(s) remain "
+                "outside every agent node. This graph prepares execution only; "
+                "no AI provider has been called. Codex execution begins in Ticket 11."
+            ),
+            style="Body.TLabel",
+            wraplength=820,
+        ).pack(anchor="w", pady=(12, 0))
 
     def _edit_task_from_plan(self) -> None:
         if (
