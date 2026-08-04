@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-04T17:30:08.078320+00:00",
+  "product": "Empy Studio",
+  "master_plan_position": {
+    "phase": 3,
+    "ticket": 9,
+    "title": "Token Budget Controller",
+    "status": "implemented",
+    "next_ticket": 10
+  },
+  "dependency": {
+    "ticket": 8,
+    "title": "Context Selector",
+    "required": true
+  },
+  "delivered": [
+    "draft and locked token-budget contracts",
+    "economy, standard, and extended presets",
+    "per-plan and per-agent allocations",
+    "retry and handoff count limits",
+    "retry and handoff token pools",
+    "automatic hard-stop decisions",
+    "persistent token-budgets.json workspace",
+    "desktop Token Budget panel",
+    "run-limit audit events"
+  ],
+  "definition_of_done": {
+    "budget_before_execution": "passed",
+    "retry_is_limited": "passed",
+    "infinite_loop_is_impossible": "passed"
+  },
+  "explicitly_not_included": [
+    "Agent Dispatcher",
+    "provider execution",
+    "file ownership",
+    "agent sequencing"
+  ],
+  "validation": {
+    "pytest_expected": "417 passed",
+    "compileall_expected": "passed",
+    "local_ci_gate": [
+      "ruff check .",
+      "mypy src",
+      "pytest -q"
+    ]
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-04T17:30:46.520794+00:00",
+  "ticket": 9,
+  "title": "Token Budget Controller",
+  "status": "implemented",
+  "test_result": {
+    "command": "PYTHONPATH=src python3 -m pytest -q",
+    "passed": 417,
+    "failed": 0,
+    "result": "passed"
+  },
+  "compile_result": {
+    "command": "python3 -m compileall -q src",
+    "result": "passed"
+  },
+  "definition_of_done": [
+    {
+      "requirement": "Budget before execution is specified",
+      "evidence": "TokenBudget starts as draft and a run requires lock_token_budget.",
+      "tests": [
+        "test_budget_must_be_locked_before_run"
+      ]
+    },
+    {
+      "requirement": "Retry is limited",
+      "evidence": "Each allocation has max_retries and a retry token pool.",
+      "tests": [
+        "test_retry_limit_stops_repeated_attempts"
+      ]
+    },
+    {
+      "requirement": "Infinite loop is impossible",
+      "evidence": "Stopped state rejects later usage without charging tokens.",
+      "tests": [
+        "test_retry_limit_stops_repeated_attempts",
+        "test_handoff_limit_is_finite",
+        "test_total_limit_rejects_overage"
+      ]
+    }
+  ],
+  "files": {
+    "src/empy_studio/core/token_budget.py": {
+      "sha256": "26075cb81fe4b4237f0544b1ca625e5c83f121d840d4549a276c95c7a1652311",
+      "bytes": 23166
+    },
+    "src/empy_studio/desktop/token_budget_workspace_adapter.py": {
+      "sha256": "6ec3773a3aae05a371fe99c07b3d75e144a014d96623590648dc0afe0365fbbf",
+      "bytes": 6423
+    },
+    "src/empy_studio/core/__init__.py": {
+      "sha256": "65d70d14eb1317ef4fa7f09a6f16b2415266a26fb6c85558d4301666d52fced3",
+      "bytes": 2309
+    },
+    "src/empy_studio/desktop/shell.py": {
+      "sha256": "7b444da2e6181a4b386db2a85cb2aecc7c7d43588c30e749b9be59fad1729c29",
+      "bytes": 49965
+    },
+    "tests/test_token_budget.py": {
+      "sha256": "9b41109fe67987d3865cc08608d2d392e8eececd4b1f11ead075986fc33144ee",
+      "bytes": 6760
+    },
+    "tests/test_token_budget_workspace_adapter.py": {
+      "sha256": "882a5d259c85716cdcb28a295fb14783bf69961d4ca6bdb8efef0b1dc123df2c",
+      "bytes": 2452
+    },
+    "docs/token-budget-controller.md": {
+      "sha256": "e369457e219b150da238c3596608d1b8fd8b9270e450068f011cc29948683657",
+      "bytes": 2727
+    },
+    "token-budget-controller-manifest.json": {
+      "sha256": "57e223928fa325c6259b893117650ac22baf7e4b93c5fb7c967a9d45226c6ffd",
+      "bytes": 1043
+    }
+  },
+  "scope_boundary": {
+    "included": [
+      "budget construction",
+      "locking",
+      "usage enforcement",
+      "workspace persistence",
+      "desktop panel"
+    ],
+    "excluded": [
+      "agent dispatch",
+      "provider calls",
+      "file ownership",
+      "execution sequencing"
+    ]
+  }
+}

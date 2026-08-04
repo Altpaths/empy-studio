@@ -6,9 +6,11 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+from typing import cast
 
 from empy_studio.core import (
     TASK_TEMPLATES,
+    BudgetPreset,
     ContextSelection,
     DefaultProjectService,
     ExecutionPlan,
@@ -16,11 +18,15 @@ from empy_studio.core import (
     ProjectDescriptor,
     ProjectDetection,
     TaskKind,
+    TokenBudget,
     approve_execution_plan,
     build_context_selection,
     build_product_task,
+    build_token_budget,
     generate_execution_plan,
+    lock_token_budget,
     mark_ready_for_planning,
+    policy_for_preset,
     template_by_key,
 )
 
@@ -32,6 +38,9 @@ from .plan_workspace_adapter import (
 )
 from .task_workspace_adapter import (
     TaskWorkspaceAdapter,
+)
+from .token_budget_workspace_adapter import (
+    TokenBudgetWorkspaceAdapter,
 )
 from .workspace_adapter import (
     DesktopWorkspaceAdapter,
@@ -70,7 +79,7 @@ NAVIGATION = (
 
 
 class EmpyDesktopShell:
-    """Desktop product shell through Ticket 8."""
+    """Desktop product shell through Ticket 9."""
 
     def __init__(
         self,
@@ -82,6 +91,7 @@ class EmpyDesktopShell:
         task_store: TaskWorkspaceAdapter | None = None,
         plan_store: PlanWorkspaceAdapter | None = None,
         context_store: ContextWorkspaceAdapter | None = None,
+        budget_store: TokenBudgetWorkspaceAdapter | None = None,
     ) -> None:
         self.root = root
         self.workspace_path = (
@@ -117,6 +127,12 @@ class EmpyDesktopShell:
                 self.workspace_path
             )
         )
+        self.budget_store = (
+            budget_store
+            or TokenBudgetWorkspaceAdapter(
+                self.workspace_path
+            )
+        )
         self.current_project: (
             ProjectDetection | None
         ) = None
@@ -125,6 +141,8 @@ class EmpyDesktopShell:
         ) = None
         self.current_plan: ExecutionPlan | None = None
         self.current_context: ContextSelection | None = None
+        self.current_budget: TokenBudget | None = None
+        self.budget_preset_var: tk.StringVar | None = None
         self.selected_template: TaskKind = "custom"
 
         self._configure_window()
@@ -263,7 +281,7 @@ class EmpyDesktopShell:
         )
         ttk.Label(
             self.sidebar,
-            text="Ticket 8 · Context Selector",
+            text="Ticket 9 · Token Budget Controller",
             style="SidebarCaption.TLabel",
         ).pack(anchor="w", padx=22)
 
@@ -317,6 +335,8 @@ class EmpyDesktopShell:
             self._render_plan_preview()
         elif key == "context-preview":
             self._render_context_preview()
+        elif key == "token-budget":
+            self._render_token_budget()
         else:
             raise KeyError(key)
 
@@ -1097,7 +1117,7 @@ class EmpyDesktopShell:
             self.page,
             text="← Execution Plan",
             style="Secondary.TButton",
-            command=lambda: self.show_page("plan-preview"),
+            command=partial(self.show_page, "plan-preview"),
         ).pack(anchor="w", pady=(0, 18))
 
         ttk.Label(
@@ -1215,15 +1235,266 @@ class EmpyDesktopShell:
             exclusions_view.insert("end", "No exclusions recorded.\n")
         exclusions_view.configure(state="disabled")
 
+        budget = self.budget_store.get_for_selection(
+            selection.selection_id
+        )
+        actions = ttk.Frame(
+            self.page,
+            style="Content.TFrame",
+        )
+        actions.pack(fill="x", pady=(12, 0))
+        ttk.Label(
+            actions,
+            text=(
+                "Context is visible and bounded. Set explicit run limits "
+                "before any agent can be dispatched."
+            ),
+            style="Body.TLabel",
+            wraplength=650,
+        ).pack(side="left")
+        ttk.Button(
+            actions,
+            text=(
+                "View Token Budget"
+                if budget is not None
+                else "Set Token Budget"
+            ),
+            style="Primary.TButton",
+            command=self._build_or_open_budget,
+        ).pack(side="right")
+
+    def _build_or_open_budget(self) -> None:
+        if self.current_context is None or self.current_plan is None:
+            return
+        existing = self.budget_store.get_for_selection(
+            self.current_context.selection_id
+        )
+        if existing is not None:
+            self.current_budget = existing
+            self.show_page("token-budget")
+            return
+        try:
+            budget = build_token_budget(
+                plan=self.current_plan,
+                selection=self.current_context,
+                policy=policy_for_preset("economy"),
+            )
+            self.budget_store.save_budget(budget)
+            self.current_budget = budget
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror(
+                "Unable to set token budget",
+                str(exc),
+            )
+            return
+        self.show_page("token-budget")
+
+    def _render_token_budget(self) -> None:
+        if (
+            self.current_budget is None
+            and self.current_context is not None
+        ):
+            self.current_budget = self.budget_store.get_for_selection(
+                self.current_context.selection_id
+            )
+        if self.current_budget is None:
+            self.show_page("context-preview")
+            return
+
+        budget = self.current_budget
+        ttk.Button(
+            self.page,
+            text="← Context Packs",
+            style="Secondary.TButton",
+            command=partial(self.show_page, "context-preview"),
+        ).pack(anchor="w", pady=(0, 18))
+        ttk.Label(
+            self.page,
+            text="Token Budget Controller",
+            style="Title.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
         ttk.Label(
             self.page,
             text=(
-                "Context is visible and bounded. No agent has been dispatched; "
-                "Token Budget Controller remains Ticket 9."
+                "Provider-neutral estimates define hard limits for planning, "
+                "each agent step, retry attempts and handoffs."
             ),
             style="Body.TLabel",
             wraplength=800,
+        ).pack(anchor="w", pady=(0, 14))
+
+        summary = ttk.Frame(self.page, style="Content.TFrame")
+        summary.pack(fill="x", pady=(0, 14))
+        self._metadata_card(
+            summary,
+            "Total hard limit",
+            f"{budget.total_limit_tokens:,} tokens",
+        ).pack(side="left", fill="both", expand=True, padx=(0, 6))
+        self._metadata_card(
+            summary,
+            "Planning limit",
+            f"{budget.planning_limit_tokens:,}",
+        ).pack(side="left", fill="both", expand=True, padx=6)
+        self._metadata_card(
+            summary,
+            "Context estimate",
+            f"{budget.estimated_context_tokens:,}",
+        ).pack(side="left", fill="both", expand=True, padx=6)
+        self._metadata_card(
+            summary,
+            "Status",
+            budget.status.upper(),
+        ).pack(side="left", fill="both", expand=True, padx=(6, 0))
+
+        controls = ttk.Frame(self.page, style="Content.TFrame")
+        controls.pack(fill="x", pady=(0, 12))
+        if budget.status == "draft":
+            ttk.Label(
+                controls,
+                text="Budget preset",
+                style="Field.TLabel",
+            ).pack(side="left", padx=(0, 8))
+            self.budget_preset_var = tk.StringVar(value=budget.preset)
+            preset_box = ttk.Combobox(
+                controls,
+                textvariable=self.budget_preset_var,
+                values=("economy", "standard", "extended"),
+                state="readonly",
+                width=14,
+            )
+            preset_box.pack(side="left")
+            ttk.Button(
+                controls,
+                text="Recalculate",
+                style="Secondary.TButton",
+                command=self._rebuild_token_budget,
+            ).pack(side="left", padx=8)
+            ttk.Button(
+                controls,
+                text="Lock Run Limits",
+                style="Primary.TButton",
+                command=self._lock_token_budget,
+            ).pack(side="right")
+        else:
+            ttk.Label(
+                controls,
+                text=(
+                    f"Locked preset: {budget.preset} · "
+                    f"Locked at: {budget.locked_at or 'unknown'}"
+                ),
+                style="Body.TLabel",
+            ).pack(side="left")
+
+        notebook = ttk.Notebook(self.page)
+        notebook.pack(fill="both", expand=True)
+        for allocation in budget.allocations:
+            tab = ttk.Frame(
+                notebook,
+                style="Content.TFrame",
+                padding=12,
+            )
+            notebook.add(
+                tab,
+                text=f"{allocation.agent_role}: {allocation.step_id}",
+            )
+            details = tk.Text(
+                tab,
+                wrap="word",
+                borderwidth=1,
+                relief="solid",
+                font=("Menlo", 11),
+                height=14,
+            )
+            details.pack(fill="both", expand=True)
+            details.insert(
+                "end",
+                (
+                    f"STEP: {allocation.step_id}\n"
+                    f"AGENT ROLE: {allocation.agent_role}\n\n"
+                    f"Context estimate: {allocation.context_tokens:,}\n"
+                    f"Instruction estimate: {allocation.instruction_tokens:,}\n"
+                    f"Response limit: {allocation.response_tokens:,}\n"
+                    f"Base call limit: {allocation.base_limit_tokens:,}\n\n"
+                    f"Retries: maximum {allocation.max_retries} · "
+                    f"{allocation.retry_tokens_per_attempt:,} tokens each · "
+                    f"pool {allocation.retry_limit_tokens:,}\n"
+                    f"Handoffs: maximum {allocation.max_handoffs} · "
+                    f"{allocation.handoff_tokens_per_event:,} tokens each · "
+                    f"pool {allocation.handoff_limit_tokens:,}\n\n"
+                    f"STEP HARD LIMIT: {allocation.total_limit_tokens:,} tokens\n"
+                    "AUTO-STOP: exceeding the step, retry, handoff or total "
+                    "limit denies further usage."
+                ),
+            )
+            details.configure(state="disabled")
+
+        ttk.Label(
+            self.page,
+            text=(
+                "Budget is visible before execution. Retry and handoff counts "
+                "are finite, so an infinite loop cannot be authorized. "
+                "No agent has been dispatched; Agent Dispatcher is Ticket 10."
+            ),
+            style="Body.TLabel",
+            wraplength=820,
         ).pack(anchor="w", pady=(12, 0))
+
+    def _rebuild_token_budget(self) -> None:
+        if (
+            self.current_plan is None
+            or self.current_context is None
+            or self.current_budget is None
+            or self.current_budget.status != "draft"
+            or self.budget_preset_var is None
+        ):
+            return
+        raw_preset = self.budget_preset_var.get()
+        if raw_preset not in {"economy", "standard", "extended"}:
+            return
+        preset = cast(BudgetPreset, raw_preset)
+        try:
+            budget = build_token_budget(
+                plan=self.current_plan,
+                selection=self.current_context,
+                policy=policy_for_preset(preset),
+            )
+            self.budget_store.save_budget(budget)
+            self.current_budget = budget
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror(
+                "Unable to recalculate budget",
+                str(exc),
+            )
+            return
+        self.show_page("token-budget")
+
+    def _lock_token_budget(self) -> None:
+        if self.current_budget is None:
+            return
+        confirmed = messagebox.askyesno(
+            "Lock run limits",
+            (
+                "Locked limits cannot be silently increased during a run. "
+                "Continue?"
+            ),
+        )
+        if not confirmed:
+            return
+        try:
+            locked = lock_token_budget(self.current_budget)
+            self.budget_store.save_budget(locked)
+            self.current_budget = locked
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror(
+                "Unable to lock token budget",
+                str(exc),
+            )
+            return
+        messagebox.showinfo(
+            "Run limits locked",
+            "Token limits are frozen and ready for Ticket 10: Agent Dispatcher.",
+        )
+        self.show_page("token-budget")
 
     def _edit_task_from_plan(self) -> None:
         if (

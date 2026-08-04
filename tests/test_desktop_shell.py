@@ -22,3 +22,11 @@ def test_desktop_exposes_context_selector_preview() -> None:
 
     assert hasattr(EmpyDesktopShell, "_build_or_open_context")
     assert hasattr(EmpyDesktopShell, "_render_context_preview")
+
+
+def test_desktop_exposes_token_budget_panel() -> None:
+    from empy_studio.desktop.shell import EmpyDesktopShell
+
+    assert hasattr(EmpyDesktopShell, "_build_or_open_budget")
+    assert hasattr(EmpyDesktopShell, "_render_token_budget")
+    assert hasattr(EmpyDesktopShell, "_lock_token_budget")

@@ -11,6 +11,7 @@ from empy_studio.core import (
     ContextSelection,
     ProjectBrain,
 )
+from empy_studio.core.planner import AgentRole
 
 
 def _as_int(value: object, field_name: str) -> int:
@@ -20,6 +21,12 @@ def _as_int(value: object, field_name: str) -> int:
         return int(value)
     except ValueError as exc:
         raise ValueError(f"{field_name} must be an integer") from exc
+
+
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(str(item) for item in value)
 
 
 class ContextWorkspaceAdapter:
@@ -40,13 +47,22 @@ class ContextWorkspaceAdapter:
         existing[selection.selection_id] = selection.to_dict()
         temporary = self.path.with_suffix(".tmp")
         temporary.write_text(
-            json.dumps(list(existing.values()), ensure_ascii=False, indent=2) + "\n",
+            json.dumps(
+                list(existing.values()),
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
             encoding="utf-8",
         )
         temporary.replace(self.path)
 
     def get_for_plan(self, plan_id: str) -> ContextSelection | None:
-        matches = [item for item in self._read() if item.get("plan_id") == plan_id]
+        matches = [
+            item
+            for item in self._read()
+            if item.get("plan_id") == plan_id
+        ]
         if not matches:
             return None
         return self._from_dict(matches[-1])
@@ -58,19 +74,31 @@ class ContextWorkspaceAdapter:
     ) -> tuple[ContextSelection, ...]:
         values = self._read()
         if project_root is not None:
-            values = [item for item in values if item.get("project_root") == project_root]
+            values = [
+                item
+                for item in values
+                if item.get("project_root") == project_root
+            ]
         return tuple(self._from_dict(item) for item in values)
 
     def _from_dict(self, value: dict[str, object]) -> ContextSelection:
-        brain_value = cast(dict[str, object], value["project_brain"])
-        raw_packs = cast(list[object], value.get("packs", []))
-        raw_exclusions = cast(list[object], value.get("exclusions", []))
+        brain_value = value["project_brain"]
+        if not isinstance(brain_value, dict):
+            raise TypeError("project_brain must be an object")
+        raw_packs = value.get("packs", [])
+        raw_exclusions = value.get("exclusions", [])
+        if not isinstance(raw_packs, list):
+            raise TypeError("packs must be a list")
+        if not isinstance(raw_exclusions, list):
+            raise TypeError("exclusions must be a list")
 
         packs: list[ContextPack] = []
         for raw_pack in raw_packs:
             if not isinstance(raw_pack, dict):
                 continue
-            raw_files = cast(list[object], raw_pack.get("files", []))
+            raw_files = raw_pack.get("files", [])
+            if not isinstance(raw_files, list):
+                raise TypeError("context pack files must be a list")
             files: list[ContextFile] = []
             for raw_file in raw_files:
                 if not isinstance(raw_file, dict):
@@ -78,10 +106,16 @@ class ContextWorkspaceAdapter:
                 files.append(
                     ContextFile(
                         relative_path=str(raw_file["relative_path"]),
-                        score=int(raw_file["score"]),
-                        reasons=tuple(str(item) for item in cast(list[object], raw_file.get("reasons", []))),
-                        size_bytes=int(raw_file["size_bytes"]),
-                        included_bytes=int(raw_file["included_bytes"]),
+                        score=_as_int(raw_file["score"], "score"),
+                        reasons=_string_tuple(raw_file.get("reasons")),
+                        size_bytes=_as_int(
+                            raw_file["size_bytes"],
+                            "size_bytes",
+                        ),
+                        included_bytes=_as_int(
+                            raw_file["included_bytes"],
+                            "included_bytes",
+                        ),
                         sha256=str(raw_file["sha256"]),
                         truncated=bool(raw_file["truncated"]),
                         content=str(raw_file["content"]),
@@ -93,11 +127,20 @@ class ContextWorkspaceAdapter:
                     plan_id=str(raw_pack["plan_id"]),
                     task_id=str(raw_pack["task_id"]),
                     step_id=str(raw_pack["step_id"]),
-                    agent_role=cast(str, raw_pack["agent_role"]),  # type: ignore[arg-type]
+                    agent_role=cast(
+                        AgentRole,
+                        str(raw_pack["agent_role"]),
+                    ),
                     objective=str(raw_pack["objective"]),
                     files=tuple(files),
-                    total_bytes=int(raw_pack["total_bytes"]),
-                    candidate_count=int(raw_pack["candidate_count"]),
+                    total_bytes=_as_int(
+                        raw_pack["total_bytes"],
+                        "total_bytes",
+                    ),
+                    candidate_count=_as_int(
+                        raw_pack["candidate_count"],
+                        "candidate_count",
+                    ),
                 )
             )
 
@@ -124,7 +167,7 @@ class ContextWorkspaceAdapter:
                 project_root=str(brain_value["project_root"]),
                 display_name=str(brain_value["display_name"]),
                 project_type=str(brain_value["project_type"]),
-                markers=tuple(str(item) for item in cast(list[object], brain_value.get("markers", []))),
+                markers=_string_tuple(brain_value.get("markers")),
                 package_manager=(
                     str(brain_value["package_manager"])
                     if brain_value.get("package_manager") is not None

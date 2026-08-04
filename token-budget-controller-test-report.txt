@@ -1,0 +1,15 @@
+Ticket 9 — Token Budget Controller
+
+Validation performed in the artifact workspace:
+- Python source compilation: passed
+- Full pytest suite: 417 passed
+- Budget construction: covered
+- Draft/lock lifecycle: covered
+- Retry limit and repeated denial: covered
+- Handoff limit: covered
+- Planning/total automatic stop: covered
+- Hard total rejection: covered
+- Workspace persistence round-trip: covered
+
+Ruff and mypy are enforced by the repository CI and by the supplied local
+apply script before commit.

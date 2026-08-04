@@ -6,6 +6,12 @@ All notable changes to Empy Studio are documented here.
 
 ### Added
 
+- pre-execution Token Budget Controller with economy, standard, and extended presets
+- visible planning, agent, retry, handoff, reserve, and total hard limits
+- immutable budget locking before execution and persistent budget workspace
+- bounded retry and handoff counters with automatic stop decisions
+- deterministic provider-neutral token estimation and per-agent allocation panel
+
 - Desktop Context Selector for approved execution plans
 - deterministic file relevance scoring per planned agent role
 - bounded per-agent context packs with visible source previews

@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "phase": 3,
+  "ticket": 9,
+  "title": "Token Budget Controller",
+  "status": "implemented",
+  "core_module": "src/empy_studio/core/token_budget.py",
+  "desktop_adapter": "src/empy_studio/desktop/token_budget_workspace_adapter.py",
+  "desktop_route": "token-budget",
+  "workspace_file": "token-budgets.json",
+  "budget_dimensions": [
+    "planning",
+    "agent base call",
+    "retry",
+    "handoff",
+    "total hard limit"
+  ],
+  "presets": [
+    "economy",
+    "standard",
+    "extended"
+  ],
+  "automatic_stops": [
+    "planning limit",
+    "per-step limit",
+    "retry count",
+    "retry token pool",
+    "handoff count",
+    "handoff token pool",
+    "total token limit"
+  ],
+  "explicit_exclusions": [
+    "agent dispatch",
+    "provider execution",
+    "file ownership",
+    "agent sequencing"
+  ],
+  "next_ticket": 10,
+  "validation": {
+    "pytest": "417 passed",
+    "compileall": "passed",
+    "tests": [
+      "tests/test_token_budget.py",
+      "tests/test_token_budget_workspace_adapter.py"
+    ]
+  }
+}
