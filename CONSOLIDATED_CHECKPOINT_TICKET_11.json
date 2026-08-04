@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-04T18:42:26.237817+00:00",
+  "product": "Empy Studio",
+  "master_plan_position": {
+    "phase": 4,
+    "ticket": 11,
+    "title": "Codex Driver Productionization",
+    "status": "implemented",
+    "next_ticket": 12
+  },
+  "dependency": {
+    "ticket": 10,
+    "title": "Agent Dispatcher",
+    "required": true
+  },
+  "delivered": [
+    "Codex CLI installation and authentication preflight",
+    "non-interactive JSONL node execution",
+    "dependency-ordered Agent Run Graph runtime",
+    "timeout and process-group cancellation",
+    "session IDs, final messages, stderr, commands, and event evidence",
+    "mapped provider and runtime errors",
+    "Git clean-worktree and file-ownership scope audits",
+    "desktop live run view and persistent run history"
+  ],
+  "definition_of_done": {
+    "runs_from_desktop": "passed",
+    "progress_is_visible": "passed",
+    "errors_are_understandable": "passed"
+  },
+  "explicitly_not_included": [
+    "multi-provider driver settings and selection",
+    "Claude or Gemini production drivers",
+    "patch synchronization and conflict resolution"
+  ],
+  "validation": {
+    "pytest_expected": "441 passed",
+    "compileall_expected": "passed",
+    "local_ci_gate": [
+      "ruff check .",
+      "mypy src",
+      "pytest -q",
+      "compileall -q src"
+    ]
+  }
+}

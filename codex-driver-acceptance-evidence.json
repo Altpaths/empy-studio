@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-04T18:44:15.419603+00:00",
+  "ticket": 11,
+  "title": "Codex Driver Productionization",
+  "status": "implemented",
+  "build_validation": {
+    "pytest": {
+      "command": "PYTHONPATH=src python3 -m pytest -q",
+      "passed": 441,
+      "failed": 0,
+      "result": "passed"
+    },
+    "compileall": {
+      "command": "python3 -m compileall -q src",
+      "result": "passed"
+    },
+    "ruff_and_mypy": {
+      "result": "required_by_apply_gate",
+      "note": "The apply helper runs repository Ruff and strict mypy using the user virtual environment before commit."
+    }
+  },
+  "definition_of_done": [
+    {
+      "requirement": "Runs from the desktop UI",
+      "evidence": "Agent Run Graph exposes a confirmed Codex launch, background controller, cancellation, and run-history routes.",
+      "tests": [
+        "test_desktop_exposes_codex_execution_runtime"
+      ]
+    },
+    {
+      "requirement": "Progress is visible",
+      "evidence": "Codex JSONL and stderr are streamed into typed progress events and rendered live.",
+      "tests": [
+        "test_streams_json_events_and_preserves_evidence",
+        "test_real_subprocess_contract_with_fake_codex_cli"
+      ]
+    },
+    {
+      "requirement": "Errors are understandable",
+      "evidence": "Installation, authentication, timeout, cancellation, provider, dirty-worktree, and scope failures use mapped codes and remediation text.",
+      "tests": [
+        "test_missing_installation_has_clear_remediation",
+        "test_nonzero_exit_maps_authentication_error",
+        "test_timeout_terminates_active_process",
+        "test_runtime_rejects_dirty_git_worktree",
+        "test_runtime_fails_node_that_changes_unowned_file"
+      ]
+    }
+  ],
+  "files": {
+    "src/empy_studio/drivers/codex.py": {
+      "sha256": "3255399f4ede4b12768daeb56da76a79950010a35b21d4b99c48d603bdd3815f",
+      "bytes": 32722
+    },
+    "src/empy_studio/drivers/codex_runtime.py": {
+      "sha256": "ae86d25eab02d83b72005ac939e8c2cd4782bce417ef130fca340cc07f45ee4b",
+      "bytes": 21272
+    },
+    "src/empy_studio/drivers/__init__.py": {
+      "sha256": "ecc0c2422359aa93fb9ce6f85ab0f3a76b9e296a00a710c0527fad2e72c003d7",
+      "bytes": 878
+    },
+    "src/empy_studio/desktop/codex_execution_controller.py": {
+      "sha256": "31ed70ebd1baa05658267b9d2c4a8603fea4a1dc582a28023a3a47e87c0d41fe",
+      "bytes": 2558
+    },
+    "src/empy_studio/desktop/codex_execution_workspace_adapter.py": {
+      "sha256": "e11df75d1817452af791243a9878e5a8827bfed8bc99f7b8e60b201a59bdf537",
+      "bytes": 7864
+    },
+    "src/empy_studio/desktop/shell.py": {
+      "sha256": "db8be77eb5c61564f85818698038a193dd56c1bfcc96b11b6a838d2ef661c84e",
+      "bytes": 69147
+    },
+    "tests/test_codex_production_driver.py": {
+      "sha256": "d4c32110c5b050530f4b459c3777d13716648ad2b847294ef9448294227c736b",
+      "bytes": 8698
+    },
+    "tests/test_codex_graph_runtime.py": {
+      "sha256": "d58df252e5e6a65ddcbc29e9796e812a2c19156411c35ab70a558ddd6e4a8469",
+      "bytes": 7891
+    },
+    "tests/test_codex_execution_workspace_adapter.py": {
+      "sha256": "499824a62ca750c58f8000a288e18c6d732d3e9f9afd326ff493075f67cb2303",
+      "bytes": 2279
+    },
+    "tests/test_desktop_shell.py": {
+      "sha256": "e16b3253bee7be96a969a6e0947d0e690070e29bd6b2bcf6b5b82d35b138da1c",
+      "bytes": 1598
+    },
+    "docs/codex-driver-production.md": {
+      "sha256": "ecff7a5cdbfe041e964a64907e040b11bf6c96ebc7d473969b2d4c7189f2011f",
+      "bytes": 2917
+    },
+    "docs/consolidated-checkpoint-ticket-11.md": {
+      "sha256": "5a7b5cd73165db0f8705c9b43d48c973d8e5862d1d9cfee3bf3953c2d91737bb",
+      "bytes": 1545
+    },
+    "CONSOLIDATED_CHECKPOINT_TICKET_11.json": {
+      "sha256": "1769c2a2913c528019b2cafe3dd44d28d444f3f55aaf2b5fa7d8075e8a77cf58",
+      "bytes": 1356
+    },
+    "codex-driver-manifest.json": {
+      "sha256": "023878b257658ccd7ed5014bdb42f381c9612a911d1e136f3b1911fe914bcef6",
+      "bytes": 1395
+    },
+    "codex-driver-test-report.txt": {
+      "sha256": "a4583efa513488a9a79db39c82b276b67a126d2dae2d72733fff71e7735a62fe",
+      "bytes": 128
+    },
+    "CHANGELOG.md": {
+      "sha256": "62a419ce8bcafcf768c0fcec2a5a75a70b5d88191451e62e8cf635ffa2010558",
+      "bytes": 5473
+    }
+  },
+  "scope_boundary": {
+    "included": [
+      "Codex CLI preflight",
+      "non-interactive execution",
+      "graph runtime",
+      "live progress",
+      "timeout",
+      "cancellation",
+      "evidence persistence",
+      "desktop runs",
+      "Git scope audit"
+    ],
+    "excluded": [
+      "provider-neutral settings",
+      "additional production drivers",
+      "patch synchronization",
+      "conflict resolution"
+    ]
+  }
+}

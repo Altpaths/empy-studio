@@ -6,6 +6,12 @@ All notable changes to Empy Studio are documented here.
 
 ### Added
 
+- production Codex CLI driver with installation and authentication preflight
+- non-interactive JSONL execution with per-node session and command evidence
+- dependency-ordered execution of approved Agent Run Graph nodes
+- live desktop progress, cancellation, timeout, run history, and mapped provider errors
+- clean-worktree and post-run file-ownership audits for Git projects
+
 - provider-neutral Agent Dispatcher and persistent Agent Run Graph
 - deterministic role and capability matching from approved plan steps
 - single-writer file ownership with explicit read-only access

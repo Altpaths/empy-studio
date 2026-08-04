@@ -31,9 +31,22 @@ from empy_studio.core import (
     policy_for_preset,
     template_by_key,
 )
+from empy_studio.drivers import (
+    CodexDriver,
+    CodexGraphExecution,
+    CodexGraphRuntime,
+    CodexProgressEvent,
+)
 
 from .agent_dispatcher_workspace_adapter import (
     AgentDispatcherWorkspaceAdapter,
+)
+from .codex_execution_controller import (
+    CodexControllerFailure,
+    CodexExecutionController,
+)
+from .codex_execution_workspace_adapter import (
+    CodexExecutionWorkspaceAdapter,
 )
 from .context_workspace_adapter import (
     ContextWorkspaceAdapter,
@@ -84,7 +97,7 @@ NAVIGATION = (
 
 
 class EmpyDesktopShell:
-    """Desktop product shell through Ticket 10."""
+    """Desktop product shell through Ticket 11."""
 
     def __init__(
         self,
@@ -98,6 +111,9 @@ class EmpyDesktopShell:
         context_store: ContextWorkspaceAdapter | None = None,
         budget_store: TokenBudgetWorkspaceAdapter | None = None,
         dispatcher_store: AgentDispatcherWorkspaceAdapter | None = None,
+        execution_store: CodexExecutionWorkspaceAdapter | None = None,
+        codex_driver: CodexDriver | None = None,
+        execution_controller: CodexExecutionController | None = None,
     ) -> None:
         self.root = root
         self.workspace_path = (
@@ -145,6 +161,25 @@ class EmpyDesktopShell:
                 self.workspace_path
             )
         )
+        self.execution_store = (
+            execution_store
+            or CodexExecutionWorkspaceAdapter(
+                self.workspace_path
+            )
+        )
+        selected_driver = codex_driver or CodexDriver(
+            artifact_root=self.execution_store.run_root
+        )
+        self.execution_controller = (
+            execution_controller
+            or CodexExecutionController(
+                runtime=CodexGraphRuntime(
+                    driver=selected_driver,
+                    run_root=self.execution_store.run_root,
+                ),
+                store=self.execution_store,
+            )
+        )
         self.current_project: (
             ProjectDetection | None
         ) = None
@@ -155,6 +190,10 @@ class EmpyDesktopShell:
         self.current_context: ContextSelection | None = None
         self.current_budget: TokenBudget | None = None
         self.current_run_graph: AgentRunGraph | None = None
+        self.current_codex_run: CodexGraphExecution | None = None
+        self.codex_status_var: tk.StringVar | None = None
+        self.codex_log_view: tk.Text | None = None
+        self.codex_cancel_button: ttk.Button | None = None
         self.budget_preset_var: tk.StringVar | None = None
         self.selected_template: TaskKind = "custom"
 
@@ -294,7 +333,7 @@ class EmpyDesktopShell:
         )
         ttk.Label(
             self.sidebar,
-            text="Ticket 10 · Agent Dispatcher",
+            text="Ticket 11 · Codex Driver",
             style="SidebarCaption.TLabel",
         ).pack(anchor="w", padx=22)
 
@@ -312,6 +351,9 @@ class EmpyDesktopShell:
     def _clear_page(self) -> None:
         for child in self.page.winfo_children():
             child.destroy()
+        self.codex_status_var = None
+        self.codex_log_view = None
+        self.codex_cancel_button = None
 
     def show_page(
         self,
@@ -324,18 +366,12 @@ class EmpyDesktopShell:
         elif key == "projects":
             self._render_projects()
         elif key == "runs":
-            self._render_placeholder(
-                title="Runs",
-                text=(
-                    "Execution history enters "
-                    "the product in later roadmap tickets."
-                ),
-            )
+            self._render_runs()
         elif key == "settings":
             self._render_placeholder(
                 title="Settings",
                 text=(
-                    "Driver settings are outside Ticket 6."
+                    "Multi-provider driver settings are planned for Ticket 12."
                 ),
             )
         elif key == "project-home":
@@ -352,6 +388,8 @@ class EmpyDesktopShell:
             self._render_token_budget()
         elif key == "agent-run-graph":
             self._render_agent_run_graph()
+        elif key == "codex-run":
+            self._render_codex_run()
         else:
             raise KeyError(key)
 
@@ -1612,6 +1650,23 @@ class EmpyDesktopShell:
             str(sum(item.owner_agent_id is not None for item in graph.ownership)),
         ).pack(side="left", fill="both", expand=True, padx=(6, 0))
 
+        run_controls = ttk.Frame(self.page, style="Content.TFrame")
+        run_controls.pack(fill="x", pady=(0, 14))
+        latest_run = self.execution_store.get_for_graph(graph.graph_id)
+        if latest_run is not None:
+            ttk.Button(
+                run_controls,
+                text="Open Latest Codex Run",
+                style="Secondary.TButton",
+                command=partial(self._open_codex_run, latest_run),
+            ).pack(side="left")
+        ttk.Button(
+            run_controls,
+            text="Run Approved Graph with Codex",
+            style="Primary.TButton",
+            command=self._start_codex_run,
+        ).pack(side="right")
+
         notebook = ttk.Notebook(self.page)
         notebook.pack(fill="both", expand=True)
 
@@ -1681,12 +1736,278 @@ class EmpyDesktopShell:
             self.page,
             text=(
                 f"{len(graph.protected_exclusions)} protected path(s) remain "
-                "outside every agent node. This graph prepares execution only; "
-                "no AI provider has been called. Codex execution begins in Ticket 11."
+                "outside every agent node. Codex runs only after explicit user "
+                "confirmation and stores progress, logs, session IDs, and mapped errors."
             ),
             style="Body.TLabel",
             wraplength=820,
         ).pack(anchor="w", pady=(12, 0))
+
+    def _start_codex_run(self) -> None:
+        if (
+            self.current_project is None
+            or self.current_context is None
+            or self.current_budget is None
+            or self.current_run_graph is None
+        ):
+            messagebox.showerror(
+                "Run is not ready",
+                "Open an approved Agent Run Graph before starting Codex.",
+            )
+            return
+        if self.execution_controller.running:
+            messagebox.showinfo(
+                "Codex is already running",
+                "Wait for the active run to finish or cancel it from the Runs page.",
+            )
+            return
+
+        installation = self.execution_controller.runtime.driver.inspect_installation(
+            refresh=True
+        )
+        if not installation.ready:
+            message = installation.message
+            if installation.remediation:
+                message = f"{message}\n\n{installation.remediation}"
+            messagebox.showerror("Codex is unavailable", message)
+            return
+
+        confirmed = messagebox.askyesno(
+            "Run approved graph with Codex",
+            (
+                f"Codex will execute {len(self.current_run_graph.nodes)} approved "
+                "node(s) in dependency order. It will not commit, push, merge, "
+                "tag, or publish. Continue?"
+            ),
+        )
+        if not confirmed:
+            return
+
+        self.current_codex_run = None
+        try:
+            self.execution_controller.start(
+                graph=self.current_run_graph,
+                selection=self.current_context,
+                budget=self.current_budget,
+                project=self.current_project.descriptor,
+            )
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Unable to start Codex", str(exc))
+            return
+        self.show_page("codex-run")
+        self.root.after(150, self._poll_codex_execution)
+
+    def _render_codex_run(self) -> None:
+        ttk.Button(
+            self.page,
+            text="← Agent Run Graph",
+            style="Secondary.TButton",
+            command=partial(self.show_page, "agent-run-graph"),
+        ).pack(anchor="w", pady=(0, 18))
+        ttk.Label(
+            self.page,
+            text="Codex Execution",
+            style="Title.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            self.page,
+            text=(
+                "Empy runs Codex outside the UI thread, streams structured progress, "
+                "enforces timeout and cancellation, and preserves evidence per node."
+            ),
+            style="Body.TLabel",
+            wraplength=840,
+        ).pack(anchor="w", pady=(0, 14))
+
+        controls = ttk.Frame(self.page, style="Content.TFrame")
+        controls.pack(fill="x", pady=(0, 12))
+        current_status = (
+            self.current_codex_run.status
+            if self.current_codex_run is not None
+            else "running"
+            if self.execution_controller.running
+            else "not started"
+        )
+        self.codex_status_var = tk.StringVar(value=f"Status: {current_status}")
+        ttk.Label(
+            controls,
+            textvariable=self.codex_status_var,
+            style="CardTitle.TLabel",
+        ).pack(side="left")
+        self.codex_cancel_button = ttk.Button(
+            controls,
+            text="Cancel Run",
+            style="Secondary.TButton",
+            command=self._cancel_codex_run,
+        )
+        self.codex_cancel_button.pack(side="right")
+        if not self.execution_controller.running:
+            self.codex_cancel_button.state(["disabled"])
+
+        log_frame = ttk.Frame(
+            self.page,
+            style="Content.TFrame",
+            padding=2,
+        )
+        log_frame.pack(fill="both", expand=True)
+        self.codex_log_view = tk.Text(
+            log_frame,
+            wrap="word",
+            borderwidth=1,
+            relief="solid",
+            font=("Menlo", 11),
+        )
+        self.codex_log_view.pack(fill="both", expand=True)
+
+        if self.current_codex_run is not None:
+            for event in self.current_codex_run.events:
+                self._append_codex_event(event)
+            self.codex_log_view.insert("end", "\nNODE RESULTS\n")
+            for node in self.current_codex_run.node_results:
+                self.codex_log_view.insert(
+                    "end",
+                    (
+                        f"{node.node_id}: {node.status}\n"
+                        f"  Summary: {node.summary}\n"
+                        f"  Session: {node.thread_id or 'not reported'}\n"
+                        f"  Changed files: {', '.join(node.changed_files) or 'none reported'}\n"
+                        f"  Events: {node.events_path}\n"
+                        f"  Errors: {node.stderr_path}\n\n"
+                    ),
+                )
+            if self.current_codex_run.error_message:
+                self.codex_log_view.insert(
+                    "end",
+                    f"RUN ERROR: {self.current_codex_run.error_message}\n",
+                )
+        elif self.execution_controller.running:
+            self.codex_log_view.insert(
+                "end",
+                "Codex preflight passed. Waiting for the first execution event...\n",
+            )
+        else:
+            self.codex_log_view.insert("end", "No Codex run is selected.\n")
+        self.codex_log_view.see("end")
+
+    def _poll_codex_execution(self) -> None:
+        terminal_received = False
+        for message in self.execution_controller.drain():
+            if isinstance(message, CodexProgressEvent):
+                self._append_codex_event(message)
+            elif isinstance(message, CodexGraphExecution):
+                terminal_received = True
+                self.current_codex_run = message
+                if self.codex_status_var is not None:
+                    self.codex_status_var.set(f"Status: {message.status}")
+                if self.codex_cancel_button is not None:
+                    self.codex_cancel_button.state(["disabled"])
+                if self.codex_log_view is not None:
+                    self.codex_log_view.insert(
+                        "end",
+                        (
+                            f"\nRun finished: {message.status}\n"
+                            f"Evidence saved under: {self.execution_store.run_root / message.run_id}\n"
+                        ),
+                    )
+                    if message.error_message:
+                        self.codex_log_view.insert(
+                            "end",
+                            f"Mapped error: {message.error_message}\n",
+                        )
+                    self.codex_log_view.see("end")
+            elif isinstance(message, CodexControllerFailure):
+                terminal_received = True
+                if self.codex_status_var is not None:
+                    self.codex_status_var.set("Status: failed")
+                if self.codex_cancel_button is not None:
+                    self.codex_cancel_button.state(["disabled"])
+                messagebox.showerror("Codex execution failed", message.message)
+
+        if self.execution_controller.running or not terminal_received:
+            self.root.after(150, self._poll_codex_execution)
+
+    def _append_codex_event(self, event: CodexProgressEvent) -> None:
+        if self.codex_log_view is None:
+            return
+        node = event.node_id or "runtime"
+        self.codex_log_view.insert(
+            "end",
+            f"[{event.timestamp}] [{event.level.upper()}] [{node}] {event.message}\n",
+        )
+        self.codex_log_view.see("end")
+
+    def _cancel_codex_run(self) -> None:
+        if not self.execution_controller.running:
+            return
+        confirmed = messagebox.askyesno(
+            "Cancel Codex run",
+            "Stop the active Codex process and skip remaining nodes?",
+        )
+        if not confirmed:
+            return
+        self.execution_controller.cancel()
+        if self.codex_status_var is not None:
+            self.codex_status_var.set("Status: cancelling")
+
+    def _open_codex_run(self, run: CodexGraphExecution) -> None:
+        self.current_codex_run = run
+        self.show_page("codex-run")
+
+    def _render_runs(self) -> None:
+        ttk.Label(
+            self.page,
+            text="Runs",
+            style="Title.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            self.page,
+            text="Codex execution history, statuses, session evidence, and mapped errors.",
+            style="Body.TLabel",
+            wraplength=820,
+        ).pack(anchor="w", pady=(0, 18))
+
+        project_root = (
+            str(self.current_project.descriptor.root)
+            if self.current_project is not None
+            else None
+        )
+        runs = self.execution_store.list_runs(project_root=project_root)
+        if not runs:
+            self._empty_card(
+                "No Codex runs yet",
+                "Build an Agent Run Graph, lock its budget, and start Codex from the graph page.",
+            ).pack(fill="x")
+            return
+
+        for run in runs:
+            row = ttk.Frame(
+                self.page,
+                style="Card.TFrame",
+                padding=16,
+            )
+            row.pack(fill="x", pady=(0, 10))
+            text = ttk.Frame(row, style="Card.TFrame")
+            text.pack(side="left", fill="both", expand=True)
+            ttk.Label(
+                text,
+                text=f"{run.status.upper()} · {run.run_id[:12]}",
+                style="CardTitle.TLabel",
+            ).pack(anchor="w")
+            ttk.Label(
+                text,
+                text=(
+                    f"Graph {run.graph_id} · {len(run.node_results)} node(s) · "
+                    f"Started {run.started_at}"
+                ),
+                style="CardBody.TLabel",
+                wraplength=700,
+            ).pack(anchor="w", pady=(5, 0))
+            ttk.Button(
+                row,
+                text="Open",
+                style="Secondary.TButton",
+                command=partial(self._open_codex_run, run),
+            ).pack(side="right")
 
     def _edit_task_from_plan(self) -> None:
         if (
@@ -1745,7 +2066,7 @@ class EmpyDesktopShell:
             "Plan approved",
             (
                 "The plan is frozen and ready for "
-                "Ticket 8: Context Selector."
+                "bounded context and execution setup."
             ),
         )
         self.show_page("plan-preview")

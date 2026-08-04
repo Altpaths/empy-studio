@@ -37,3 +37,12 @@ def test_desktop_exposes_agent_run_graph() -> None:
 
     assert hasattr(EmpyDesktopShell, "_build_or_open_agent_run_graph")
     assert hasattr(EmpyDesktopShell, "_render_agent_run_graph")
+
+
+def test_desktop_exposes_codex_execution_runtime() -> None:
+    from empy_studio.desktop.shell import EmpyDesktopShell
+
+    assert hasattr(EmpyDesktopShell, "_start_codex_run")
+    assert hasattr(EmpyDesktopShell, "_render_codex_run")
+    assert hasattr(EmpyDesktopShell, "_cancel_codex_run")
+    assert hasattr(EmpyDesktopShell, "_render_runs")

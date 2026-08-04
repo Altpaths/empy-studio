@@ -1,0 +1,5 @@
+Ticket 11 — Codex Driver Productionization
+PYTHONPATH=src python3 -m pytest -q
+441 passed
+python3 -m compileall -q src
+passed
