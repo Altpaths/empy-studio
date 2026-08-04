@@ -9,6 +9,21 @@ from empy_studio.core import (
 )
 
 
+def _as_int(value: object, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise TypeError(f"{field_name} must be an integer")
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an integer") from exc
+
+
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(str(item) for item in value)
+
+
 class PlanWorkspaceAdapter:
     """Persist draft and approved execution plans."""
 
@@ -93,8 +108,9 @@ class PlanWorkspaceAdapter:
             raw_steps = []
 
         plan = ExecutionPlan(
-            schema_version=int(
-                value["schema_version"]
+            schema_version=_as_int(
+                value["schema_version"],
+                "schema_version",
             ),
             plan_id=str(value["plan_id"]),
             task_id=str(value["task_id"]),
@@ -121,21 +137,20 @@ class PlanWorkspaceAdapter:
             risk=str(
                 value["risk"]
             ),  # type: ignore[arg-type]
-            estimated_files=int(
-                value["estimated_files"]
+            estimated_files=_as_int(
+                value["estimated_files"],
+                "estimated_files",
             ),
-            estimated_agents=int(
-                value["estimated_agents"]
+            estimated_agents=_as_int(
+                value["estimated_agents"],
+                "estimated_agents",
             ),
-            estimated_tokens=int(
-                value["estimated_tokens"]
+            estimated_tokens=_as_int(
+                value["estimated_tokens"],
+                "estimated_tokens",
             ),
-            likely_paths=tuple(
-                str(item)
-                for item in value.get(
-                    "likely_paths",
-                    [],
-                )
+            likely_paths=_string_tuple(
+                value.get("likely_paths")
             ),
             steps=tuple(
                 PlanStep(
@@ -158,10 +173,9 @@ class PlanWorkspaceAdapter:
                             "suggested_agent"
                         ]
                     ),  # type: ignore[arg-type]
-                    estimated_files=int(
-                        item[
-                            "estimated_files"
-                        ]
+                    estimated_files=_as_int(
+                        item["estimated_files"],
+                        "step.estimated_files",
                     ),
                     risk=str(
                         item["risk"]

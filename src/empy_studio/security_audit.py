@@ -11,10 +11,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-try:
+if sys.version_info >= (3, 11):
     import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python 3.10
-    import tomli as tomllib  # type: ignore[import-not-found]
+else:  # pragma: no cover - Python 3.10
+    import tomli as tomllib
 
 Severity = Literal[
     "info",

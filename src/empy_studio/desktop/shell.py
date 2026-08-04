@@ -3,12 +3,14 @@ from __future__ import annotations
 import tkinter as tk
 import uuid
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from empy_studio.core import (
     TASK_TEMPLATES,
     DefaultProjectService,
+    ExecutionPlan,
     ProductTask,
     ProjectDescriptor,
     ProjectDetection,
@@ -109,7 +111,7 @@ class EmpyDesktopShell:
         self.current_task: (
             ProductTask | None
         ) = None
-        self.current_plan = None
+        self.current_plan: ExecutionPlan | None = None
         self.selected_template: TaskKind = "custom"
 
         self._configure_window()
@@ -238,7 +240,7 @@ class EmpyDesktopShell:
                 self.sidebar,
                 text=item.label,
                 style="Nav.TButton",
-                command=lambda key=item.key: self.show_page(key),
+                command=partial(self.show_page, item.key),
             ).pack(fill="x", padx=14, pady=4)
 
         ttk.Separator(self.sidebar).pack(
@@ -817,9 +819,7 @@ class EmpyDesktopShell:
                 else "Generate Plan"
             ),
             style="Secondary.TButton",
-            command=lambda value=task: (
-                self._open_task_plan(value)
-            ),
+            command=partial(self._open_task_plan, task),
         ).pack(side="right")
         return row
 
@@ -838,15 +838,14 @@ class EmpyDesktopShell:
             self.current_plan = existing
         else:
             try:
-                self.current_plan = (
-                    generate_execution_plan(
-                        task=task,
-                        project=self.current_project,
-                    )
+                generated_plan = generate_execution_plan(
+                    task=task,
+                    project=self.current_project,
                 )
                 self.plan_store.save_plan(
-                    self.current_plan
+                    generated_plan
                 )
+                self.current_plan = generated_plan
             except Exception as exc:  # noqa: BLE001
                 messagebox.showerror(
                     "Unable to generate plan",
@@ -1113,8 +1112,9 @@ class EmpyDesktopShell:
             row,
             text="Open",
             style="Secondary.TButton",
-            command=lambda value=project: (
-                self.open_registered_project(value)
+            command=partial(
+                self.open_registered_project,
+                project,
             ),
         ).pack(side="right")
         return row

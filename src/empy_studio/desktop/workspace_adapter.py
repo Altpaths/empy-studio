@@ -144,24 +144,31 @@ class DesktopWorkspaceAdapter:
             return value
 
         if isinstance(value, dict):
+            raw_root = (
+                value.get("root")
+                or value.get("project_root")
+                or value.get("path")
+            )
+            if not isinstance(raw_root, (str, Path)):
+                raise TypeError(
+                    "Stored project is missing a valid root path"
+                )
+            root = Path(raw_root)
+            raw_display_name = (
+                value.get("display_name")
+                or value.get("name")
+            )
             return ProjectDescriptor(
-                root=Path(
-                    value.get("root")
-                    or value.get("project_root")
-                    or value["path"]
-                ),
+                root=root,
                 project_type=str(
                     value.get("project_type")
                     or value.get("type")
                     or "generic"
                 ),
-                display_name=str(
-                    value.get("display_name")
-                    or value.get("name")
-                    or Path(
-                        value.get("root")
-                        or value.get("path")
-                    ).name
+                display_name=(
+                    str(raw_display_name)
+                    if raw_display_name is not None
+                    else root.name
                 ),
             )
 

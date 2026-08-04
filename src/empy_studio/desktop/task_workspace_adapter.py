@@ -7,6 +7,12 @@ from pathlib import Path
 from empy_studio.core import ProductTask
 
 
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(str(item) for item in value)
+
+
 class TaskWorkspaceAdapter:
     """Persist product tasks inside the Empy workspace."""
 
@@ -73,26 +79,14 @@ class TaskWorkspaceAdapter:
                 objective=str(
                     item["objective"]
                 ),
-                requirements=tuple(
-                    str(value)
-                    for value in item.get(
-                        "requirements",
-                        [],
-                    )
+                requirements=_string_tuple(
+                    item.get("requirements")
                 ),
-                constraints=tuple(
-                    str(value)
-                    for value in item.get(
-                        "constraints",
-                        [],
-                    )
+                constraints=_string_tuple(
+                    item.get("constraints")
                 ),
-                definition_of_done=tuple(
-                    str(value)
-                    for value in item.get(
-                        "definition_of_done",
-                        [],
-                    )
+                definition_of_done=_string_tuple(
+                    item.get("definition_of_done")
                 ),
                 status=str(
                     item.get(
