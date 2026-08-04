@@ -6,6 +6,13 @@ All notable changes to Empy Studio are documented here.
 
 ### Added
 
+- provider-neutral Sync & Conflict Resolver with deterministic ordered patch queues
+- Agent Dispatcher ownership enforcement before workspace changes
+- protected-file, stale-base, invalid-operation, and duplicate-write detection
+- explicit user resolutions: apply patch, keep current, or manual merged content
+- atomic file writes, pre-apply workspace revalidation, and rollback on apply failure
+- persistent Sync Reports for Desktop conflict review
+
 - provider-neutral Driver Registry, Driver Manager, and persisted Driver Settings
 - desktop capability matrix with honest available, disabled, and unavailable states
 - replaceable default-provider selection without credential-secret persistence

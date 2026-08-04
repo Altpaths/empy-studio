@@ -1,0 +1,17 @@
+Ticket 13 — Sync & Conflict Resolver
+
+Validation result:
+- Dedicated sync tests: 12 passed
+- Full repository suite: 461 passed
+- Python compileall: passed
+- Git whitespace check: passed
+
+Coverage includes:
+- deterministic graph/patch ordering
+- ownership and protected-file enforcement
+- stale-base detection
+- duplicate-write preservation
+- create, modify, and delete operations
+- apply-patch, keep-current, and manual-content decisions
+- pre-apply workspace revalidation
+- persistent desktop Sync Report evidence

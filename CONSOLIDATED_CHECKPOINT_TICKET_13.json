@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-04T20:30:00+00:00",
+  "product": "Empy Studio",
+  "master_plan_position": {
+    "phase": 5,
+    "ticket": 13,
+    "title": "Sync & Conflict Resolver",
+    "status": "implemented",
+    "next_ticket": 14
+  },
+  "dependency": {
+    "ticket": 12,
+    "title": "Driver Abstraction & Settings",
+    "required": true
+  },
+  "delivered": [
+    "deterministic provider-neutral patch queue",
+    "Agent Run Graph file-ownership enforcement",
+    "protected-file and stale-base detection",
+    "duplicate-write preservation and conflict records",
+    "explicit user conflict decisions",
+    "atomic ordered apply with rollback",
+    "persistent Sync Reports for Desktop review"
+  ],
+  "definition_of_done": {
+    "file_conflicts_are_detected": "passed",
+    "changes_are_not_lost": "passed",
+    "conflicts_require_user_decision": "passed"
+  },
+  "explicitly_not_included": [
+    "verification pipeline UI",
+    "test/build/lint streaming panel",
+    "final diff accept and revert workflow",
+    "automatic Git commit"
+  ],
+  "validation": {
+    "pytest_expected": "461 passed",
+    "compileall_expected": "passed",
+    "git_diff_check_expected": "passed"
+  }
+}
