@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "master_plan_ticket": 7,
+  "phase": "Planning, Agents & Token Control",
+  "title": "Planner & Approval",
+  "status": "completed",
+  "user_visible_capabilities": [
+    "Generate Plan from saved Task",
+    "Plan Preview",
+    "risk estimate",
+    "affected-files estimate",
+    "agent-role estimate",
+    "token estimate",
+    "ordered dependency steps",
+    "Approve Plan",
+    "immutable approved plan"
+  ],
+  "explicitly_deferred": [
+    "Context Pack construction",
+    "real token-budget enforcement",
+    "Agent Dispatcher",
+    "Codex execution",
+    "project modification"
+  ]
+}

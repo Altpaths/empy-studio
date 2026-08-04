@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "master_plan_ticket": 5,
+  "phase": "Usable Desktop Product",
+  "title": "Project Picker & Project Home",
+  "status": "completed",
+  "user_visible_capabilities": [
+    "Finder folder picker",
+    "project type detection",
+    "Workspace project registration",
+    "Recent Projects",
+    "Project Home summary"
+  ],
+  "supported_project_types": [
+    "laravel",
+    "python",
+    "node",
+    "rust",
+    "go",
+    "generic"
+  ],
+  "deferred": [
+    "Task Builder",
+    "Planner",
+    "AI execution",
+    "Verification",
+    "Diff review"
+  ]
+}

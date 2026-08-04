@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "master_plan_ticket": 2,
+  "phase": "Product Foundation",
+  "title": "Core / Desktop / Driver Boundaries",
+  "status": "completed",
+  "boundaries": {
+    "core": "Provider-independent product contracts and rules",
+    "desktop": "User-facing application boundary",
+    "drivers": "Replaceable provider implementations"
+  },
+  "rules": [
+    "core must not import desktop",
+    "core must not import drivers",
+    "desktop must not import concrete drivers",
+    "drivers implement core contracts"
+  ],
+  "created_files": [
+    "src/empy_studio/core/__init__.py",
+    "src/empy_studio/core/contracts.py",
+    "src/empy_studio/drivers/__init__.py",
+    "src/empy_studio/drivers/base.py",
+    "src/empy_studio/desktop/__init__.py",
+    "src/empy_studio/desktop/application.py",
+    "src/empy_studio/architecture_guard.py",
+    "tests/test_product_boundaries.py",
+    "docs/product-architecture-boundaries.md",
+    "product-architecture-boundaries.json"
+  ]
+}

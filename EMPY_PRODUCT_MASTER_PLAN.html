@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Empy Studio — Product Master Plan</title>
+<style>
+:root{
+  --bg:#0f1220;--panel:#171b2e;--panel2:#1e2440;--text:#eef2ff;--muted:#a9b1d6;
+  --accent:#7c8cff;--accent2:#5de2c2;--danger:#ff6b7a;--warn:#ffc857;--ok:#4ade80;
+  --line:#303758;--shadow:0 14px 40px rgba(0,0,0,.28)
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Vazirmatn,Arial,sans-serif;background:linear-gradient(180deg,#0d1020,#13172a 35%,#0d1020);color:var(--text)}
+.container{max-width:1240px;margin:auto;padding:28px 18px 80px}
+.hero{background:linear-gradient(135deg,#1a2140,#20284d 55%,#163d3a);padding:28px;border:1px solid #35406c;border-radius:24px;box-shadow:var(--shadow)}
+h1{margin:0 0 8px;font-size:34px}
+h2{font-size:23px;margin:0 0 14px}
+h3{margin:0 0 10px}
+p{line-height:1.9}
+.badge{display:inline-block;padding:6px 10px;border-radius:999px;background:#20294f;color:#cbd4ff;margin:4px;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px;margin-top:16px}
+.card{grid-column:span 12;background:rgba(23,27,46,.95);border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:var(--shadow)}
+.half{grid-column:span 6}.third{grid-column:span 4}
+@media(max-width:860px){.half,.third{grid-column:span 12}}
+.progress-wrap{height:18px;background:#0d1120;border-radius:999px;overflow:hidden;border:1px solid #2e3657}
+.progress{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:.25s}
+.metric{font-size:28px;font-weight:800}
+.rule{padding:12px 14px;border:1px solid #38405f;border-radius:12px;margin:8px 0;background:#13182a}
+.rule.critical{border-color:#6d3540;background:#24151a}
+.phase{margin-top:18px}
+.ticket{border:1px solid #343c5d;border-radius:16px;background:#13182a;margin:12px 0;overflow:hidden}
+.ticket-head{display:flex;gap:12px;align-items:flex-start;padding:16px;cursor:pointer;background:#171d33}
+.ticket-head input{transform:scale(1.35);margin-top:6px}
+.ticket-title{font-weight:800;font-size:17px}
+.ticket-meta{color:var(--muted);font-size:13px;margin-top:4px}
+.ticket-body{display:none;padding:16px;border-top:1px solid #2b3352}
+.ticket.open .ticket-body{display:block}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:10px;padding:8px 0;border-bottom:1px dashed #303758}
+.kv:last-child{border-bottom:0}
+.checklist label{display:block;padding:8px 0}
+small{color:var(--muted)}
+button{border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:700}
+.btn{background:var(--accent);color:white}.btn2{background:#252d4e;color:#dfe5ff}.danger{background:#4b2028;color:#ffd7dc}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.arch{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;background:#0c1020;border:1px solid #2f385e;padding:16px;border-radius:14px;line-height:1.8;direction:ltr;text-align:left}
+.status-pill{font-size:12px;padding:4px 8px;border-radius:999px;background:#242d50;color:#cfd6ff}
+.note{padding:14px;border-right:4px solid var(--warn);background:#2b2413;border-radius:10px;color:#ffe8a3}
+.final{border:1px solid #2d6b5f;background:#132722}
+.footer{color:var(--muted);text-align:center;margin-top:24px}
+</style>
+</head>
+<body>
+<div class="container">
+<section class="hero">
+  <div class="badge">Empy Studio</div>
+  <div class="badge">Product Constitution</div>
+  <div class="badge">v1.0 Roadmap</div>
+  <h1>نقشه مادر محصول Empy Studio</h1>
+  <p>این سند مسیر قطعی تبدیل Empy Studio از یک هسته فنی به یک محصول مستقل، قابل دانلود، قابل نصب و قابل استفاده را نگه می‌دارد. هیچ کار جدیدی خارج از این مسیر مجاز نیست.</p>
+  <div class="grid">
+    <div class="card third"><div class="metric" id="overallPct">0%</div><small>پیشرفت کل محصول</small></div>
+    <div class="card third"><div class="metric" id="doneCount">0</div><small>تیکت‌های تکمیل‌شده</small></div>
+    <div class="card third"><div class="metric" id="nextTicket">1</div><small>تیکت بعدی مجاز</small></div>
+  </div>
+  <div class="progress-wrap"><div class="progress" id="overallProgress"></div></div>
+  <div class="toolbar">
+    <button class="btn" onclick="expandAll()">باز کردن همه</button>
+    <button class="btn2" onclick="collapseAll()">بستن همه</button>
+    <button class="btn2" onclick="exportState()">خروجی وضعیت</button>
+    <button class="danger" onclick="resetAll()">پاک‌کردن همه تیک‌ها</button>
+  </div>
+</section>
+
+<div class="grid">
+<section class="card half">
+<h2>هدف نهایی نسخه ۱</h2>
+<div class="arch">Download
+  ↓
+Install
+  ↓
+Open Empy Studio
+  ↓
+Choose Project
+  ↓
+Write Request
+  ↓
+Review Plan
+  ↓
+Run
+  ↓
+Review Changes & Tests
+  ↓
+Accept / Revert
+  ↓
+Done</div>
+</section>
+
+<section class="card half">
+<h2>تعریف محصول</h2>
+<p><strong>Empy Studio</strong> یک محصول مستقل برای ارکستراسیون توسعه نرم‌افزار با کمک چند موتور هوش مصنوعی است. Codex، Claude و Gemini فقط Driver هستند؛ مرکز محصول Empy است.</p>
+<div class="note">کاربر نباید JSON بنویسد، مسیرها را دستی وارد کند، Agent انتخاب کند، Context بسازد یا از Terminal برای کار روزمره استفاده کند.</div>
+</section>
+
+<section class="card">
+<h2>قوانین غیرقابل نقض</h2>
+<div class="rule critical">۱. هیچ تیکتی خارج از این Roadmap ساخته نمی‌شود مگر با اصلاح رسمی همین فایل.</div>
+<div class="rule critical">۲. هیچ تیکتی فقط برای افزایش تعداد ماژول‌ها یا تست‌ها پذیرفته نیست؛ باید ارزش قابل مشاهده برای کاربر ایجاد کند.</div>
+<div class="rule">۳. Empy مستقل است؛ AI Providerها فقط Driverهای قابل تعویض‌اند.</div>
+<div class="rule">۴. رابط اصلی نسخه ۱ Desktop است؛ CLI فقط ابزار پشتیبان و توسعه باقی می‌ماند.</div>
+<div class="rule">۵. کاربر درخواست طبیعی می‌نویسد؛ Empy آن را به Task Contract تبدیل می‌کند.</div>
+<div class="rule">۶. هر Agent فقط Context لازم، فایل‌های مجاز و بودجه مشخص دریافت می‌کند.</div>
+<div class="rule">۷. Agentها اجازه ویرایش هم‌زمان یک فایل را ندارند مگر از مسیر Sync.</div>
+<div class="rule">۸. تغییرات بدون Verification و Evidence قابل نهایی‌شدن نیستند.</div>
+<div class="rule">۹. Commit، Push، Merge و Release بدون تأیید صریح کاربر انجام نمی‌شود.</div>
+<div class="rule">۱۰. هر تیکت فقط وقتی کامل است که روی پروژه واقعی قابل مشاهده و قابل آزمایش باشد.</div>
+<div class="rule">۱۱. Refactor نامرتبط، بازنویسی معماری و Feature creep ممنوع است.</div>
+<div class="rule">۱۲. هر بار قبل از شروع کار باید «تیکت بعدی مجاز» در بالای همین صفحه بررسی شود.</div>
+</section>
+
+<section class="card">
+<h2>معماری مقصد</h2>
+<div class="arch">User
+  ↓
+Empy Desktop
+  ↓
+Workspace
+  ├─ Projects
+  ├─ Tasks
+  ├─ Templates
+  ├─ History
+  └─ Settings
+  ↓
+Task Intake
+  ↓
+Planner
+  ↓
+Context & Token Controller
+  ↓
+Agent Dispatcher
+  ↓
+AI Drivers
+  ├─ Codex
+  ├─ Claude
+  └─ Gemini
+  ↓
+Sync & Conflict Resolver
+  ↓
+Verification & Evidence
+  ↓
+Review / Accept / Revert</div>
+</section>
+</div>
+
+<div id="roadmap"></div>
+
+<section class="card final">
+<h2>معیار پایان نسخه ۱</h2>
+<div class="checklist">
+<label><input type="checkbox" class="final-check"> کاربر فایل نصب macOS را دانلود و نصب می‌کند.</label>
+<label><input type="checkbox" class="final-check"> محصول بدون Terminal باز می‌شود.</label>
+<label><input type="checkbox" class="final-check"> کاربر پروژه را با Finder انتخاب می‌کند.</label>
+<label><input type="checkbox" class="final-check"> کاربر Task آماده یا سفارشی می‌سازد.</label>
+<label><input type="checkbox" class="final-check"> Empy برنامه اجرا و Agentهای لازم را پیشنهاد می‌دهد.</label>
+<label><input type="checkbox" class="final-check"> Context و بودجه توکن برای هر Agent محدود است.</label>
+<label><input type="checkbox" class="final-check"> حداقل Codex Driver در اجرای واقعی کار می‌کند.</label>
+<label><input type="checkbox" class="final-check"> تغییرات، تست‌ها و خطاها در UI دیده می‌شوند.</label>
+<label><input type="checkbox" class="final-check"> کاربر می‌تواند تغییرات را Accept یا Revert کند.</label>
+<label><input type="checkbox" class="final-check"> Kit4Kids به‌عنوان Acceptance Project موفق اجرا شده است.</label>
+<label><input type="checkbox" class="final-check"> Build امضاشده یا بسته نصب قابل آزمایش تولید شده است.</label>
+</div>
+</section>
+
+<div class="footer">EMPY_PRODUCT_MASTER_PLAN.html — وضعیت در LocalStorage همین مرورگر ذخیره می‌شود.</div>
+</div>
+
+<script>
+const phases = [
+{
+ title:"فاز ۱ — Product Foundation",
+ goal:"تثبیت ساختار محصول، مرزبندی Core و Desktop، و ایجاد Workspace واحد.",
+ tickets:[
+  {id:1,title:"Repository & Product Baseline",goal:"ثبت وضعیت واقعی Repository و قفل‌کردن Scope نسخه ۱.",how:"Audit سورس موجود، طبقه‌بندی ماژول‌های قابل استفاده، حذف ادعاهای بدون پیاده‌سازی و تولید baseline manifest.",out:"product-baseline.json، product-scope.md، لیست ماژول‌های قابل استفاده.",deps:[],dod:["Repository واحد مبنا مشخص است","Scope نسخه ۱ ثبت شده","هیچ Feature خارج از Scope باقی نمانده"]},
+  {id:2,title:"Core / Desktop / Driver Boundaries",goal:"جداکردن معماری مستقل محصول از رابط و Providerها.",how:"تعریف interfaceها و مسیرهای روشن بدون بازنویسی هسته؛ انتقال فقط موارد لازم.",out:"ساختار packages یا ماژول‌های core، desktop، drivers.",deps:[1],dod:["Core به Codex وابسته نیست","Desktop فقط از API داخلی استفاده می‌کند","Driver interface پایدار است"]},
+  {id:3,title:"Workspace Persistence",goal:"ساخت مخزن پایدار پروژه‌ها، Taskها، Runها و تنظیمات.",how:"ذخیره محلی امن با schema نسخه‌دار و migration سبک.",out:"Workspace DB/JSON store و Project Registry.",deps:[2],dod:["پروژه‌ها ذخیره می‌شوند","Recent Projects کار می‌کند","Run history از بین نمی‌رود"]}
+ ]},
+{
+ title:"فاز ۲ — Usable Desktop Product",
+ goal:"ساخت محصولی که کاربر بدون Terminal باز کند و پروژه انتخاب کند.",
+ tickets:[
+  {id:4,title:"Desktop Shell",goal:"ساخت پنجره اصلی قابل اجرا در macOS.",how:"استفاده از پوسته Desktop سبک، بدون تغییر Core؛ صفحات Home، Project، Runs، Settings.",out:"Empy Studio.app development build.",deps:[3],dod:["برنامه با دوبار کلیک باز می‌شود","Crash اولیه ندارد","هیچ Terminal برای شروع لازم نیست"]},
+  {id:5,title:"Project Picker & Project Home",goal:"انتخاب پروژه با Finder و نمایش وضعیت آن.",how:"Folder picker، اعتبارسنجی پروژه، تشخیص Laravel/Python/Node و ثبت در Workspace.",out:"Open Project، Recent Projects، Project Summary.",deps:[4],dod:["Kit4Kids انتخاب می‌شود","نوع پروژه درست تشخیص داده می‌شود","پروژه بدون تغییر ثبت می‌شود"]},
+  {id:6,title:"Task Intake: Templates + Custom",goal:"ساخت Task آماده و سفارشی از داخل UI.",how:"Templateهای محدود و فرم درخواست طبیعی؛ استخراج Objective، Requirements، Constraints و DoD.",out:"Task Composer و Task Preview.",deps:[5],dod:["JSON از کاربر گرفته نمی‌شود","Task سفارشی ذخیره می‌شود","Template قابل ویرایش است"]}
+ ]},
+{
+ title:"فاز ۳ — Planning, Agents & Token Control",
+ goal:"تقسیم خودکار کار و کاهش مصرف Context و Token.",
+ tickets:[
+  {id:7,title:"Planner & Approval",goal:"تبدیل Task به Execution Plan قابل تأیید.",how:"تحلیل Scope، تعیین بخش‌ها، ریسک‌ها، فایل‌های احتمالی و Agentهای لازم.",out:"Plan Preview با Approve / Edit / Cancel.",deps:[6],dod:["Plan قبل از اجرا دیده می‌شود","کاربر می‌تواند اصلاح کند","Agent اضافی فعال نمی‌شود"]},
+  {id:8,title:"Context Selector",goal:"ارسال فقط Context مرتبط به هر Agent.",how:"File relevance scoring، Project Brain، bounded context packs و exclusion rules.",out:"Context Pack برای هر Agent.",deps:[7],dod:["کل پروژه ارسال نمی‌شود","فایل‌های حساس محافظت می‌شوند","Context قابل مشاهده است"]},
+  {id:9,title:"Token Budget Controller",goal:"کاهش مصرف Token و جلوگیری از Loop.",how:"بودجه برای Plan، Agent، Retry و Handoff؛ توقف خودکار پس از سقف.",out:"Token Budget panel و run limits.",deps:[8],dod:["Budget قبل از اجرا مشخص است","Retry محدود است","Loop بی‌نهایت ممکن نیست"]},
+  {id:10,title:"Agent Dispatcher",goal:"واگذاری Task به Agentهای لازم و فقط همان‌ها.",how:"Agent registry، capability matching، file ownership و sequencing.",out:"Agent Run Graph.",deps:[9],dod:["مالکیت فایل مشخص است","Agent نامرتبط اجرا نمی‌شود","ترتیب اجرای وابستگی‌ها رعایت می‌شود"]}
+ ]},
+{
+ title:"فاز ۴ — Real AI Execution",
+ goal:"اتصال مستقل Empy به موتورهای AI با Driver قابل تعویض.",
+ tickets:[
+  {id:11,title:"Codex Driver Productionization",goal:"اجرای واقعی Codex از داخل Empy بدون دخالت کاربر.",how:"تشخیص نصب، session execution، timeout، cancellation، logs و error mapping.",out:"Codex Driver قابل استفاده از Desktop.",deps:[10],dod:["Codex از UI اجرا می‌شود","Progress دیده می‌شود","خطا قابل فهم است"]},
+  {id:12,title:"Driver Abstraction & Settings",goal:"آماده‌سازی محصول برای Providerهای دیگر بدون وابستگی سخت.",how:"Driver interface، provider capabilities، credential/settings screen.",out:"Driver Settings و capability matrix.",deps:[11],dod:["Core بدون Codex import می‌شود","Driver قابل تعویض است","Unavailable state درست نمایش داده می‌شود"]}
+ ]},
+{
+ title:"فاز ۵ — Sync, Verification & Review",
+ goal:"یکپارچه‌سازی امن خروجی Agentها و ارائه نتیجه قابل اعتماد.",
+ tickets:[
+  {id:13,title:"Sync & Conflict Resolver",goal:"ترکیب خروجی Agentها بدون تخریب تغییرات.",how:"File ownership check، patch queue، conflict detection و ordered apply.",out:"Sync Report و conflict UI.",deps:[12],dod:["تداخل فایل شناسایی می‌شود","تغییرات گم نمی‌شوند","Conflict نیازمند تصمیم کاربر است"]},
+  {id:14,title:"Verification Pipeline in UI",goal:"اجرای تست‌ها و نمایش Evidence داخل محصول.",how:"استفاده از موتور verification موجود، mapping پروژه و stream نتایج.",out:"Tests، Build، Lint و Evidence panel.",deps:[13],dod:["تست واقعی اجرا می‌شود","stdout/stderr در UI دیده می‌شود","Failure مانع Finalize می‌شود"]},
+  {id:15,title:"Diff Review, Accept & Revert",goal:"کنترل نهایی تغییرات توسط کاربر.",how:"نمایش changed files و diff، پذیرش، رد یا بازگشت امن.",out:"Review Workspace.",deps:[14],dod:["Diff قابل خواندن است","Accept و Revert کار می‌کند","هیچ Commit خودکار بدون اجازه نیست"]}
+ ]},
+{
+ title:"فاز ۶ — Real Product Validation & Release",
+ goal:"اثبات محصول روی پروژه واقعی و تولید فایل دانلود.",
+ tickets:[
+  {id:16,title:"Kit4Kids Acceptance Run",goal:"اجرای Task واقعی UI روی پروژه Laravel Kit4Kids.",how:"استفاده از Task تأییدشده، اجرای Planner، Context، Agentها، Codex، Verification و Review.",out:"Acceptance Report و نسخه اصلاح‌شده پروژه آزمایشی.",deps:[15],dod:["Task واقعی کامل می‌شود","هیچ بخش نامرتبط تغییر نمی‌کند","Quality Gate پاس می‌شود"]},
+  {id:17,title:"macOS Packaging",goal:"تولید بسته قابل دانلود و نصب.",how:"Build reproducible، bundling dependencies، app icon، first-run checks.",out:"Empy Studio.app و ZIP/DMG آزمایشی.",deps:[16],dod:["روی Mac تمیز باز می‌شود","Dependency گمشده گزارش می‌شود","کاربر Terminal لازم ندارد"]},
+  {id:18,title:"Release Candidate & User Trial",goal:"تست محصول توسط کاربر واقعی پیش از نسخه نهایی.",how:"v1.0.0-rc.1، checklist نصب، اجرای پروژه دوم و ثبت اشکالات blocker.",out:"RC download و trial report.",deps:[17],dod:["نصب توسط کاربر موفق است","حداقل دو پروژه تست شده","Blocker باز باقی نمانده"]},
+  {id:19,title:"Empy Studio v1.0.0",goal:"انتشار نسخه نهایی قابل استفاده.",how:"Build نهایی، release notes، checksum، GitHub Release و مستند شروع سریع.",out:"لینک دانلود رسمی نسخه ۱.",deps:[18],dod:["فایل دانلود عمومی است","راهنمای استفاده نهایی است","نسخه و checksum هماهنگ‌اند"]}
+ ]}
+];
+
+const root=document.getElementById('roadmap');
+function render(){
+ root.innerHTML='';
+ phases.forEach((phase,pi)=>{
+  const section=document.createElement('section');
+  section.className='card phase';
+  section.innerHTML=`<h2>${phase.title}</h2><p>${phase.goal}</p>`;
+  phase.tickets.forEach(t=>{
+   const box=document.createElement('div');
+   box.className='ticket';
+   box.dataset.id=t.id;
+   box.innerHTML=`
+   <div class="ticket-head" onclick="toggleTicket(event,${t.id})">
+    <input type="checkbox" class="ticket-check" data-id="${t.id}" onclick="event.stopPropagation();saveState()">
+    <div style="flex:1">
+      <div class="ticket-title">تیکت ${t.id} — ${t.title}</div>
+      <div class="ticket-meta">وابستگی: ${t.deps.length?t.deps.join(', '):'ندارد'} · وضعیت: <span class="status-pill" id="status-${t.id}">در انتظار</span></div>
+    </div>
+   </div>
+   <div class="ticket-body">
+    <div class="kv"><strong>هدف</strong><span>${t.goal}</span></div>
+    <div class="kv"><strong>نحوه انجام</strong><span>${t.how}</span></div>
+    <div class="kv"><strong>خروجی قابل تحویل</strong><span>${t.out}</span></div>
+    <div class="kv"><strong>Definition of Done</strong><div class="checklist">${t.dod.map((x,i)=>`<label><input type="checkbox" class="subcheck" data-key="${t.id}-${i}" onchange="saveState()"> ${x}</label>`).join('')}</div></div>
+   </div>`;
+   section.appendChild(box);
+  });
+  root.appendChild(section);
+ });
+ loadState();
+}
+function toggleTicket(e,id){document.querySelector(`.ticket[data-id="${id}"]`).classList.toggle('open')}
+function expandAll(){document.querySelectorAll('.ticket').forEach(x=>x.classList.add('open'))}
+function collapseAll(){document.querySelectorAll('.ticket').forEach(x=>x.classList.remove('open'))}
+function saveState(){
+ const state={tickets:{},subs:{},finals:[]};
+ document.querySelectorAll('.ticket-check').forEach(x=>state.tickets[x.dataset.id]=x.checked);
+ document.querySelectorAll('.subcheck').forEach(x=>state.subs[x.dataset.key]=x.checked);
+ document.querySelectorAll('.final-check').forEach((x,i)=>state.finals[i]=x.checked);
+ localStorage.setItem('empyMasterPlan',JSON.stringify(state));
+ updateProgress();
+}
+function loadState(){
+ const state=JSON.parse(localStorage.getItem('empyMasterPlan')||'{"tickets":{"1":true,"2":true,"3":true,"4":true,"5":true,"6":true,"7":true}}');
+ document.querySelectorAll('.ticket-check').forEach(x=>x.checked=!!(state.tickets||{})[x.dataset.id]);
+ document.querySelectorAll('.subcheck').forEach(x=>x.checked=!!(state.subs||{})[x.dataset.key]);
+ document.querySelectorAll('.final-check').forEach((x,i)=>x.checked=!!(state.finals||[])[i]);
+ document.querySelectorAll('input').forEach(x=>x.addEventListener('change',saveState));
+ updateProgress();
+}
+function updateProgress(){
+ const checks=[...document.querySelectorAll('.ticket-check')];
+ const done=checks.filter(x=>x.checked).length;
+ const pct=Math.round(done/checks.length*100);
+ document.getElementById('overallPct').textContent=pct+'%';
+ document.getElementById('doneCount').textContent=done+' / '+checks.length;
+ document.getElementById('overallProgress').style.width=pct+'%';
+ let next='تمام';
+ for(const x of checks){if(!x.checked){next=x.dataset.id;break}}
+ document.getElementById('nextTicket').textContent=next;
+ checks.forEach(x=>{
+  const id=+x.dataset.id;
+  const t=phases.flatMap(p=>p.tickets).find(a=>a.id===id);
+  const depsDone=t.deps.every(d=>document.querySelector(`.ticket-check[data-id="${d}"]`)?.checked);
+  const pill=document.getElementById('status-'+id);
+  if(x.checked){pill.textContent='تکمیل‌شده';pill.style.background='#15452d';pill.style.color='#b9ffd4'}
+  else if(depsDone){pill.textContent='مجاز برای شروع';pill.style.background='#4b3b16';pill.style.color='#ffe5a2'}
+  else{pill.textContent='قفل';pill.style.background='#40202a';pill.style.color='#ffc4ce'}
+ });
+}
+function resetAll(){
+ if(confirm('همه وضعیت‌ها پاک شود؟')){
+  localStorage.removeItem('empyMasterPlan');location.reload();
+ }
+}
+function exportState(){
+ const data=localStorage.getItem('empyMasterPlan')||'{}';
+ const blob=new Blob([data],{type:'application/json'});
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(blob);a.download='empy-master-plan-state.json';a.click();
+ URL.revokeObjectURL(a.href);
+}
+render();
+</script>
+</body>
+</html>

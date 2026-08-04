@@ -30,10 +30,11 @@ dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
 [project.scripts]
 empy = "empy_studio.cli:main"
 
+empy-desktop = "empy_studio.desktop.shell:launch_desktop"
 [project.urls]
-Homepage = "https://github.com/Azadeh Sharifi/empy-studio"
-Documentation = "https://github.com/Azadeh Sharifi/empy-studio/tree/main/docs"
-Issues = "https://github.com/Azadeh Sharifi/empy-studio/issues"
+Homepage = "https://github.com/Altpaths/empy-studio"
+Documentation = "https://github.com/Altpaths/empy-studio/tree/main/docs"
+Issues = "https://github.com/Altpaths/empy-studio/issues"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

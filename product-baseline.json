@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "product": "Empy Studio",
+  "baseline_name": "product-v1-baseline",
+  "source_archive": "empy-studio-main.zip",
+  "repository_origin": "https://github.com/Altpaths/empy-studio",
+  "declared_version": "0.1.0",
+  "captured_at_utc": "2026-08-04T12:57:07.356680+00:00",
+  "inventory": {
+    "total_files": 350,
+    "python_source_modules": 71,
+    "test_modules": 55,
+    "markdown_docs": 48,
+    "source_lines": 19136,
+    "test_lines": 11062,
+    "documentation_lines": 2685,
+    "github_workflows": 1
+  },
+  "verified_assets": {
+    "project_vault": true,
+    "bounded_context_builder": true,
+    "task_orchestration": true,
+    "multi_agent_runtime": true,
+    "capability_graph": true,
+    "codex_driver_family": true,
+    "verification": true,
+    "security_audit": true,
+    "release_pipeline": true,
+    "distribution_builder": true,
+    "plugin_system": true,
+    "desktop_application": false,
+    "graphical_project_picker": false,
+    "natural_language_task_intake": false,
+    "desktop_diff_review": false,
+    "task_9_end_to_end_cli": false
+  },
+  "product_gap": {
+    "core_engine_present": true,
+    "end_user_desktop_product_present": false,
+    "daily_use_without_terminal": false,
+    "downloadable_macos_app_present": false
+  },
+  "v1_scope": {
+    "in_scope": [
+      "Independent desktop shell",
+      "Project picker and recent projects",
+      "Prepared and custom task intake",
+      "Plan preview and approval",
+      "Bounded context and token budgets",
+      "Agent dispatch and file ownership",
+      "Production Codex driver",
+      "Sync and conflict detection",
+      "Verification evidence in UI",
+      "Diff review, accept and revert",
+      "Kit4Kids acceptance run",
+      "macOS package and release candidate"
+    ],
+    "out_of_scope": [
+      "Plugin marketplace UI",
+      "Mobile application",
+      "Cloud account system",
+      "Team collaboration server",
+      "Autonomous Git push or merge",
+      "More than one production AI driver before Codex acceptance",
+      "Public SaaS hosting"
+    ]
+  },
+  "quality_observation": {
+    "ci_workflow_present": true,
+    "ci_matrix": [
+      "3.10",
+      "3.11",
+      "3.12"
+    ],
+    "local_retest_in_audit_environment": "blocked",
+    "blocker": "Offline package index did not provide hatchling; baseline therefore does not claim a fresh independent full quality-gate run."
+  },
+  "next_allowed_ticket": 2
+}

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "master_plan_ticket": 6,
+  "phase": "Usable Desktop Product",
+  "title": "Task Intake: Templates + Custom",
+  "status": "completed",
+  "user_visible_capabilities": [
+    "prepared task templates",
+    "custom tasks",
+    "natural-language task fields",
+    "task preview",
+    "task persistence",
+    "project task list"
+  ],
+  "templates": [
+    "bug_fix",
+    "feature",
+    "ui_improvement",
+    "audit",
+    "release",
+    "custom"
+  ],
+  "deferred": [
+    "Planner",
+    "Context Selector",
+    "Token Budget",
+    "Agent Dispatcher",
+    "AI execution",
+    "Verification",
+    "Diff review"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "master_plan_ticket": 3,
+  "phase": "Product Foundation",
+  "title": "Workspace Persistence",
+  "status": "completed",
+  "database": "SQLite",
+  "records": ["projects", "tasks", "runs", "settings"],
+  "migration_policy": "ordered schema versions; reject future schema",
+  "next_ticket": 4
+}

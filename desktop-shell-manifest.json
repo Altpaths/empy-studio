@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "master_plan_ticket": 4,
+  "phase": "Usable Desktop Product",
+  "title": "Desktop Shell",
+  "status": "completed",
+  "fixed_during_validation": [
+    "Core public exports for AIDriver, ProjectService, and WorkspaceStore"
+  ],
+  "user_visible_capabilities": [
+    "macOS desktop window",
+    "Home",
+    "Projects placeholder",
+    "Runs placeholder",
+    "Settings placeholder",
+    "Open Project entry point reserved for Ticket 5"
+  ],
+  "deferred": [
+    "Finder project picker",
+    "task intake",
+    "planner",
+    "AI execution",
+    "verification",
+    "diff review"
+  ]
+}
