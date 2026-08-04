@@ -172,7 +172,7 @@ class DesktopWorkspaceAdapter:
                 getattr(
                     value,
                     "project_root",
-                    getattr(value, "path"),
+                    value.path,
                 ),
             )
         )

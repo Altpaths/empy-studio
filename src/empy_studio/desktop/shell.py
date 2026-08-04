@@ -10,8 +10,8 @@ from empy_studio.core import (
     TASK_TEMPLATES,
     DefaultProjectService,
     ProductTask,
-    ProjectDetection,
     ProjectDescriptor,
+    ProjectDetection,
     TaskKind,
     approve_execution_plan,
     build_product_task,
@@ -316,7 +316,7 @@ class EmpyDesktopShell:
             self.workspace_store.save_project(
                 detection.descriptor
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             messagebox.showerror(
                 "Unable to open project",
                 str(exc),
@@ -334,7 +334,7 @@ class EmpyDesktopShell:
             self.current_project = self.project_service.detect(
                 project.root
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             messagebox.showerror(
                 "Unable to open project",
                 str(exc),
@@ -660,7 +660,7 @@ class EmpyDesktopShell:
                     "end",
                 ),
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             messagebox.showerror(
                 "Task is incomplete",
                 str(exc),
@@ -847,7 +847,7 @@ class EmpyDesktopShell:
                 self.plan_store.save_plan(
                     self.current_plan
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 messagebox.showerror(
                     "Unable to generate plan",
                     str(exc),
@@ -1066,7 +1066,7 @@ class EmpyDesktopShell:
             )
             self.plan_store.save_plan(approved)
             self.current_plan = approved
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             messagebox.showerror(
                 "Unable to approve plan",
                 str(exc),

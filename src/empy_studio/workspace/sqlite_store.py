@@ -4,9 +4,10 @@ import json
 import os
 import sqlite3
 import uuid
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any
 
 from empy_studio.core import ProjectDescriptor
 from empy_studio.core.workspace_models import (

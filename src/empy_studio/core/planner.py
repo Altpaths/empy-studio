@@ -228,11 +228,7 @@ def _likely_paths(
             )
         paths.append("tests/")
 
-    elif project_type == "python":
-        paths.extend(("src/", "tests/"))
-    elif project_type == "node":
-        paths.extend(("src/", "tests/"))
-    elif project_type == "rust":
+    elif project_type == "python" or project_type == "node" or project_type == "rust":
         paths.extend(("src/", "tests/"))
     elif project_type == "go":
         paths.extend(("./",))
