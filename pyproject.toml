@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "empy-studio"
-version = "0.1.0"
+version = "1.0.0"
 description = "A lightweight operating layer for bounded, verifiable AI-assisted product development."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,9 +31,9 @@ dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
 empy = "empy_studio.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/Azadeh Sharifi/empy-studio"
-Documentation = "https://github.com/Azadeh Sharifi/empy-studio/tree/main/docs"
-Issues = "https://github.com/Azadeh Sharifi/empy-studio/issues"
+Homepage = "https://github.com/Altpaths/empy-studio"
+Documentation = "https://github.com/Altpaths/empy-studio/tree/main/docs"
+Issues = "https://github.com/Altpaths/empy-studio/issues"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use Empy Studio in published work, cite this software."
 title: "Empy Studio"
 type: software
-version: 0.1.0
+version: "1.0.0"
 authors:
   - family-names: Sharifi
     given-names: Azadeh
