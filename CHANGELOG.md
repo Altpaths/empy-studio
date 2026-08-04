@@ -1,3 +1,13 @@
+## Unreleased
+
+### Ticket 13 completion — Conflict UI
+
+- Added a dedicated Desktop Sync workspace for persisted Sync Reports.
+- Added conflict inspection with file, conflict type, hashes, and competing patches.
+- Added explicit Apply Patch, Keep Current, and Manual Content decisions.
+- Disabled ordered apply until every conflict has a user decision.
+- Persisted decisions and final applied state through SyncWorkspaceAdapter.
+
 # Changelog
 
 All notable changes to Empy Studio are documented here.

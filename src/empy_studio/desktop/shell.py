@@ -63,6 +63,7 @@ from .driver_settings_workspace_adapter import (
 from .plan_workspace_adapter import (
     PlanWorkspaceAdapter,
 )
+from .sync_workspace_adapter import SyncWorkspaceAdapter
 from .task_workspace_adapter import (
     TaskWorkspaceAdapter,
 )
@@ -98,6 +99,11 @@ NAVIGATION = (
         description="Execution history and evidence.",
     ),
     NavigationItem(
+        key="sync",
+        label="Sync",
+        description="Review sync reports and resolve file conflicts.",
+    ),
+    NavigationItem(
         key="settings",
         label="Settings",
         description="Workspace and driver settings.",
@@ -121,6 +127,7 @@ class EmpyDesktopShell:
         budget_store: TokenBudgetWorkspaceAdapter | None = None,
         dispatcher_store: AgentDispatcherWorkspaceAdapter | None = None,
         execution_store: CodexExecutionWorkspaceAdapter | None = None,
+        sync_store: SyncWorkspaceAdapter | None = None,
         driver_registry: DriverRegistry | None = None,
         driver_settings_store: DriverSettingsWorkspaceAdapter | None = None,
         driver_manager: DriverManager | None = None,
@@ -179,6 +186,7 @@ class EmpyDesktopShell:
                 self.workspace_path
             )
         )
+        self.sync_store = sync_store or SyncWorkspaceAdapter(self.workspace_path)
         self.driver_registry = driver_registry or default_driver_registry()
         self.driver_settings_store = (
             driver_settings_store
@@ -211,6 +219,9 @@ class EmpyDesktopShell:
         self.current_budget: TokenBudget | None = None
         self.current_run_graph: AgentRunGraph | None = None
         self.current_codex_run: CodexGraphExecution | None = None
+        self.current_sync_id: str | None = None
+        self.selected_conflict_id: str | None = None
+        self.sync_manual_view: tk.Text | None = None
         self.codex_status_var: tk.StringVar | None = None
         self.codex_log_view: tk.Text | None = None
         self.codex_cancel_button: ttk.Button | None = None
@@ -384,7 +395,7 @@ class EmpyDesktopShell:
         )
         ttk.Label(
             self.sidebar,
-            text="Ticket 12 · Driver Settings",
+            text="Ticket 13 · Sync & Conflict Resolver",
             style="SidebarCaption.TLabel",
         ).pack(anchor="w", padx=22)
 
@@ -418,6 +429,10 @@ class EmpyDesktopShell:
             self._render_projects()
         elif key == "runs":
             self._render_runs()
+        elif key == "sync":
+            self._render_sync_reports()
+        elif key == "sync-detail":
+            self._render_sync_detail()
         elif key == "settings":
             self._render_driver_settings()
         elif key == "project-home":
@@ -2067,6 +2082,151 @@ class EmpyDesktopShell:
                 style="Secondary.TButton",
                 command=partial(self._open_codex_run, run),
             ).pack(side="right")
+
+
+    def _open_sync_report(self, sync_id: str) -> None:
+        self.current_sync_id = sync_id
+        self.selected_conflict_id = None
+        self.show_page("sync-detail")
+
+    def _render_sync_reports(self) -> None:
+        ttk.Label(self.page, text="Sync Reports", style="Title.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            self.page,
+            text="Review ordered agent patches. Conflicts remain blocked until you choose an explicit resolution.",
+            style="Body.TLabel",
+            wraplength=840,
+        ).pack(anchor="w", pady=(0, 18))
+        reports = tuple(reversed(self.sync_store.list_reports()))
+        if not reports:
+            self._empty_card("No sync reports yet", "Agent patch synchronization reports will appear here.").pack(fill="x")
+            return
+        for report in reports:
+            row = ttk.Frame(self.page, style="Card.TFrame", padding=16)
+            row.pack(fill="x", pady=(0, 10))
+            text = ttk.Frame(row, style="Card.TFrame")
+            text.pack(side="left", fill="both", expand=True)
+            ttk.Label(text, text=f"{report.status.upper()} · {report.sync_id}", style="CardTitle.TLabel").pack(anchor="w")
+            ttk.Label(
+                text,
+                text=(f"{len(report.queue)} patch(es) · {len(report.unresolved_conflicts)} unresolved conflict(s) · {report.project_root}"),
+                style="CardBody.TLabel",
+                wraplength=720,
+            ).pack(anchor="w", pady=(5, 0))
+            ttk.Button(row, text="Review", style="Secondary.TButton", command=partial(self._open_sync_report, report.sync_id)).pack(side="right")
+
+    def _render_sync_detail(self) -> None:
+        if self.current_sync_id is None:
+            self.show_page("sync")
+            return
+        try:
+            report = self.sync_store.load(self.current_sync_id)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Unable to open sync report", str(exc))
+            self.show_page("sync")
+            return
+        toolbar = ttk.Frame(self.page, style="Content.TFrame")
+        toolbar.pack(fill="x", pady=(0, 14))
+        ttk.Button(toolbar, text="← Sync Reports", style="Secondary.TButton", command=lambda: self.show_page("sync")).pack(side="left")
+        apply_button = ttk.Button(toolbar, text="Apply ordered changes", style="Primary.TButton", command=self._apply_current_sync)
+        apply_button.pack(side="right")
+        if report.status != "ready":
+            apply_button.state(["disabled"])
+        ttk.Label(self.page, text=f"Sync {report.sync_id}", style="Title.TLabel").pack(anchor="w", pady=(0, 6))
+        ttk.Label(
+            self.page,
+            text=f"Status: {report.status} · Queue: {len(report.queue)} · Unresolved: {len(report.unresolved_conflicts)}",
+            style="Body.TLabel",
+        ).pack(anchor="w", pady=(0, 16))
+
+        pane = ttk.Panedwindow(self.page, orient="horizontal")
+        pane.pack(fill="both", expand=True)
+        left = ttk.Frame(pane, style="Card.TFrame", padding=12)
+        right = ttk.Frame(pane, style="Card.TFrame", padding=12)
+        pane.add(left, weight=1)
+        pane.add(right, weight=2)
+        ttk.Label(left, text="Conflicts", style="CardTitle.TLabel").pack(anchor="w", pady=(0, 8))
+        conflicts = ttk.Treeview(left, columns=("kind", "state"), show="tree headings", height=18)
+        conflicts.heading("#0", text="File")
+        conflicts.heading("kind", text="Type")
+        conflicts.heading("state", text="State")
+        conflicts.column("#0", width=220)
+        conflicts.column("kind", width=130)
+        conflicts.column("state", width=90)
+        conflicts.pack(fill="both", expand=True)
+        for conflict in report.conflicts:
+            conflicts.insert("", "end", iid=conflict.conflict_id, text=conflict.relative_path, values=(conflict.kind, conflict.resolution or "unresolved"))
+        conflicts.bind("<<TreeviewSelect>>", lambda _event: self._select_sync_conflict(conflicts))
+
+        ttk.Label(right, text="Conflict decision", style="CardTitle.TLabel").pack(anchor="w", pady=(0, 8))
+        self.sync_conflict_detail = tk.Text(right, height=10, wrap="word", state="disabled")
+        self.sync_conflict_detail.pack(fill="x", pady=(0, 10))
+        ttk.Label(right, text="Manual merged content", style="Field.TLabel").pack(anchor="w", pady=(0, 5))
+        self.sync_manual_view = tk.Text(right, height=12, wrap="none")
+        self.sync_manual_view.pack(fill="both", expand=True, pady=(0, 10))
+        actions = ttk.Frame(right, style="Card.TFrame")
+        actions.pack(fill="x")
+        ttk.Button(actions, text="Apply patch", style="Secondary.TButton", command=lambda: self._resolve_selected_conflict("apply-patch")).pack(side="left", padx=(0, 6))
+        ttk.Button(actions, text="Keep current", style="Secondary.TButton", command=lambda: self._resolve_selected_conflict("keep-current")).pack(side="left", padx=6)
+        ttk.Button(actions, text="Use manual content", style="Primary.TButton", command=lambda: self._resolve_selected_conflict("manual-content")).pack(side="left", padx=6)
+        if report.conflicts:
+            first = report.conflicts[0].conflict_id
+            conflicts.selection_set(first)
+            conflicts.focus(first)
+            self._show_sync_conflict(first)
+
+    def _select_sync_conflict(self, tree: ttk.Treeview) -> None:
+        selected = tree.selection()
+        if selected:
+            self._show_sync_conflict(selected[0])
+
+    def _show_sync_conflict(self, conflict_id: str) -> None:
+        if self.current_sync_id is None:
+            return
+        report = self.sync_store.load(self.current_sync_id)
+        conflict = next(item for item in report.conflicts if item.conflict_id == conflict_id)
+        queue_item = next(item for item in report.queue if item.patch.patch_id == conflict.patch_id)
+        self.selected_conflict_id = conflict_id
+        detail = (
+            f"File: {conflict.relative_path}\nType: {conflict.kind}\nMessage: {conflict.message}\n"
+            f"Patch: {conflict.patch_id} ({queue_item.patch.operation})\nExpected SHA: {conflict.expected_sha256 or '-'}\n"
+            f"Current SHA: {conflict.current_sha256 or '-'}\nCompeting patches: {', '.join(conflict.competing_patch_ids) or '-'}\n"
+            f"Decision: {conflict.resolution or 'required'}"
+        )
+        self.sync_conflict_detail.configure(state="normal")
+        self.sync_conflict_detail.delete("1.0", "end")
+        self.sync_conflict_detail.insert("1.0", detail)
+        self.sync_conflict_detail.configure(state="disabled")
+        if self.sync_manual_view is not None:
+            self.sync_manual_view.delete("1.0", "end")
+            self.sync_manual_view.insert("1.0", conflict.manual_content if conflict.manual_content is not None else (queue_item.patch.content or ""))
+
+    def _resolve_selected_conflict(self, choice: str) -> None:
+        if self.current_sync_id is None or self.selected_conflict_id is None:
+            messagebox.showerror("No conflict selected", "Select a conflict before recording a decision.")
+            return
+        manual = None
+        if choice == "manual-content":
+            manual = self.sync_manual_view.get("1.0", "end-1c") if self.sync_manual_view is not None else ""
+        try:
+            self.sync_store.resolve(self.current_sync_id, conflict_id=self.selected_conflict_id, choice=choice, manual_content=manual)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Unable to resolve conflict", str(exc))
+            return
+        self.show_page("sync-detail")
+
+    def _apply_current_sync(self) -> None:
+        if self.current_sync_id is None:
+            return
+        if not messagebox.askyesno("Apply sync", "Apply the ordered patch queue to the project now?"):
+            return
+        try:
+            self.sync_store.apply(self.current_sync_id)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Unable to apply sync", str(exc))
+            return
+        messagebox.showinfo("Sync applied", "All approved changes were applied in queue order.")
+        self.show_page("sync-detail")
 
     def _edit_task_from_plan(self) -> None:
         if (

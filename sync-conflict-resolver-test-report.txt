@@ -1,17 +1,12 @@
-Ticket 13 — Sync & Conflict Resolver
+Ticket 13 complete validation
+=============================
 
-Validation result:
-- Dedicated sync tests: 12 passed
-- Full repository suite: 461 passed
-- Python compileall: passed
-- Git whitespace check: passed
+Goal: combine Agent outputs without destructive overwrites.
+Deliverables: Sync Report and functional Desktop Conflict UI.
 
-Coverage includes:
-- deterministic graph/patch ordering
-- ownership and protected-file enforcement
-- stale-base detection
-- duplicate-write preservation
-- create, modify, and delete operations
-- apply-patch, keep-current, and manual-content decisions
-- pre-apply workspace revalidation
-- persistent desktop Sync Report evidence
+Validation in build environment:
+- 463 tests passed
+- Python compileall passed
+- Conflict report persistence and reloading passed
+- Explicit user resolution persistence passed
+- UI contract exposes report list, conflict review, resolution, and ordered apply

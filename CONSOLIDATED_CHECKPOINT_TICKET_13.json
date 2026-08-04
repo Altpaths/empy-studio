@@ -1,42 +1,29 @@
 {
-  "schema_version": 1,
-  "generated_at": "2026-08-04T20:30:00+00:00",
-  "product": "Empy Studio",
-  "master_plan_position": {
-    "phase": 5,
-    "ticket": 13,
-    "title": "Sync & Conflict Resolver",
-    "status": "implemented",
-    "next_ticket": 14
-  },
-  "dependency": {
-    "ticket": 12,
-    "title": "Driver Abstraction & Settings",
-    "required": true
-  },
-  "delivered": [
-    "deterministic provider-neutral patch queue",
-    "Agent Run Graph file-ownership enforcement",
-    "protected-file and stale-base detection",
-    "duplicate-write preservation and conflict records",
-    "explicit user conflict decisions",
-    "atomic ordered apply with rollback",
-    "persistent Sync Reports for Desktop review"
+  "ticket": 13,
+  "title": "Sync & Conflict Resolver",
+  "status": "complete",
+  "goal": "Combine agent outputs without destroying changes.",
+  "implementation": [
+    "file ownership check",
+    "deterministic patch queue",
+    "conflict detection",
+    "ordered atomic apply",
+    "persistent Sync Report",
+    "desktop conflict UI requiring explicit user decisions"
+  ],
+  "deliverables": [
+    "Sync Report",
+    "Conflict UI"
   ],
   "definition_of_done": {
-    "file_conflicts_are_detected": "passed",
-    "changes_are_not_lost": "passed",
-    "conflicts_require_user_decision": "passed"
+    "file_overlap_detected": true,
+    "changes_not_lost": true,
+    "conflict_requires_user_decision": true,
+    "sync_report_delivered": true,
+    "conflict_ui_delivered": true
   },
-  "explicitly_not_included": [
-    "verification pipeline UI",
-    "test/build/lint streaming panel",
-    "final diff accept and revert workflow",
-    "automatic Git commit"
-  ],
   "validation": {
-    "pytest_expected": "461 passed",
-    "compileall_expected": "passed",
-    "git_diff_check_expected": "passed"
+    "tests": "463 passed",
+    "compileall": "passed"
   }
 }

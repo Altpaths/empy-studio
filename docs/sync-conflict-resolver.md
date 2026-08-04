@@ -45,3 +45,19 @@ No Git commit is created.
 `SyncWorkspaceAdapter` stores versioned Sync Reports under
 `sync-reports/<sync-id>.json`. This is the data contract for the conflict UI and
 for the later Diff Review, Accept, and Revert workflow.
+
+## Desktop Conflict UI completion
+
+The Desktop shell now exposes a dedicated **Sync** workspace. It lists persisted
+Sync Reports, opens blocked reports, displays each conflict with its file,
+kind, hashes, competing patches, and current decision, and requires one of the
+three explicit user resolutions:
+
+- Apply patch
+- Keep current file
+- Use manually merged content
+
+The ordered apply action remains disabled while any conflict is unresolved.
+After every decision the updated report is persisted, and once the report is
+ready the user can apply the ordered queue through the same screen. Application
+still uses the resolver's atomic write and rollback guarantees.

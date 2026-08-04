@@ -8,6 +8,7 @@ def test_desktop_navigation_contract() -> None:
         "home",
         "projects",
         "runs",
+        "sync",
         "settings",
     )
 
@@ -55,3 +56,13 @@ def test_desktop_exposes_driver_settings_and_capability_matrix() -> None:
     assert hasattr(EmpyDesktopShell, "_save_driver_settings")
     assert hasattr(EmpyDesktopShell, "_refresh_driver_settings")
     assert hasattr(EmpyDesktopShell, "_selected_driver_inspection")
+
+
+def test_desktop_exposes_sync_conflict_ui() -> None:
+    from empy_studio.desktop.shell import EmpyDesktopShell
+
+    assert "sync" in tuple(item.key for item in NAVIGATION)
+    assert hasattr(EmpyDesktopShell, "_render_sync_reports")
+    assert hasattr(EmpyDesktopShell, "_render_sync_detail")
+    assert hasattr(EmpyDesktopShell, "_resolve_selected_conflict")
+    assert hasattr(EmpyDesktopShell, "_apply_current_sync")

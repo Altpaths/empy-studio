@@ -1,28 +1,20 @@
 {
-  "schema_version": 1,
   "ticket": 13,
   "title": "Sync & Conflict Resolver",
-  "status": "implemented",
+  "status": "complete",
   "components": [
-    "src/empy_studio/core/sync_resolver.py",
-    "src/empy_studio/desktop/sync_workspace_adapter.py",
-    "docs/sync-conflict-resolver.md"
-  ],
-  "conflict_kinds": [
-    "ownership-violation",
-    "protected-file",
-    "stale-base",
-    "duplicate-write",
-    "invalid-operation"
-  ],
-  "resolution_choices": [
-    "apply-patch",
-    "keep-current",
-    "manual-content"
+    "core sync resolver",
+    "sync report persistence",
+    "desktop Sync report list",
+    "desktop conflict detail view",
+    "explicit user resolution controls",
+    "ordered apply control"
   ],
   "definition_of_done": {
-    "file_conflicts_are_detected": true,
-    "patches_are_not_lost": true,
-    "conflicts_require_user_decision": true
+    "detects_file_conflicts": true,
+    "preserves_all_agent_changes": true,
+    "requires_user_decision": true,
+    "sync_report": true,
+    "conflict_ui": true
   }
 }
