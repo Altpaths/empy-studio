@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "phase": 3,
+  "ticket": 8,
+  "title": "Context Selector",
+  "status": "implemented",
+  "core_module": "src/empy_studio/core/context_selector.py",
+  "desktop_adapter": "src/empy_studio/desktop/context_workspace_adapter.py",
+  "desktop_route": "context-preview",
+  "workspace_file": "context-selections.json",
+  "limits": {
+    "max_candidates": 2500,
+    "max_files_per_pack": 12,
+    "max_bytes_per_file": 32768,
+    "max_total_bytes_per_pack": 196608,
+    "max_candidate_file_bytes": 1048576
+  },
+  "explicit_exclusions": [
+    "agent dispatch",
+    "provider execution",
+    "token budget enforcement",
+    "retry control"
+  ],
+  "next_ticket": 9,
+  "validation": {
+    "pytest": "407 passed",
+    "compileall": "passed",
+    "self_acceptance_evidence": "context-selector-acceptance-evidence.json"
+  }
+}

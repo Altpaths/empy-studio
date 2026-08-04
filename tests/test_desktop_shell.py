@@ -15,3 +15,10 @@ def test_desktop_navigation_contract() -> None:
 def test_desktop_navigation_content_is_non_empty() -> None:
     assert all(item.label.strip() for item in NAVIGATION)
     assert all(item.description.strip() for item in NAVIGATION)
+
+
+def test_desktop_exposes_context_selector_preview() -> None:
+    from empy_studio.desktop.shell import EmpyDesktopShell
+
+    assert hasattr(EmpyDesktopShell, "_build_or_open_context")
+    assert hasattr(EmpyDesktopShell, "_render_context_preview")

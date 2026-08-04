@@ -6,6 +6,12 @@ All notable changes to Empy Studio are documented here.
 
 ### Added
 
+- Desktop Context Selector for approved execution plans
+- deterministic file relevance scoring per planned agent role
+- bounded per-agent context packs with visible source previews
+- Project Brain summary and persistent context-selection workspace
+- sensitive-file, dependency-directory, symlink, binary, and size exclusions
+
 - transactional Plugin Package Manager
 - local, HTTP, HTTPS, file URL, and GitHub Release source resolution
 - versioned Plugin Store with inventory, locks, and transaction journals

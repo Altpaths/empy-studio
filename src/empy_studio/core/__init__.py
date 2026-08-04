@@ -14,6 +14,11 @@ from .contracts import (
 __all__ = [
     "TASK_TEMPLATES",
     "AIDriver",
+    "ContextExclusion",
+    "ContextFile",
+    "ContextPack",
+    "ContextPolicy",
+    "ContextSelection",
     "DefaultProjectService",
     "DriverCapabilities",
     "DriverExecutionRequest",
@@ -22,6 +27,7 @@ __all__ = [
     "ExecutionPlan",
     "PlanStep",
     "ProductTask",
+    "ProjectBrain",
     "ProjectDescriptor",
     "ProjectDetection",
     "ProjectService",
@@ -29,6 +35,7 @@ __all__ = [
     "TaskTemplate",
     "WorkspaceStore",
     "approve_execution_plan",
+    "build_context_selection",
     "build_product_task",
     "cancel_execution_plan",
     "generate_execution_plan",
@@ -37,6 +44,15 @@ __all__ = [
     "template_by_key",
 ]
 
+from .context_selector import (
+    ContextExclusion,
+    ContextFile,
+    ContextPack,
+    ContextPolicy,
+    ContextSelection,
+    ProjectBrain,
+    build_context_selection,
+)
 from .planner import (
     ExecutionPlan,
     PlanStep,

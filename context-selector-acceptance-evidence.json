@@ -1,0 +1,460 @@
+{
+  "selection_id": "9f9caecd054758ea433c",
+  "plan_id": "959550a4b9959ae36e38",
+  "project_type": "python",
+  "scanned_candidates": 274,
+  "selected_files": 36,
+  "selected_bytes": 194850,
+  "packs": [
+    {
+      "step_id": "discovery",
+      "agent_role": "discovery",
+      "file_count": 12,
+      "total_bytes": 76082,
+      "files": [
+        {
+          "relative_path": "pyproject.toml",
+          "score": 93,
+          "reasons": [
+            "project marker",
+            "discovery path signal",
+            "project orientation file"
+          ],
+          "included_bytes": 1399,
+          "truncated": false,
+          "sha256": "b0e98df4c00ccb89a0e87aed210092c857d346e2843200db84f5f9292b6769d6"
+        },
+        {
+          "relative_path": "examples/v1-sample-project/README.md",
+          "score": 65,
+          "reasons": [
+            "task terms match path",
+            "discovery path signal",
+            "project orientation file"
+          ],
+          "included_bytes": 361,
+          "truncated": false,
+          "sha256": "94c2739bd15e5b9c6bf7eb000d640b8c5a925cb352af6a2079cf07c22b607428"
+        },
+        {
+          "relative_path": "tests/test_plugin_package.py",
+          "score": 63,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "discovery path signal"
+          ],
+          "included_bytes": 3557,
+          "truncated": false,
+          "sha256": "eaf7a105773f1df8fc5c172fd3eec073d37186d2a50f3a69797048695b2685b2"
+        },
+        {
+          "relative_path": "tests/test_plugin_package_manager_e2e.py",
+          "score": 63,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "discovery path signal"
+          ],
+          "included_bytes": 2615,
+          "truncated": false,
+          "sha256": "2f6aad428a6ca1429c1f6c58aa6f9cc29104fb39dee551dbd7b70ea1ee3a962f"
+        },
+        {
+          "relative_path": "README.md",
+          "score": 58,
+          "reasons": [
+            "discovery path signal",
+            "project orientation file"
+          ],
+          "included_bytes": 7801,
+          "truncated": false,
+          "sha256": "2c23fa3943affd767beb6384569df1d0f0ec4b6217d593acc1e33d0ff77ee988"
+        },
+        {
+          "relative_path": "src/empy_studio/architecture_guard.py",
+          "score": 56,
+          "reasons": [
+            "inside approved likely scope",
+            "discovery path signal"
+          ],
+          "included_bytes": 2619,
+          "truncated": false,
+          "sha256": "0a78fb849bfc46b02c27de1c6394926d17df7e71cd6ecb951ab297be821ee9c3"
+        },
+        {
+          "relative_path": "src/empy_studio/distribution_manifest.py",
+          "score": 56,
+          "reasons": [
+            "inside approved likely scope",
+            "discovery path signal"
+          ],
+          "included_bytes": 7680,
+          "truncated": false,
+          "sha256": "e5856df0bbf6d821afbe9338da1667bf5c25fd3aa1d366d205ce959cf63d7e68"
+        },
+        {
+          "relative_path": "src/empy_studio/plugin_manifest.py",
+          "score": 56,
+          "reasons": [
+            "inside approved likely scope",
+            "discovery path signal"
+          ],
+          "included_bytes": 3944,
+          "truncated": false,
+          "sha256": "58baee026371a45fa4181532d22307ec4db477811d30c2a0132bd6678cfc4929"
+        },
+        {
+          "relative_path": "src/empy_studio/plugin_package.py",
+          "score": 56,
+          "reasons": [
+            "inside approved likely scope",
+            "discovery path signal"
+          ],
+          "included_bytes": 8549,
+          "truncated": false,
+          "sha256": "e20a53777619b8287256afbff2660c677e18f01aef8a6a14fb9022844e69b9de"
+        },
+        {
+          "relative_path": "src/empy_studio/release_manifest.py",
+          "score": 56,
+          "reasons": [
+            "inside approved likely scope",
+            "discovery path signal"
+          ],
+          "included_bytes": 8544,
+          "truncated": false,
+          "sha256": "432e6b0abefc386639c2e5d3ea01b5dccde941263db22d319b5d73fa8195b5ef"
+        },
+        {
+          "relative_path": "tests/test_context_selector.py",
+          "score": 53,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope"
+          ],
+          "included_bytes": 6115,
+          "truncated": false,
+          "sha256": "96cef109b47a6306d2caa02b596063ede494f8965f1578c014d2800ea6ca6914"
+        },
+        {
+          "relative_path": "src/empy_studio/core/context_selector.py",
+          "score": 46,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope"
+          ],
+          "included_bytes": 22898,
+          "truncated": false,
+          "sha256": "9f1b02f51a127664275d6acd4af2ce415f0f76619f8468afbd0ba5715e210011"
+        }
+      ]
+    },
+    {
+      "step_id": "implement-frontend",
+      "agent_role": "frontend",
+      "file_count": 12,
+      "total_bytes": 66802,
+      "files": [
+        {
+          "relative_path": "src/empy_studio/release_asset_plan.py",
+          "score": 63,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "frontend path signal"
+          ],
+          "included_bytes": 8708,
+          "truncated": false,
+          "sha256": "7b9388b2a3f4bb6dcc60ad687d21b3ddf7df7f5c292a64d11edc87374cea922f"
+        },
+        {
+          "relative_path": "tests/test_context_selector.py",
+          "score": 53,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope"
+          ],
+          "included_bytes": 6115,
+          "truncated": false,
+          "sha256": "96cef109b47a6306d2caa02b596063ede494f8965f1578c014d2800ea6ca6914"
+        },
+        {
+          "relative_path": "src/empy_studio/core/context_selector.py",
+          "score": 46,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope"
+          ],
+          "included_bytes": 22898,
+          "truncated": false,
+          "sha256": "9f1b02f51a127664275d6acd4af2ce415f0f76619f8468afbd0ba5715e210011"
+        },
+        {
+          "relative_path": "src/empy_studio/desktop/context_workspace_adapter.py",
+          "score": 46,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope"
+          ],
+          "included_bytes": 5651,
+          "truncated": false,
+          "sha256": "9515a1266bf39214290bb641c8c87da999f72f791d64133646e3da251df1a96a"
+        },
+        {
+          "relative_path": "src/empy_studio/desktop/plan_workspace_adapter.py",
+          "score": 46,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope"
+          ],
+          "included_bytes": 5144,
+          "truncated": false,
+          "sha256": "bc4d751fe584f3be5c6f2311d095c9fd15f41a24fea90f1d6bcf344d9a40984c"
+        },
+        {
+          "relative_path": "tests/test_context_workspace_adapter.py",
+          "score": 46,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope"
+          ],
+          "included_bytes": 2321,
+          "truncated": false,
+          "sha256": "5ef8502d98a37a90cc3065d162a8c0dfcb99024812de9e6c602d95d8501f7aa3"
+        },
+        {
+          "relative_path": "tests/test_desktop_shell.py",
+          "score": 46,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope"
+          ],
+          "included_bytes": 452,
+          "truncated": false,
+          "sha256": "36eb1f9e89cc7b4cd7d6dea9d3ec3446199c7eebac4844dabb3814bb95f6ef64"
+        },
+        {
+          "relative_path": "tests/test_desktop_workspace_adapter.py",
+          "score": 46,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope"
+          ],
+          "included_bytes": 756,
+          "truncated": false,
+          "sha256": "18f519003c40d631e478b837de26a5f604bce2d6c530d83bd7b8ed826d938250"
+        },
+        {
+          "relative_path": "tests/test_multi_agent_runtime.py",
+          "score": 46,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope"
+          ],
+          "included_bytes": 4828,
+          "truncated": false,
+          "sha256": "ef61d3295eec8451654e8e30f79035c331a5b3b75747e0000dd3be432a0ca004"
+        },
+        {
+          "relative_path": "tests/test_plan_workspace_adapter.py",
+          "score": 46,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope"
+          ],
+          "included_bytes": 1211,
+          "truncated": false,
+          "sha256": "2e5f84c038e1fb01a54ea09498a7506d9fd37b0f1ffa2d2543cfe6e04e0e1ed3"
+        },
+        {
+          "relative_path": "tests/test_plugin_source.py",
+          "score": 46,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope"
+          ],
+          "included_bytes": 6607,
+          "truncated": false,
+          "sha256": "a9ffbd2bcc4e6a673939b6bf13110aaeaa9df4bd12cb94e55a8926a7070b5e95"
+        },
+        {
+          "relative_path": "tests/test_project_service.py",
+          "score": 46,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope"
+          ],
+          "included_bytes": 2111,
+          "truncated": false,
+          "sha256": "512e68b21a218cc58e4e4bd218f0a74d62c98ef30e66aa6dc2b43b85d5b7035b"
+        }
+      ]
+    },
+    {
+      "step_id": "quality",
+      "agent_role": "quality",
+      "file_count": 12,
+      "total_bytes": 51966,
+      "files": [
+        {
+          "relative_path": "tests/test_context_selector.py",
+          "score": 112,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "quality path signal",
+            "verification file"
+          ],
+          "included_bytes": 6115,
+          "truncated": false,
+          "sha256": "96cef109b47a6306d2caa02b596063ede494f8965f1578c014d2800ea6ca6914"
+        },
+        {
+          "relative_path": "tests/test_context_workspace_adapter.py",
+          "score": 105,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "quality path signal",
+            "verification file"
+          ],
+          "included_bytes": 2321,
+          "truncated": false,
+          "sha256": "5ef8502d98a37a90cc3065d162a8c0dfcb99024812de9e6c602d95d8501f7aa3"
+        },
+        {
+          "relative_path": "tests/test_desktop_shell.py",
+          "score": 105,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "quality path signal",
+            "verification file"
+          ],
+          "included_bytes": 452,
+          "truncated": false,
+          "sha256": "36eb1f9e89cc7b4cd7d6dea9d3ec3446199c7eebac4844dabb3814bb95f6ef64"
+        },
+        {
+          "relative_path": "tests/test_desktop_workspace_adapter.py",
+          "score": 105,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "quality path signal",
+            "verification file"
+          ],
+          "included_bytes": 756,
+          "truncated": false,
+          "sha256": "18f519003c40d631e478b837de26a5f604bce2d6c530d83bd7b8ed826d938250"
+        },
+        {
+          "relative_path": "tests/test_documentation_evidence.py",
+          "score": 105,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "quality path signal",
+            "verification file"
+          ],
+          "included_bytes": 5849,
+          "truncated": false,
+          "sha256": "aca59675957bc1ecedd3ac30df28aa66b499513f5b374a5ea69a022dbec7ec56"
+        },
+        {
+          "relative_path": "tests/test_multi_agent_runtime.py",
+          "score": 105,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "quality path signal",
+            "verification file"
+          ],
+          "included_bytes": 4828,
+          "truncated": false,
+          "sha256": "ef61d3295eec8451654e8e30f79035c331a5b3b75747e0000dd3be432a0ca004"
+        },
+        {
+          "relative_path": "tests/test_plan_workspace_adapter.py",
+          "score": 105,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "quality path signal",
+            "verification file"
+          ],
+          "included_bytes": 1211,
+          "truncated": false,
+          "sha256": "2e5f84c038e1fb01a54ea09498a7506d9fd37b0f1ffa2d2543cfe6e04e0e1ed3"
+        },
+        {
+          "relative_path": "tests/test_plugin_source.py",
+          "score": 105,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "quality path signal",
+            "verification file"
+          ],
+          "included_bytes": 6607,
+          "truncated": false,
+          "sha256": "a9ffbd2bcc4e6a673939b6bf13110aaeaa9df4bd12cb94e55a8926a7070b5e95"
+        },
+        {
+          "relative_path": "tests/test_project_service.py",
+          "score": 105,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "quality path signal",
+            "verification file"
+          ],
+          "included_bytes": 2111,
+          "truncated": false,
+          "sha256": "512e68b21a218cc58e4e4bd218f0a74d62c98ef30e66aa6dc2b43b85d5b7035b"
+        },
+        {
+          "relative_path": "tests/test_publication_plan.py",
+          "score": 105,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "quality path signal",
+            "verification file"
+          ],
+          "included_bytes": 7256,
+          "truncated": false,
+          "sha256": "080d0be5df3997c07f03cb999cd599f735023dc2824a05c1394941b79dfa919f"
+        },
+        {
+          "relative_path": "tests/test_quality_evidence.py",
+          "score": 105,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "quality path signal",
+            "verification file"
+          ],
+          "included_bytes": 6482,
+          "truncated": false,
+          "sha256": "0124da97ace460df482b3deb7f62bc1f3d76bf88f7dc75fc7bc0f6301a16069e"
+        },
+        {
+          "relative_path": "tests/test_real_project_scenario.py",
+          "score": 105,
+          "reasons": [
+            "task terms match path",
+            "inside approved likely scope",
+            "quality path signal",
+            "verification file"
+          ],
+          "included_bytes": 7978,
+          "truncated": false,
+          "sha256": "880b706d3a27337fbc100369558c0da5b5375a567591a5517c6780ea105ebd45"
+        }
+      ]
+    }
+  ],
+  "protected_paths": []
+}

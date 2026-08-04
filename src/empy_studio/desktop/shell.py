@@ -9,6 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from empy_studio.core import (
     TASK_TEMPLATES,
+    ContextSelection,
     DefaultProjectService,
     ExecutionPlan,
     ProductTask,
@@ -16,12 +17,16 @@ from empy_studio.core import (
     ProjectDetection,
     TaskKind,
     approve_execution_plan,
+    build_context_selection,
     build_product_task,
     generate_execution_plan,
     mark_ready_for_planning,
     template_by_key,
 )
 
+from .context_workspace_adapter import (
+    ContextWorkspaceAdapter,
+)
 from .plan_workspace_adapter import (
     PlanWorkspaceAdapter,
 )
@@ -65,7 +70,7 @@ NAVIGATION = (
 
 
 class EmpyDesktopShell:
-    """Desktop product shell through Ticket 6."""
+    """Desktop product shell through Ticket 8."""
 
     def __init__(
         self,
@@ -76,6 +81,7 @@ class EmpyDesktopShell:
         workspace_store: DesktopWorkspaceAdapter | None = None,
         task_store: TaskWorkspaceAdapter | None = None,
         plan_store: PlanWorkspaceAdapter | None = None,
+        context_store: ContextWorkspaceAdapter | None = None,
     ) -> None:
         self.root = root
         self.workspace_path = (
@@ -105,6 +111,12 @@ class EmpyDesktopShell:
                 self.workspace_path
             )
         )
+        self.context_store = (
+            context_store
+            or ContextWorkspaceAdapter(
+                self.workspace_path
+            )
+        )
         self.current_project: (
             ProjectDetection | None
         ) = None
@@ -112,6 +124,7 @@ class EmpyDesktopShell:
             ProductTask | None
         ) = None
         self.current_plan: ExecutionPlan | None = None
+        self.current_context: ContextSelection | None = None
         self.selected_template: TaskKind = "custom"
 
         self._configure_window()
@@ -250,7 +263,7 @@ class EmpyDesktopShell:
         )
         ttk.Label(
             self.sidebar,
-            text="Ticket 6 · Task Intake",
+            text="Ticket 8 · Context Selector",
             style="SidebarCaption.TLabel",
         ).pack(anchor="w", padx=22)
 
@@ -302,6 +315,8 @@ class EmpyDesktopShell:
             self._render_task_preview()
         elif key == "plan-preview":
             self._render_plan_preview()
+        elif key == "context-preview":
+            self._render_context_preview()
         else:
             raise KeyError(key)
 
@@ -1010,14 +1025,205 @@ class EmpyDesktopShell:
                 command=self._approve_plan,
             ).pack(side="right")
         else:
+            existing_context = self.context_store.get_for_plan(
+                plan.plan_id
+            )
             ttk.Label(
                 actions,
                 text=(
-                    "Approved plan — immutable and "
-                    "ready for Context Selector."
+                    "Approved plan — immutable. "
+                    "Context is bounded before execution."
                 ),
                 style="Body.TLabel",
-            ).pack(anchor="e")
+            ).pack(side="left")
+            ttk.Button(
+                actions,
+                text=(
+                    "View Context Packs"
+                    if existing_context is not None
+                    else "Build Context Packs"
+                ),
+                style="Primary.TButton",
+                command=self._build_or_open_context,
+            ).pack(side="right")
+
+    def _build_or_open_context(self) -> None:
+        if (
+            self.current_project is None
+            or self.current_task is None
+            or self.current_plan is None
+        ):
+            return
+
+        existing = self.context_store.get_for_plan(
+            self.current_plan.plan_id
+        )
+        if existing is not None:
+            self.current_context = existing
+            self.show_page("context-preview")
+            return
+
+        try:
+            selection = build_context_selection(
+                task=self.current_task,
+                project=self.current_project,
+                plan=self.current_plan,
+            )
+            self.context_store.save_selection(selection)
+            self.current_context = selection
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror(
+                "Unable to build context",
+                str(exc),
+            )
+            return
+
+        self.show_page("context-preview")
+
+    def _render_context_preview(self) -> None:
+        if (
+            self.current_context is None
+            and self.current_plan is not None
+        ):
+            self.current_context = self.context_store.get_for_plan(
+                self.current_plan.plan_id
+            )
+        if self.current_context is None:
+            self.show_page("plan-preview")
+            return
+
+        selection = self.current_context
+        ttk.Button(
+            self.page,
+            text="← Execution Plan",
+            style="Secondary.TButton",
+            command=lambda: self.show_page("plan-preview"),
+        ).pack(anchor="w", pady=(0, 18))
+
+        ttk.Label(
+            self.page,
+            text="Context packs",
+            style="Title.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            self.page,
+            text=selection.project_brain.summary,
+            style="Body.TLabel",
+            wraplength=800,
+        ).pack(anchor="w", pady=(0, 14))
+
+        summary = ttk.Frame(self.page, style="Content.TFrame")
+        summary.pack(fill="x", pady=(0, 14))
+        self._metadata_card(
+            summary,
+            "Scanned candidates",
+            str(selection.scanned_candidates),
+        ).pack(side="left", fill="both", expand=True, padx=(0, 6))
+        self._metadata_card(
+            summary,
+            "Selected files",
+            str(selection.selected_files),
+        ).pack(side="left", fill="both", expand=True, padx=6)
+        self._metadata_card(
+            summary,
+            "Selected bytes",
+            f"{selection.selected_bytes:,}",
+        ).pack(side="left", fill="both", expand=True, padx=6)
+        protected_count = sum(
+            1 for item in selection.exclusions if item.protected
+        )
+        self._metadata_card(
+            summary,
+            "Protected paths",
+            str(protected_count),
+        ).pack(side="left", fill="both", expand=True, padx=(6, 0))
+
+        notebook = ttk.Notebook(self.page)
+        notebook.pack(fill="both", expand=True)
+
+        for pack in selection.packs:
+            tab = ttk.Frame(notebook, style="Content.TFrame", padding=12)
+            notebook.add(tab, text=f"{pack.agent_role}: {pack.step_id}")
+            ttk.Label(
+                tab,
+                text=(
+                    f"{pack.objective}\n"
+                    f"{len(pack.files)} files · {pack.total_bytes:,} bytes "
+                    f"from {pack.candidate_count} relevant candidates"
+                ),
+                style="Body.TLabel",
+                wraplength=760,
+            ).pack(anchor="w", pady=(0, 8))
+            viewer = tk.Text(
+                tab,
+                wrap="none",
+                borderwidth=1,
+                relief="solid",
+                font=("Menlo", 11),
+            )
+            viewer.pack(fill="both", expand=True)
+            for item in pack.files:
+                viewer.insert(
+                    "end",
+                    (
+                        f"FILE: {item.relative_path}\n"
+                        f"Score: {item.score}\n"
+                        f"Reason: {', '.join(item.reasons)}\n"
+                        f"Included: {item.included_bytes:,}/{item.size_bytes:,} bytes"
+                        f"{' (truncated)' if item.truncated else ''}\n"
+                        f"SHA256: {item.sha256}\n"
+                        "----------------------------------------\n"
+                        f"{item.content}\n"
+                        "========================================\n\n"
+                    ),
+                )
+            if not pack.files:
+                viewer.insert(
+                    "end",
+                    "No readable file met the bounded relevance rules for this step.",
+                )
+            viewer.configure(state="disabled")
+
+        protected_tab = ttk.Frame(
+            notebook,
+            style="Content.TFrame",
+            padding=12,
+        )
+        notebook.add(protected_tab, text="Exclusions")
+        exclusions_view = tk.Text(
+            protected_tab,
+            wrap="word",
+            borderwidth=1,
+            relief="solid",
+            font=("Menlo", 11),
+        )
+        exclusions_view.pack(fill="both", expand=True)
+        for exclusion in selection.exclusions:
+            flag = (
+                "PROTECTED"
+                if exclusion.protected
+                else "SKIPPED"
+            )
+            exclusions_view.insert(
+                "end",
+                (
+                    f"[{flag}] {exclusion.relative_path}"
+                    f" — {exclusion.reason}\n"
+                ),
+            )
+        if not selection.exclusions:
+            exclusions_view.insert("end", "No exclusions recorded.\n")
+        exclusions_view.configure(state="disabled")
+
+        ttk.Label(
+            self.page,
+            text=(
+                "Context is visible and bounded. No agent has been dispatched; "
+                "Token Budget Controller remains Ticket 9."
+            ),
+            style="Body.TLabel",
+            wraplength=800,
+        ).pack(anchor="w", pady=(12, 0))
 
     def _edit_task_from_plan(self) -> None:
         if (

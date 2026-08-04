@@ -270,7 +270,7 @@ function saveState(){
  updateProgress();
 }
 function loadState(){
- const state=JSON.parse(localStorage.getItem('empyMasterPlan')||'{"tickets":{"1":true,"2":true,"3":true,"4":true,"5":true,"6":true,"7":true}}');
+ const state=JSON.parse(localStorage.getItem('empyMasterPlan')||'{"tickets":{"1":true,"2":true,"3":true,"4":true,"5":true,"6":true,"7":true,"8":true}}');
  document.querySelectorAll('.ticket-check').forEach(x=>x.checked=!!(state.tickets||{})[x.dataset.id]);
  document.querySelectorAll('.subcheck').forEach(x=>x.checked=!!(state.subs||{})[x.dataset.key]);
  document.querySelectorAll('.final-check').forEach((x,i)=>x.checked=!!(state.finals||[])[i]);

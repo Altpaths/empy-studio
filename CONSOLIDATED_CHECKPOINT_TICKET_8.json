@@ -3,8 +3,8 @@
   "baseline": "original Empy Studio repository supplied in this conversation",
   "consolidated_through": {
     "phase": 3,
-    "ticket": 7,
-    "title": "Planner & Approval"
+    "ticket": 8,
+    "title": "Context Selector"
   },
   "ticket_status": {
     "ticket_1": {
@@ -34,6 +34,10 @@
     "ticket_7": {
       "status": "present",
       "missing": []
+    },
+    "ticket_8": {
+      "status": "implemented",
+      "missing": []
     }
   },
   "inventory": {
@@ -53,9 +57,9 @@
   },
   "next_master_plan_position": {
     "phase": 3,
-    "ticket": 8,
-    "title": "Context Selector",
+    "ticket": 9,
+    "title": "Token Budget Controller",
     "status": "not_started"
   },
-  "decision_boundary": "This archive is the single consolidated checkpoint. Ticket 8 has not been added."
+  "decision_boundary": "This archive is the single consolidated checkpoint through Ticket 8. Token Budget Controller and later tickets are not complete."
 }
