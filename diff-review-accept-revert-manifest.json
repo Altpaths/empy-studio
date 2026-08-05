@@ -1,0 +1,14 @@
+{
+  "ticket": 15,
+  "title": "Diff Review, Accept & Revert",
+  "base_commit": "1e17f4c",
+  "workspace": "Review Workspace",
+  "decisions": ["Accept", "Revert"],
+  "safety_gates": [
+    "captured HEAD must remain unchanged",
+    "selected file content must remain unchanged",
+    "rename source must not reappear"
+  ],
+  "automatic_commit": false,
+  "test_count": 483
+}

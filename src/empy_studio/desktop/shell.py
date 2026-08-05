@@ -43,6 +43,11 @@ from empy_studio.drivers import (
     DriverRegistry,
     default_driver_registry,
 )
+from empy_studio.review_workspace import (
+    ReviewFile,
+    ReviewReport,
+    ReviewWorkspaceAdapter,
+)
 from empy_studio.verification_pipeline import (
     VerificationEvent,
     VerificationReport,
@@ -119,6 +124,11 @@ NAVIGATION = (
         description="Run tests, build, lint, and review evidence.",
     ),
     NavigationItem(
+        key="review",
+        label="Review",
+        description="Inspect changed files, accept changes, or revert them safely.",
+    ),
+    NavigationItem(
         key="settings",
         label="Settings",
         description="Workspace and driver settings.",
@@ -127,7 +137,7 @@ NAVIGATION = (
 
 
 class EmpyDesktopShell:
-    """Desktop product shell through Ticket 12."""
+    """Desktop product shell through Ticket 15."""
 
     def __init__(
         self,
@@ -145,6 +155,7 @@ class EmpyDesktopShell:
         sync_store: SyncWorkspaceAdapter | None = None,
         verification_store: VerificationWorkspaceAdapter | None = None,
         verification_controller: VerificationController | None = None,
+        review_store: ReviewWorkspaceAdapter | None = None,
         driver_registry: DriverRegistry | None = None,
         driver_settings_store: DriverSettingsWorkspaceAdapter | None = None,
         driver_manager: DriverManager | None = None,
@@ -208,6 +219,7 @@ class EmpyDesktopShell:
         self.verification_controller = verification_controller or VerificationController(
             VerificationRuntime(), self.verification_store
         )
+        self.review_store = review_store or ReviewWorkspaceAdapter(self.workspace_path)
         self.driver_registry = driver_registry or default_driver_registry()
         self.driver_settings_store = (
             driver_settings_store
@@ -242,6 +254,13 @@ class EmpyDesktopShell:
         self.current_codex_run: CodexGraphExecution | None = None
         self.current_sync_id: str | None = None
         self.current_verification: VerificationReport | None = None
+        self.current_review: ReviewReport | None = None
+        self.selected_review_path: str | None = None
+        self.review_file_tree: ttk.Treeview | None = None
+        self.review_diff_view: tk.Text | None = None
+        self.review_status_var: tk.StringVar | None = None
+        self.review_accept_button: ttk.Button | None = None
+        self.review_revert_button: ttk.Button | None = None
         self.verification_views: dict[str, tk.Text] = {}
         self.verification_status_var: tk.StringVar | None = None
         self.verification_finalize_button: ttk.Button | None = None
@@ -420,7 +439,7 @@ class EmpyDesktopShell:
         )
         ttk.Label(
             self.sidebar,
-            text="Ticket 13 · Sync & Conflict Resolver",
+            text="Ticket 15 · Diff Review, Accept & Revert",
             style="SidebarCaption.TLabel",
         ).pack(anchor="w", padx=22)
 
@@ -444,6 +463,12 @@ class EmpyDesktopShell:
         self.verification_views = {}
         self.verification_status_var = None
         self.verification_finalize_button = None
+        self.selected_review_path = None
+        self.review_file_tree = None
+        self.review_diff_view = None
+        self.review_status_var = None
+        self.review_accept_button = None
+        self.review_revert_button = None
 
     def show_page(
         self,
@@ -463,6 +488,8 @@ class EmpyDesktopShell:
             self._render_sync_detail()
         elif key == "verification":
             self._render_verification()
+        elif key == "review":
+            self._render_review_workspace()
         elif key == "settings":
             self._render_driver_settings()
         elif key == "project-home":
@@ -2057,6 +2084,199 @@ class EmpyDesktopShell:
         self.current_codex_run = run
         self.show_page("codex-run")
 
+    def _render_review_workspace(self) -> None:
+        ttk.Label(self.page, text="Review Workspace", style="Title.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(
+            self.page,
+            text=(
+                "Inspect every changed file before delivery. Accept keeps the current change; "
+                "Revert restores the file safely. Empy never commits from this workspace."
+            ),
+            style="Body.TLabel",
+            wraplength=860,
+        ).pack(anchor="w", pady=(0, 16))
+
+        controls = ttk.Frame(self.page, style="Content.TFrame")
+        controls.pack(fill="x", pady=(0, 12))
+        self.review_status_var = tk.StringVar(value="Status: no review")
+        ttk.Label(controls, textvariable=self.review_status_var, style="CardTitle.TLabel").pack(side="left")
+        ttk.Button(
+            controls,
+            text="Refresh Changed Files",
+            style="Primary.TButton",
+            command=self._start_review,
+        ).pack(side="right")
+
+        workspace = ttk.Panedwindow(self.page, orient="horizontal")
+        workspace.pack(fill="both", expand=True)
+        files_frame = ttk.Frame(workspace, style="Content.TFrame", padding=8)
+        diff_frame = ttk.Frame(workspace, style="Content.TFrame", padding=8)
+        workspace.add(files_frame, weight=1)
+        workspace.add(diff_frame, weight=3)
+
+        ttk.Label(files_frame, text="Changed files", style="CardTitle.TLabel").pack(anchor="w", pady=(0, 8))
+        tree = ttk.Treeview(files_frame, columns=("kind", "decision"), show="tree headings", height=18)
+        tree.heading("#0", text="File")
+        tree.heading("kind", text="Change")
+        tree.heading("decision", text="Decision")
+        tree.column("#0", width=260, stretch=True)
+        tree.column("kind", width=90, stretch=False)
+        tree.column("decision", width=90, stretch=False)
+        tree.pack(fill="both", expand=True)
+        tree.bind("<<TreeviewSelect>>", self._select_review_file)
+        self.review_file_tree = tree
+
+        ttk.Label(diff_frame, text="Readable diff", style="CardTitle.TLabel").pack(anchor="w", pady=(0, 8))
+        diff_view = tk.Text(diff_frame, wrap="none", borderwidth=1, relief="solid", font=("Menlo", 10))
+        diff_view.pack(fill="both", expand=True)
+        self.review_diff_view = diff_view
+
+        actions = ttk.Frame(diff_frame, style="Content.TFrame")
+        actions.pack(fill="x", pady=(10, 0))
+        self.review_revert_button = ttk.Button(
+            actions,
+            text="Revert",
+            style="Secondary.TButton",
+            command=self._revert_selected_change,
+        )
+        self.review_revert_button.pack(side="right")
+        self.review_accept_button = ttk.Button(
+            actions,
+            text="Accept",
+            style="Primary.TButton",
+            command=self._accept_selected_change,
+        )
+        self.review_accept_button.pack(side="right", padx=(0, 8))
+
+        if self.current_project is None:
+            self.current_review = None
+        else:
+            reports = self.review_store.list_reports(
+                str(self.current_project.descriptor.root)
+            )
+            self.current_review = reports[0] if reports else None
+        self._display_review_report()
+
+    def _start_review(self) -> None:
+        if self.current_project is None:
+            messagebox.showerror("Project required", "Open a project before reviewing changes.")
+            return
+        try:
+            self.current_review = self.review_store.create(self.current_project.descriptor.root)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Unable to create review", str(exc))
+            return
+        self.selected_review_path = None
+        self._display_review_report()
+
+    def _display_review_report(self) -> None:
+        tree = self.review_file_tree
+        view = self.review_diff_view
+        if tree is None or view is None:
+            return
+        for tree_item_id in tree.get_children():
+            tree.delete(tree_item_id)
+        view.delete("1.0", "end")
+        report = self.current_review
+        if report is None:
+            view.insert("end", "No review has been created for the selected project.\n")
+            self._update_review_action_state()
+            return
+        if self.review_status_var is not None:
+            self.review_status_var.set(
+                f"Status: {report.status} · pending {report.pending_count} · "
+                f"accepted {report.accepted_count} · reverted {report.reverted_count}"
+            )
+        if not report.files:
+            view.insert("end", "Working tree is clean. There are no changed files to review.\n")
+        for review_file in report.files:
+            tree.insert(
+                "",
+                "end",
+                iid=review_file.relative_path,
+                text=review_file.relative_path,
+                values=(review_file.change_kind, review_file.decision),
+            )
+        self._update_review_action_state()
+
+    def _select_review_file(self, _event: object | None = None) -> None:
+        tree = self.review_file_tree
+        report = self.current_review
+        view = self.review_diff_view
+        if tree is None or report is None or view is None:
+            return
+        selected = tree.selection()
+        if not selected:
+            self.selected_review_path = None
+            self._update_review_action_state()
+            return
+        self.selected_review_path = str(selected[0])
+        item = self._selected_review_file()
+        view.delete("1.0", "end")
+        if item is not None:
+            view.insert(
+                "end",
+                f"File: {item.relative_path}\n"
+                f"Git status: {item.git_status}\n"
+                f"Decision: {item.decision}\n\n"
+                f"{item.diff_text}",
+            )
+        self._update_review_action_state()
+
+    def _selected_review_file(self) -> ReviewFile | None:
+        if self.current_review is None or self.selected_review_path is None:
+            return None
+        for item in self.current_review.files:
+            if item.relative_path == self.selected_review_path:
+                return item
+        return None
+
+    def _update_review_action_state(self) -> None:
+        item = self._selected_review_file()
+        enabled = item is not None and item.decision == "pending"
+        for button in (self.review_accept_button, self.review_revert_button):
+            if button is None:
+                continue
+            if enabled:
+                button.state(["!disabled"])
+            else:
+                button.state(["disabled"])
+
+    def _accept_selected_change(self) -> None:
+        report = self.current_review
+        path = self.selected_review_path
+        if report is None or path is None:
+            return
+        try:
+            self.current_review = self.review_store.accept(report.review_id, path)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Accept blocked", str(exc))
+            return
+        self._display_review_report()
+        if self.review_file_tree is not None:
+            self.review_file_tree.selection_set(path)
+            self._select_review_file()
+
+    def _revert_selected_change(self) -> None:
+        report = self.current_review
+        path = self.selected_review_path
+        if report is None or path is None:
+            return
+        confirmed = messagebox.askyesno(
+            "Revert change",
+            f"Restore {path} to the repository baseline? This changes the working tree but does not commit.",
+        )
+        if not confirmed:
+            return
+        try:
+            self.current_review = self.review_store.revert(report.review_id, path)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Revert blocked", str(exc))
+            return
+        self._display_review_report()
+        if self.review_file_tree is not None:
+            self.review_file_tree.selection_set(path)
+            self._select_review_file()
 
     def _render_verification(self) -> None:
         ttk.Label(self.page, text="Verification", style="Title.TLabel").pack(anchor="w", pady=(0, 8))
@@ -2085,6 +2305,12 @@ class EmpyDesktopShell:
             command=self._finalize_verification,
         )
         self.verification_finalize_button.pack(side="right")
+        ttk.Button(
+            controls,
+            text="Review Changes",
+            style="Secondary.TButton",
+            command=partial(self.show_page, "review"),
+        ).pack(side="right", padx=(0, 8))
 
         notebook = ttk.Notebook(self.page)
         notebook.pack(fill="both", expand=True)

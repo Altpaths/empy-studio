@@ -1,5 +1,13 @@
 ## Unreleased
 
+### Ticket 15 — Diff Review, Accept & Revert
+
+- Added a Desktop Review Workspace with changed-file status and readable diffs.
+- Added explicit per-file Accept decisions that preserve working-tree changes.
+- Added safe Revert for tracked, staged, deleted, renamed, and untracked files.
+- Added stale HEAD, stale file, and rename-source safety gates before decisions.
+- Kept commit, push, merge, and release outside Review Workspace and under explicit user control.
+
 ### Ticket 14 — Verification Pipeline in UI
 
 - Added project-aware verification mapping for Python, Laravel, Node, Rust, Go, and explicit `.empy/verification.json` manifests.

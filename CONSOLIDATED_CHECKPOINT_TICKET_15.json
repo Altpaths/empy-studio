@@ -1,0 +1,32 @@
+{
+  "ticket": 15,
+  "title": "Diff Review, Accept & Revert",
+  "status": "complete",
+  "goal": "Give the user final control over workspace changes.",
+  "implementation": [
+    "Git-backed changed-file capture",
+    "readable text diffs and binary markers",
+    "persistent Review Reports",
+    "explicit per-file Accept decisions",
+    "safe per-file Revert for tracked, staged, deleted, renamed, and untracked changes",
+    "stale HEAD and workspace-change protection",
+    "Desktop Review Workspace",
+    "no automatic commit, push, merge, or release path"
+  ],
+  "deliverables": [
+    "Review Workspace",
+    "changed-file list",
+    "readable diff viewer",
+    "Accept control",
+    "Revert control"
+  ],
+  "definition_of_done": {
+    "diff_is_readable": true,
+    "accept_and_revert_work": true,
+    "no_automatic_commit_without_permission": true
+  },
+  "validation": {
+    "tests": "483 passed",
+    "compileall": "passed"
+  }
+}

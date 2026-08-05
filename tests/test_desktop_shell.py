@@ -10,6 +10,7 @@ def test_desktop_navigation_contract() -> None:
         "runs",
         "sync",
         "verification",
+        "review",
         "settings",
     )
 
@@ -76,3 +77,13 @@ def test_desktop_exposes_verification_pipeline_ui() -> None:
     assert hasattr(EmpyDesktopShell, "_render_verification")
     assert hasattr(EmpyDesktopShell, "_start_verification")
     assert hasattr(EmpyDesktopShell, "_finalize_verification")
+
+
+def test_desktop_exposes_diff_review_accept_and_revert() -> None:
+    from empy_studio.desktop.shell import EmpyDesktopShell
+
+    assert "review" in tuple(item.key for item in NAVIGATION)
+    assert hasattr(EmpyDesktopShell, "_render_review_workspace")
+    assert hasattr(EmpyDesktopShell, "_start_review")
+    assert hasattr(EmpyDesktopShell, "_accept_selected_change")
+    assert hasattr(EmpyDesktopShell, "_revert_selected_change")

@@ -1,0 +1,12 @@
+Ticket 15 — Diff Review, Accept & Revert
+
+Validation in build workspace:
+- 483 tests passed
+- Python compileall passed
+- readable modified, added, deleted, and binary diffs covered
+- Accept preserves working-tree content and Git HEAD
+- Revert covered for tracked, untracked, staged-added, deleted, and renamed files
+- stale file, changed HEAD, and rename-source reappearance gates covered
+- no automatic Git commit path added
+- Ruff SIM102 regression removed from untracked Revert control flow
+- Ruff UP022 subprocess capture regression removed from runtime and tests
