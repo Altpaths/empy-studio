@@ -43,6 +43,34 @@ def test_builds_deterministic_safe_records_with_lightweight_hints(tmp_path: Path
     assert "ProjectBrainService" in record.summary
 
 
+def test_php_runtime_config_and_logs_are_skipped_but_examples_are_indexed(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "config.php").write_text(
+        "<?php return ['password' => 'secret'];\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "config" / "config.example.php").write_text(
+        "<?php return ['password' => ''];\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "storage" / "logs").mkdir(parents=True)
+    (tmp_path / "storage" / "logs" / "app.log").write_text(
+        "runtime data\n",
+        encoding="utf-8",
+    )
+
+    result = build_project_brain_index(tmp_path)
+    indexed_paths = {record.relative_path for record in result.index.records}
+
+    assert "config/config.example.php" in indexed_paths
+    assert "config/config.php" not in indexed_paths
+    assert "storage/logs/app.log" not in indexed_paths
+    assert "config/config.php" in result.skipped_paths
+    assert "storage/logs/app.log" in result.skipped_paths
+
+
 def test_reuses_unchanged_records_without_rereading_and_reports_removed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

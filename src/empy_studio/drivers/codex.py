@@ -816,12 +816,24 @@ class CodexDriver(BaseDriver):
             )
         if any(item in lowered for item in ("rate limit", "quota", "too many requests")):
             return "rate_limited", "Codex reached an account or rate limit. Retry after the limit resets."
+        if any(
+            item in lowered
+            for item in (
+                "in-process app-server",
+                "app-server client",
+                "failed to initialize",
+                "could not create path aliases",
+                "state_5.sqlite",
+            )
+        ) or "sandbox" in lowered:
+            return (
+                "sandbox_error",
+                "Codex sandbox or app-server could not initialize in this environment. Verify host permissions or choose an allowed workspace.",
+            )
         if any(item in lowered for item in ("permission denied", "operation not permitted", "access denied")):
             return "permission_denied", "Codex could not access a required project path."
         if any(item in lowered for item in ("network", "connection", "dns", "timed out connecting")):
             return "network_error", "Codex could not reach the provider service. Check the network and retry."
-        if "sandbox" in lowered:
-            return "sandbox_error", "Codex sandbox initialization or execution failed."
         detail = stderr.strip() or f"Codex exited with status {return_code}."
         return "process_failed", detail
 

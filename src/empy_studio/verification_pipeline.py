@@ -124,6 +124,15 @@ def _node_scripts(root: Path) -> dict[str, object]:
     return scripts if isinstance(scripts, dict) else {}
 
 
+def _composer_scripts(root: Path) -> dict[str, object]:
+    package = root / "composer.json"
+    if not package.is_file():
+        return {}
+    value = json.loads(package.read_text(encoding="utf-8"))
+    scripts = value.get("scripts", {}) if isinstance(value, dict) else {}
+    return scripts if isinstance(scripts, dict) else {}
+
+
 def _verification_category(value: object) -> VerificationCategory:
     if value == "tests":
         return "tests"
@@ -152,6 +161,35 @@ def map_project_verification(detection: ProjectDetection) -> tuple[VerificationC
         pint = root / "vendor" / "bin" / "pint"
         if pint.is_file():
             checks.append(VerificationCheck("lint", "Laravel Pint", "lint", (str(pint), "--test")))
+    elif project_type == "php":
+        if (root / "composer.json").is_file():
+            checks.append(
+                VerificationCheck(
+                    "build",
+                    "Composer validation",
+                    "build",
+                    ("composer", "validate", "--no-check-publish"),
+                )
+            )
+            composer_scripts = _composer_scripts(root)
+            if (root / "vendor" / "autoload.php").is_file() and "test" in composer_scripts:
+                checks.append(
+                    VerificationCheck(
+                        "tests",
+                        "Composer tests",
+                        "tests",
+                        ("composer", "--no-interaction", "run-script", "test"),
+                    )
+                )
+        elif (root / "vendor" / "bin" / "phpunit").is_file():
+            checks.append(
+                VerificationCheck(
+                    "tests",
+                    "PHPUnit tests",
+                    "tests",
+                    (str(root / "vendor" / "bin" / "phpunit"),),
+                )
+            )
     elif project_type == "node":
         scripts = _node_scripts(root)
         node_checks: tuple[tuple[VerificationCategory, str], ...] = (

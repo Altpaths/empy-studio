@@ -11,6 +11,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from .core.path_policy import is_sensitive_relative_path
+
 MAX_ARCHIVE_FILE_BYTES = 64 * 1024 * 1024
 MAX_ARCHIVE_TOTAL_BYTES = 512 * 1024 * 1024
 
@@ -82,6 +84,8 @@ def _sha256_file(path: Path) -> str:
 
 
 def _excluded(relative: PurePosixPath) -> bool:
+    if is_sensitive_relative_path(relative):
+        return True
     return any(
         part in EXCLUDED_NAMES
         or part.startswith(".env.")

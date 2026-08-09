@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Final
 
+from .path_policy import is_sensitive_relative_path
 from .planner import AgentRole, ExecutionPlan, PlanStep
 from .project_brain import ProjectBrainIndex, ProjectBrainRecord
 from .project_service import ProjectDetection
@@ -33,34 +34,6 @@ DEFAULT_EXCLUDED_DIRECTORIES: Final[tuple[str, ...]] = (
     ".ruff_cache",
     ".next",
     ".nuxt",
-)
-
-SENSITIVE_FILE_NAMES: Final[frozenset[str]] = frozenset(
-    {
-        ".env",
-        ".npmrc",
-        ".pypirc",
-        ".netrc",
-        "credentials",
-        "credentials.json",
-        "secrets.json",
-        "secret.json",
-        "id_rsa",
-        "id_dsa",
-        "id_ecdsa",
-        "id_ed25519",
-        "authorized_keys",
-        "known_hosts",
-    }
-)
-
-SENSITIVE_SUFFIXES: Final[tuple[str, ...]] = (
-    ".pem",
-    ".key",
-    ".p12",
-    ".pfx",
-    ".jks",
-    ".keystore",
 )
 
 TEXT_EXTENSIONS: Final[frozenset[str]] = frozenset(
@@ -380,20 +353,7 @@ def _normalise_relative(path: Path, root: Path) -> str:
 
 
 def _is_sensitive(relative_path: str) -> bool:
-    path = Path(relative_path)
-    lowered_parts = tuple(part.lower() for part in path.parts)
-    name = path.name.lower()
-
-    if name in SENSITIVE_FILE_NAMES:
-        return True
-    if name.startswith(".env"):
-        return True
-    if any(name.endswith(suffix) for suffix in SENSITIVE_SUFFIXES):
-        return True
-    return any(
-        part in {"secrets", "credentials", ".ssh", ".gnupg"}
-        for part in lowered_parts[:-1]
-    )
+    return is_sensitive_relative_path(relative_path)
 
 
 def _looks_textual(path: Path, raw: bytes) -> bool:
@@ -524,6 +484,20 @@ def _discover_indexed_candidates(
     candidates: list[_Candidate] = []
     exclusions: list[ContextExclusion] = []
     excluded_directories = {item.lower() for item in policy.excluded_directories}
+
+    for relative in sorted(set(brain_index.skipped_paths)):
+        if not is_sensitive_relative_path(relative):
+            continue
+        path = (root / relative).resolve()
+        if root not in path.parents or path.is_symlink() or not path.is_file():
+            continue
+        exclusions.append(
+            ContextExclusion(
+                relative_path=relative,
+                reason="sensitive file rule",
+                protected=True,
+            )
+        )
 
     for record in brain_index.records:
         relative = record.relative_path
