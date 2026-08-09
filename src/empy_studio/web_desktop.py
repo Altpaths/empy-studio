@@ -31,6 +31,12 @@ from empy_studio.core import (
     lock_token_budget,
     mark_ready_for_planning,
 )
+from empy_studio.benchmark import (
+    BenchmarkResult,
+    ProjectBrainIndex,
+    build_load_save_project_brain_index,
+    run_local_benchmark,
+)
 from empy_studio.drivers import (
     CodexDriver,
     CodexGraphExecution,
@@ -131,6 +137,8 @@ class GuidedState:
     plan: ExecutionPlan | None = None
     context: ContextSelection | None = None
     budget: TokenBudget | None = None
+    brain_index: ProjectBrainIndex | None = None
+    benchmark: BenchmarkResult | None = None
     graph: AgentRunGraph | None = None
     run: CodexGraphExecution | None = None
     verification: VerificationReport | None = None
@@ -209,6 +217,21 @@ class GuidedState:
                 return project
         return None
 
+    def _brain_index_path(self, project_id: str) -> Path:
+        return self.workspace_root / "project-brain" / f"{project_id}.json"
+
+    def _refresh_brain_index(self) -> ProjectBrainIndex:
+        if self.active_project_id is None or self.detection is None:
+            raise RuntimeError("Choose a project first.")
+        index = build_load_save_project_brain_index(
+            project_id=self.active_project_id,
+            project=self.detection,
+            path=self._brain_index_path(self.active_project_id),
+        )
+        with self.lock:
+            self.brain_index = index
+        return index
+
     def select_project(self, project_id: str, *, restore: bool = False) -> None:
         project = self.store.get_project(project_id)
         detection = self.project_service.detect(project.root)
@@ -226,6 +249,8 @@ class GuidedState:
             self.plan = None
             self.context = None
             self.budget = None
+            self.brain_index = None
+            self.benchmark = None
             self.graph = None
             self.run = None
             self.verification = None
@@ -237,6 +262,7 @@ class GuidedState:
         self.store.set_setting("active_project_id", project.project_id)
         if not restore:
             self.store.set_setting("active_task_id", None)
+        self._refresh_brain_index()
 
     def import_path(self, path: str) -> None:
         selected = Path(path).expanduser().resolve()
@@ -294,6 +320,7 @@ class GuidedState:
             raise RuntimeError("Choose a project first.")
         draft = generate_execution_plan(task=task, project=self.detection)
         plan = approve_execution_plan(draft, current_task=task)
+        self._refresh_brain_index()
         context = build_context_selection(task=task, project=self.detection, plan=plan)
         budget = lock_token_budget(build_token_budget(plan=plan, selection=context))
         graph = build_agent_run_graph(plan=plan, selection=context, budget=budget)
@@ -328,6 +355,7 @@ class GuidedState:
             self.plan = plan
             self.context = context
             self.budget = budget
+            self.benchmark = None
             self.graph = graph
             self.run = None
             self.verification = None
@@ -392,6 +420,7 @@ class GuidedState:
             self.plan = plan
             self.context = context
             self.budget = budget
+            self.benchmark = None
             self.graph = graph
             self.run = None
             self.verification = None
@@ -402,6 +431,23 @@ class GuidedState:
             self.error = None
             self.message = "برنامه و مالکیت فایل‌ها آماده شد."
         self.store.set_setting("active_task_id", ready.task_id)
+
+    def run_benchmark(self) -> BenchmarkResult:
+        if self.task is None or self.detection is None or self.plan is None:
+            raise RuntimeError("Build a plan before running the benchmark.")
+        index = self._refresh_brain_index()
+        result = run_local_benchmark(
+            task=self.task,
+            project=self.detection,
+            plan=self.plan,
+            brain_index=index,
+            selection=self.context,
+            budget=self.budget,
+        )
+        with self.lock:
+            self.benchmark = result
+            self.message = "بنچمارک محلی بدون فراخوانی Provider اجرا شد."
+        return result
 
     def start_run(self) -> None:
         if self.running:
@@ -564,6 +610,8 @@ class GuidedState:
             self.plan = None
             self.context = None
             self.budget = None
+            self.brain_index = None
+            self.benchmark = None
             self.graph = None
             self.run = None
             self.verification = None
@@ -601,7 +649,23 @@ class GuidedState:
                     "selected_files": self.context.selected_files,
                     "scanned_files": self.context.scanned_candidates,
                     "token_limit": self.budget.total_limit_tokens,
+                    "estimated_context_tokens": self.budget.estimated_context_tokens,
+                    "estimate_source": "provider_neutral_local_estimate",
                 }
+            budget = (
+                {
+                    "status": self.budget.status,
+                    "preset": self.budget.preset,
+                    "planning_limit_tokens": self.budget.planning_limit_tokens,
+                    "reserve_tokens": self.budget.reserve_tokens,
+                    "total_limit_tokens": self.budget.total_limit_tokens,
+                    "estimated_context_tokens": self.budget.estimated_context_tokens,
+                    "source": "provider_neutral_local_estimate",
+                }
+                if self.budget is not None
+                else None
+            )
+            provider_usage = self._provider_usage()
             review = self.review.to_dict() if self.review is not None else None
             verification = self.verification.to_dict() if self.verification is not None else None
             return _json_safe(
@@ -616,6 +680,11 @@ class GuidedState:
                     "tasks": tasks,
                     "task": asdict(self.task) if self.task is not None else None,
                     "plan": plan,
+                    "brain": self.brain_index.stats() if self.brain_index is not None else None,
+                    "budget": budget,
+                    "provider_usage": provider_usage,
+                    "estimate_source": "provider_neutral_local_estimate",
+                    "benchmark": self.benchmark.to_dict() if self.benchmark is not None else None,
                     "running": self.running,
                     "logs": list(self.logs),
                     "verification": verification,
@@ -631,6 +700,31 @@ class GuidedState:
                     },
                 }
             )
+
+    def _provider_usage(self) -> dict[str, Any] | None:
+        if self.run is None:
+            return None
+        total = 0
+        for event in self.run.events:
+            raw = event.raw or {}
+            for key in (
+                "total_tokens",
+                "tokens",
+                "input_tokens",
+                "output_tokens",
+                "prompt_tokens",
+                "completion_tokens",
+            ):
+                value = raw.get(key)
+                if isinstance(value, int):
+                    total += value
+        return {
+            "provider": self.run.provider,
+            "status": self.run.status,
+            "total_tokens": total if total else None,
+            "available": bool(total),
+            "source": "provider_events" if total else "not_reported",
+        }
 
 
 def _native_picker(kind: str) -> str | None:
@@ -749,6 +843,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             state.select_task(str(body["task_id"]))
         elif path == "/api/plan":
             state.create_plan(str(body.get("tasks", "")), body.get("task_id"))
+        elif path == "/api/benchmark":
+            state.run_benchmark()
         elif path == "/api/run":
             state.start_run()
         elif path == "/api/decision":

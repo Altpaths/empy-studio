@@ -10,6 +10,7 @@ const t = {
     plan: "تحلیل و ساخت برنامه", start: "شروع اجرا", accept: "تأیید تغییرات", revert: "بازگردانی تغییرات", export: "خروجی ZIP پروژه",
     newProject: "پروژه‌ی دیگر", noProject: "هنوز پروژه‌ای ثبت نشده است.", noTask: "هنوز تیکتی ثبت نشده است.", engine: "وضعیت Codex",
     ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", result: "نتیجه و بررسی", resume: "ادامه تیکت",
+    benchmark: "بنچمارک محلی", runBenchmark: "اجرای بنچمارک", full: "تخمین کامل", bounded: "تخمین محدود", saved: "صرفه‌جویی", brain: "Project Brain",
   },
   en: {
     subtitle: "Coordinated project development with bounded agents", project: "Projects", import: "Project folder or ZIP path",
@@ -17,6 +18,7 @@ const t = {
     plan: "Analyze and build plan", start: "Start run", accept: "Accept changes", revert: "Restore changes", export: "Export project ZIP",
     newProject: "Another project", noProject: "No projects have been registered.", noTask: "No tickets have been registered.", engine: "Codex status",
     ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", result: "Result and review", resume: "Resume ticket",
+    benchmark: "Local benchmark", runBenchmark: "Run benchmark", full: "Full estimate", bounded: "Bounded estimate", saved: "Saved", brain: "Project Brain",
   },
 };
 function text() { return t[language]; }
@@ -53,7 +55,12 @@ function renderTask() {
 }
 function renderPlan() {
   const plan = state.plan || {}; const nodes = plan.nodes || [];
-  return `<div class="card"><h1>${language === "fa" ? "برنامه آماده است" : "Plan is ready"}</h1><div class="stats"><div><small>${text().files}</small><strong>${plan.selected_files || 0}</strong></div><div><small>${text().tokens}</small><strong>${Number(plan.token_limit || 0).toLocaleString()}</strong></div><div><small>${language === "fa" ? "ایجنت" : "agents"}</small><strong>${plan.agents || 0}</strong></div></div><div class="node-list">${nodes.map(node => `<div class="node"><span>${escapeHtml(node.role)}</span><strong>${escapeHtml(node.title)}</strong><small>${node.owned_files?.length || 0} ${text().files}</small></div>`).join("")}</div><div class="actions"><button class="primary" onclick="startRun()" ${state.engine?.ready ? "" : "disabled"}>${text().start}</button><button class="secondary" onclick="goTask()">${language === "fa" ? "ویرایش تیکت" : "Edit ticket"}</button></div></div>`;
+  return `<div class="card"><h1>${language === "fa" ? "برنامه آماده است" : "Plan is ready"}</h1><div class="stats"><div><small>${text().files}</small><strong>${plan.selected_files || 0}</strong></div><div><small>${text().tokens}</small><strong>${Number(plan.token_limit || 0).toLocaleString()}</strong></div><div><small>${language === "fa" ? "ایجنت" : "agents"}</small><strong>${plan.agents || 0}</strong></div></div>${renderBenchmark()}<div class="node-list">${nodes.map(node => `<div class="node"><span>${escapeHtml(node.role)}</span><strong>${escapeHtml(node.title)}</strong><small>${node.owned_files?.length || 0} ${text().files}</small></div>`).join("")}</div><div class="actions"><button class="primary" onclick="startRun()" ${state.engine?.ready ? "" : "disabled"}>${text().start}</button><button class="secondary" onclick="runBenchmark()">${text().runBenchmark}</button><button class="secondary" onclick="goTask()">${language === "fa" ? "ویرایش تیکت" : "Edit ticket"}</button></div></div>`;
+}
+function renderBenchmark() {
+  const brain = state.brain || {}; const budget = state.budget || {}; const benchmark = state.benchmark || null; const usage = state.provider_usage || {};
+  const rows = benchmark ? `<div><small>${text().full}</small><strong>${Number(benchmark.full_context_estimate_tokens || 0).toLocaleString()}</strong></div><div><small>${text().bounded}</small><strong>${Number(benchmark.bounded_context_estimate_tokens || budget.estimated_context_tokens || 0).toLocaleString()}</strong></div><div><small>${text().saved}</small><strong>${Number(benchmark.saved_tokens || 0).toLocaleString()} · ${Number(benchmark.savings_percentage || 0).toLocaleString()}%</strong></div>` : `<div><small>${text().brain}</small><strong>${Number(brain.file_count || 0).toLocaleString()}</strong></div><div><small>${text().bounded}</small><strong>${Number(budget.estimated_context_tokens || 0).toLocaleString()}</strong></div><div><small>${language === "fa" ? "مصرف واقعی" : "Actual usage"}</small><strong>${usage.available ? Number(usage.total_tokens || 0).toLocaleString() : "—"}</strong></div>`;
+  return `<section class="benchmark"><div class="row"><div><h2>${text().benchmark}</h2><p class="muted">${language === "fa" ? "تخمین محلی و بدون Provider؛ فقط مسیرهای نسبی امن نمایش داده می‌شود." : "Local provider-free estimate; only safe relative paths are shown."}</p></div><small>${escapeHtml((benchmark?.source_estimate || budget.source || state.estimate_source || ""))}</small></div><div class="stats">${rows}</div></section>`;
 }
 function renderRun() {
   const nodes = state.plan?.nodes || []; return `<div class="card"><h1>${text().run}</h1><div class="node-list">${nodes.map(node => `<div class="node ${node.status}"><span>${escapeHtml(node.status)}</span><strong>${escapeHtml(node.title)}</strong></div>`).join("")}</div><pre class="log">${(state.logs || []).map(item => `[${escapeHtml(item.time)}] ${escapeHtml(item.text)}`).join("\n")}</pre></div>`;
@@ -76,6 +83,7 @@ window.chooseFolder = async () => { loading(); try { state = await api("/api/sel
 window.selectProject = async id => { loading(); try { state = await api("/api/project/select", {project_id:id}); render(); } catch (error) { await refresh(); } };
 window.selectTask = async id => { loading(); try { state = await api("/api/task/select", {task_id:id}); render(); } catch (error) { await refresh(); } };
 window.buildPlan = async () => { loading(); try { state = await api("/api/plan", {tasks: document.querySelector("#tasks").value}); render(); } catch (error) { await refresh(); } };
+window.runBenchmark = async () => { loading(); try { state = await api("/api/benchmark", {}); render(); } catch (error) { await refresh(); } };
 window.startRun = async () => { loading(); try { state = await api("/api/run", {}); render(); } catch (error) { await refresh(); } };
 window.decide = async decision => { loading(); try { state = await api("/api/decision", {decision}); render(); } catch (error) { await refresh(); } };
 window.exportProject = async () => { loading(); try { state = await api("/api/export", {}); render(); } catch (error) { await refresh(); } };

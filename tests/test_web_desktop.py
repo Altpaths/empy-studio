@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 from empy_studio.review_workspace import ReviewReport
 from empy_studio.verification_pipeline import VerificationReport
-from empy_studio.web_desktop import GuidedState
+
+from empy_studio.web_desktop import GuidedState, RequestHandler
 
 
 def test_guided_state_persists_project_and_follow_up_ticket(tmp_path: Path) -> None:
@@ -76,6 +78,7 @@ def test_guided_state_persists_project_and_follow_up_ticket(tmp_path: Path) -> N
     assert restarted.export is not None
     assert restarted.export.archive_path == archive
     assert restarted.export.verified is True
+    assert restarted.public()["brain"]["source"] == "local_project_brain_index"
 
 
 def test_reset_keeps_project_history(tmp_path: Path) -> None:
@@ -132,3 +135,59 @@ def test_export_registers_release_history(tmp_path: Path) -> None:
     assert len(releases) == 1
     assert releases[0].sha256 == state.export.sha256
     assert state.public()["active_project"]["releases"][0]["verified"] is True
+
+
+def test_public_state_exposes_budget_brain_and_benchmark_without_paths(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+    (source / "src").mkdir()
+    (source / "src" / "service.py").write_text("def run():\n    return 'ok'\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "empy-workspace")
+    state.import_path(str(source))
+    state.create_plan("Update the service")
+    state.run_benchmark()
+
+    public = state.public()
+
+    assert public["brain"]["file_count"] >= 2
+    assert public["budget"]["estimated_context_tokens"] == state.budget.estimated_context_tokens
+    assert public["plan"]["estimate_source"] == "provider_neutral_local_estimate"
+    assert public["provider_usage"] is None
+    assert public["benchmark"]["candidate_files"]
+    assert not any(str(tmp_path) in item for item in public["benchmark"]["candidate_files"])
+
+
+def test_benchmark_endpoint_requires_auth_and_valid_plan(tmp_path: Path) -> None:
+    state = GuidedState(tmp_path / "workspace")
+    handler = RequestHandler.__new__(RequestHandler)
+    handler.server = SimpleNamespace(token="secret-token", state=state)
+    handler.path = "/api/benchmark"
+    handler.headers = {}
+
+    assert handler._authorized() is False
+
+    handler.headers = {"X-Empy-Token": "secret-token"}
+    assert handler._authorized() is True
+    try:
+        handler._handle_post("/api/benchmark", {})
+    except RuntimeError as exc:
+        assert "Build a plan" in str(exc)
+    else:
+        raise AssertionError("benchmark without a plan succeeded")
+
+
+def test_brain_index_survives_restart(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("demo\n", encoding="utf-8")
+    first = GuidedState(tmp_path / "empy-workspace")
+    first.import_path(str(source))
+    project_id = first.active_project_id
+
+    reopened = GuidedState(tmp_path / "empy-workspace")
+
+    assert project_id is not None
+    assert reopened.active_project_id == project_id
+    assert reopened.brain_index is not None
+    assert reopened.brain_index.project_id == project_id
