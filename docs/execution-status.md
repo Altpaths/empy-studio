@@ -16,5 +16,8 @@ the end of each implementation wave.
 - Baseline failure: `test_missing_installation_has_clear_remediation` detected a
   locally installed Codex fallback despite the test hiding PATH lookup.
 
+The immutable input hashes and working-copy map are recorded in
+[`baseline-audit-2026-08-09.json`](baseline-audit-2026-08-09.json).
+
 The baseline failure is being fixed as a determinism/testability issue before
 new product behavior is merged.

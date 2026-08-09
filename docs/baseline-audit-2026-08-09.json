@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "audited_at": "2026-08-09",
+  "canonical_repository": "Altpaths/empy-studio",
+  "starting_commit": "39239f5a88b1f35bef095d8ed35f2832031016fc",
+  "inputs": [
+    {
+      "name": "empy-studio-main.zip",
+      "path": "/Users/azadehsharifi/Downloads/empy-studio-main.zip",
+      "sha256": "ad18e46b6f2b288da378d8196b26d14cbe3962db7c2751bd61cb4d74c664d7c9",
+      "archive_entries": 364,
+      "indexed_source_files": 343,
+      "role": "immutable core and documentation audit baseline"
+    },
+    {
+      "name": "empy-studio-ticket16-gui-macos-universal.zip",
+      "path": "/Users/azadehsharifi/Downloads/empy-studio-ticket16-gui-macos-universal.zip",
+      "sha256": "e93f5646762c06893a51c3f3d5b62e79c946e55b9f1dbecfa5e8d0e4108f670c",
+      "archive_entries": 135,
+      "indexed_repository_files": 116,
+      "role": "immutable Ticket 16 GUI and macOS packaging audit baseline"
+    }
+  ],
+  "working_copies": {
+    "main": "work/baseline-main/empy-studio-main",
+    "ticket16": "work/baseline-ticket16/Empy Studio.app"
+  },
+  "rules": [
+    "The original ZIP files are never edited.",
+    "The GitHub repository is the canonical source of truth.",
+    "Ticket 16 sources are merged selectively after contract and test reconciliation."
+  ]
+}
