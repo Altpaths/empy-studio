@@ -21,6 +21,10 @@ from empy_studio.core import (
 )
 from empy_studio.token_usage import TokenUsage
 
+from ..codex_preflight import (
+    CodexHostDiagnostic,
+    detect_codex_host_diagnostic,
+)
 from .base import BaseDriver
 
 CodexAvailability = Literal[
@@ -73,6 +77,7 @@ class CodexInstallation:
     authenticated: bool
     message: str
     remediation: str | None = None
+    error_code: CodexErrorCode | None = None
 
     @property
     def ready(self) -> bool:
@@ -86,6 +91,16 @@ class CodexInstallation:
                 raise ValueError("available Codex installation must be authenticated")
         if not self.message.strip():
             raise ValueError("Codex installation message cannot be empty")
+
+    @property
+    def terminal_error_code(self) -> CodexErrorCode:
+        if self.error_code is not None:
+            return self.error_code
+        if self.availability == "missing":
+            return "installation_missing"
+        if self.availability == "unauthenticated":
+            return "authentication_required"
+        return "launch_failed"
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -313,6 +328,7 @@ class CodexDriver(BaseDriver):
             self._status = "unavailable"
             return installation
 
+        host_diagnostic: CodexHostDiagnostic | None = None
         try:
             version_result = self.command_runner(
                 [executable, "--version"],
@@ -322,14 +338,31 @@ class CodexDriver(BaseDriver):
                 check=False,
             )
             version = (version_result.stdout or version_result.stderr).strip()
+            host_diagnostic = detect_codex_host_diagnostic(
+                version_result.stdout or "",
+                version_result.stderr or "",
+            )
             if version_result.returncode != 0 or not version:
                 installation = CodexInstallation(
                     availability="unavailable",
                     executable=executable,
                     version=version or None,
                     authenticated=False,
-                    message="Codex CLI is installed but its version check failed.",
-                    remediation="Reinstall or update Codex CLI.",
+                    message=(
+                        host_diagnostic.message
+                        if host_diagnostic is not None
+                        else "Codex CLI is installed but its version check failed."
+                    ),
+                    remediation=(
+                        host_diagnostic.remediation
+                        if host_diagnostic is not None
+                        else "Reinstall or update Codex CLI."
+                    ),
+                    error_code=(
+                        "sandbox_error"
+                        if host_diagnostic is not None
+                        else None
+                    ),
                 )
                 installation.validate()
                 self._installation = installation
@@ -343,14 +376,34 @@ class CodexDriver(BaseDriver):
                 timeout=DEFAULT_PREFLIGHT_TIMEOUT,
                 check=False,
             )
+            host_diagnostic = host_diagnostic or detect_codex_host_diagnostic(
+                exec_result.stdout or "",
+                exec_result.stderr or "",
+            )
             if exec_result.returncode != 0:
                 installation = CodexInstallation(
                     availability="unavailable",
                     executable=executable,
                     version=version,
                     authenticated=False,
-                    message="This Codex CLI installation does not provide non-interactive execution.",
-                    remediation="Update Codex CLI to a version that supports `codex exec`.",
+                    message=(
+                        host_diagnostic.message
+                        if host_diagnostic is not None
+                        else (
+                            "This Codex CLI installation does not provide "
+                            "non-interactive execution."
+                        )
+                    ),
+                    remediation=(
+                        host_diagnostic.remediation
+                        if host_diagnostic is not None
+                        else "Update Codex CLI to a version that supports `codex exec`."
+                    ),
+                    error_code=(
+                        "sandbox_error"
+                        if host_diagnostic is not None
+                        else None
+                    ),
                 )
                 installation.validate()
                 self._installation = installation
@@ -364,6 +417,10 @@ class CodexDriver(BaseDriver):
                 timeout=DEFAULT_PREFLIGHT_TIMEOUT,
                 check=False,
             )
+            host_diagnostic = host_diagnostic or detect_codex_host_diagnostic(
+                auth_result.stdout or "",
+                auth_result.stderr or "",
+            )
             if auth_result.returncode != 0:
                 installation = CodexInstallation(
                     availability="unauthenticated",
@@ -372,6 +429,20 @@ class CodexDriver(BaseDriver):
                     authenticated=False,
                     message="Codex CLI is installed but is not signed in.",
                     remediation="Run `codex login` once, then retry from Empy Studio.",
+                )
+                installation.validate()
+                self._installation = installation
+                self._status = "unavailable"
+                return installation
+            if host_diagnostic is not None:
+                installation = CodexInstallation(
+                    availability="unavailable",
+                    executable=executable,
+                    version=version,
+                    authenticated=True,
+                    message=host_diagnostic.message,
+                    remediation=host_diagnostic.remediation,
+                    error_code="sandbox_error",
                 )
                 installation.validate()
                 self._installation = installation
@@ -441,13 +512,7 @@ class CodexDriver(BaseDriver):
                 started_at=self._utc_now(),
                 return_code=None,
                 summary="Codex execution could not start.",
-                error_code=(
-                    "installation_missing"
-                    if installation.availability == "missing"
-                    else "authentication_required"
-                    if installation.availability == "unauthenticated"
-                    else "launch_failed"
-                ),
+                error_code=installation.terminal_error_code,
                 error_message=message,
             )
 

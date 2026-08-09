@@ -191,6 +191,53 @@ def test_unauthenticated_codex_is_not_ready(
     )
 
 
+def test_host_preflight_failure_is_not_ready_without_reading_credentials(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = create_materialized_run(tmp_path)
+
+    monkeypatch.setattr(
+        "empy_studio.codex_doctor.shutil.which",
+        lambda executable: "/usr/local/bin/codex",
+    )
+
+    def fake_run(
+        command: Any,
+        *,
+        cwd: Path | None = None,
+        timeout_seconds: float = 10.0,
+    ) -> FakeResult:
+        del cwd, timeout_seconds
+        warning = "WARNING: could not create PATH aliases: Operation not permitted"
+        if command[-1] == "--version":
+            return FakeResult(stdout="codex-cli 1.0.0", stderr=warning)
+        if command[:2] == ["/usr/local/bin/codex", "exec"]:
+            return FakeResult(stdout="Usage: codex exec", stderr=warning)
+        if command[-2:] == ["login", "status"]:
+            return FakeResult(stdout="Logged in", stderr=warning)
+        if command[:2] == ["git", "rev-parse"]:
+            return FakeResult(stdout=str(tmp_path / "project"))
+        if command[:2] == ["git", "status"]:
+            return FakeResult(stdout="")
+        raise AssertionError(command)
+
+    monkeypatch.setattr(
+        "empy_studio.codex_doctor._run_command",
+        fake_run,
+    )
+
+    result = diagnose_codex_environment(manifest)
+
+    assert result["status"] == "not_ready"
+    assert any(
+        check["check_id"] == "codex_host_preflight"
+        and check["status"] == "failed"
+        and check["details"]["diagnostic"] == "path_aliases"
+        for check in result["checks"]
+    )
+
+
 def test_missing_materialized_file_is_reported(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

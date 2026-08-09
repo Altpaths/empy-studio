@@ -11,6 +11,8 @@ The doctor reports:
 - the installed Codex version;
 - whether `codex exec` is available;
 - whether `codex login status` reports valid authentication;
+- whether Codex reports known host PATH-alias, app-server, state, or sandbox
+  initialization failures;
 - whether the project root exists;
 - whether `AGENTS.md`, the prompt, and Evidence Directory exist;
 - whether the project is a Git repository;
@@ -19,7 +21,7 @@ The doctor reports:
 ## Status model
 
 A missing Codex executable, failed authentication, unavailable `codex exec`, or
-missing Run files makes the result `not_ready`.
+known host preflight failure makes the result `not_ready`.
 
 A non-Git project or dirty working tree is reported as a warning rather than a
 hard failure.
@@ -31,3 +33,8 @@ The doctor never reads credential files, API keys, access tokens, or
 `codex login status` command.
 
 Codex execution is not performed in this stage.
+
+The host preflight check only inspects output from the existing version,
+`exec --help`, and login-status commands. It does not start a model turn and
+does not consume provider tokens. It reports stable diagnostic codes without
+persisting raw command output in the Doctor result.

@@ -1,4 +1,4 @@
-# Ticket 11 — Codex Driver Productionization
+# Ticket 8 — Production Codex Driver
 
 ## Purpose
 
@@ -14,7 +14,14 @@ Before a run starts, Empy:
 2. reads `codex --version`;
 3. confirms that `codex exec` is available;
 4. checks `codex login status`;
-5. refuses to start when installation or authentication is unavailable.
+5. inspects command diagnostics for known host PATH-alias, app-server, state,
+   and sandbox initialization failures;
+6. refuses to start when installation, authentication, or host readiness is
+   unavailable.
+
+Preflight never starts a model turn, so this readiness check does not consume
+provider tokens. Raw command output is kept only in the normal execution
+evidence; the readiness result exposes a stable diagnostic and remediation.
 
 The UI returns a concrete remediation instead of a raw process failure.
 
@@ -77,8 +84,11 @@ Empy distinguishes installation, authentication, permission, rate-limit,
 network, sandbox, malformed-output, launch, timeout, cancellation, dirty
 worktree, scope violation, and generic process failures.
 
+Host-level preflight failures are returned as `sandbox_error` with an explicit
+remediation. Empy never silently changes a node to `danger-full-access`.
+
 ## Scope boundary
 
-Ticket 11 implements the production Codex driver only. Ticket 12 remains
+Ticket 8 implements the production Codex driver only. Ticket 7 remains
 responsible for provider-neutral driver selection and settings. Patch
 synchronization and conflict resolution remain outside this ticket.

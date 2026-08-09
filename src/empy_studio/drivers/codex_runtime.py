@@ -265,13 +265,7 @@ class CodexGraphRuntime:
                 installation=installation,
                 node_results=(),
                 events=tuple(events),
-                error_code=(
-                    "installation_missing"
-                    if installation.availability == "missing"
-                    else "authentication_required"
-                    if installation.availability == "unauthenticated"
-                    else "launch_failed"
-                ),
+                error_code=installation.terminal_error_code,
                 error_message=message,
             )
             result.validate()
