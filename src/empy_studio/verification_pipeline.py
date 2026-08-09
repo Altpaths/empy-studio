@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import threading
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -18,6 +20,17 @@ VerificationCategory = Literal["tests", "build", "lint"]
 VerificationStream = Literal["stdout", "stderr", "system"]
 VerificationStatus = Literal["pending", "running", "pass", "fail"]
 VerificationResultStatus = Literal["pass", "fail"]
+
+DEFAULT_VERIFICATION_TIMEOUT_SECONDS = 1800.0
+DEFAULT_PROCESS_GRACE_SECONDS = 2.0
+
+
+class VerificationCancelled(RuntimeError):
+    """Raised after a verification subprocess has been stopped by the user."""
+
+
+class VerificationTimedOut(RuntimeError):
+    """Raised after a verification subprocess exceeds its bounded timeout."""
 
 
 def _now() -> str:
@@ -258,7 +271,11 @@ class VerificationRuntime:
         detection: ProjectDetection,
         evidence_root: Path,
         on_event: Callable[[VerificationEvent], None] | None = None,
+        cancel_event: threading.Event | None = None,
+        timeout_seconds: float = DEFAULT_VERIFICATION_TIMEOUT_SECONDS,
     ) -> VerificationReport:
+        if timeout_seconds < 1:
+            raise ValueError("verification timeout must be at least one second")
         checks = map_project_verification(detection)
         if not checks:
             raise RuntimeError("No verification commands are mapped for this project")
@@ -268,7 +285,16 @@ class VerificationRuntime:
         started_at = _now()
         results: list[VerificationResult] = []
         for check in checks:
-            results.append(self._run_check(check, detection.descriptor.root, run_root, on_event))
+            results.append(
+                self._run_check(
+                    check,
+                    detection.descriptor.root,
+                    run_root,
+                    on_event,
+                    cancel_event,
+                    timeout_seconds,
+                )
+            )
         status: VerificationStatus = "pass" if all(item.status == "pass" for item in results) else "fail"
         report = VerificationReport(
             schema_version=1,
@@ -293,7 +319,11 @@ class VerificationRuntime:
         cwd: Path,
         run_root: Path,
         on_event: Callable[[VerificationEvent], None] | None,
+        cancel_event: threading.Event | None,
+        timeout_seconds: float,
     ) -> VerificationResult:
+        if cancel_event is not None and cancel_event.is_set():
+            raise VerificationCancelled("Verification was cancelled before it started.")
         started_at = _now()
         process = subprocess.Popen(
             check.command,
@@ -302,6 +332,7 @@ class VerificationRuntime:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=os.environ.copy(),
+            start_new_session=(os.name == "posix"),
         )
         stdout_lines: list[str] = []
         stderr_lines: list[str] = []
@@ -325,13 +356,36 @@ class VerificationRuntime:
         stderr_thread = threading.Thread(target=consume, args=(process.stderr, "stderr", stderr_lines), daemon=True)
         stdout_thread.start()
         stderr_thread.start()
-        returncode = process.wait()
+        deadline = time.monotonic() + timeout_seconds
+        terminal_error: VerificationCancelled | VerificationTimedOut | None = None
+        while process.poll() is None:
+            if cancel_event is not None and cancel_event.is_set():
+                terminal_error = VerificationCancelled("Verification was cancelled.")
+                self._terminate_process(process)
+                break
+            if time.monotonic() >= deadline:
+                terminal_error = VerificationTimedOut(
+                    f"Verification exceeded the {timeout_seconds:g}-second timeout."
+                )
+                self._terminate_process(process)
+                break
+            try:
+                process.wait(timeout=0.1)
+            except subprocess.TimeoutExpired:
+                continue
+        try:
+            returncode = process.wait(timeout=DEFAULT_PROCESS_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            self._kill_process(process)
+            returncode = process.wait()
         stdout_thread.join()
         stderr_thread.join()
         stdout = "".join(stdout_lines)
         stderr = "".join(stderr_lines)
         (run_root / f"{check.check_id}.stdout.txt").write_text(stdout, encoding="utf-8")
         (run_root / f"{check.check_id}.stderr.txt").write_text(stderr, encoding="utf-8")
+        if terminal_error is not None:
+            raise terminal_error
         return VerificationResult(
             check=check,
             status="pass" if returncode == 0 else "fail",
@@ -341,6 +395,30 @@ class VerificationRuntime:
             started_at=started_at,
             finished_at=_now(),
         )
+
+    @staticmethod
+    def _terminate_process(process: subprocess.Popen[str]) -> None:
+        if process.poll() is not None:
+            return
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGTERM)
+            else:
+                process.terminate()
+        except (OSError, AttributeError):
+            process.terminate()
+
+    @staticmethod
+    def _kill_process(process: subprocess.Popen[str]) -> None:
+        if process.poll() is not None:
+            return
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
+        except (OSError, AttributeError):
+            process.kill()
 
 
 def finalize_verification(report: VerificationReport) -> VerificationReport:

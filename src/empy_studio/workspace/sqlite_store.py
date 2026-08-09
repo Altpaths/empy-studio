@@ -426,6 +426,14 @@ class SQLiteWorkspaceStore:
             ).fetchall()
         return tuple(self._run_from_row(row) for row in rows)
 
+    def list_task_runs(self, task_id: str) -> tuple[WorkspaceRun, ...]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM runs WHERE task_id = ? ORDER BY updated_at DESC",
+                (task_id,),
+            ).fetchall()
+        return tuple(self._run_from_row(row) for row in rows)
+
     def create_release(
         self,
         *,

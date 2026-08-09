@@ -223,6 +223,7 @@ class CodexGraphRuntime:
         self.run_root = Path(run_root).expanduser().resolve()
         self.timeout_seconds = timeout_seconds
         self._cancel_requested = threading.Event()
+        self._lifecycle_lock = threading.Lock()
 
     def run(
         self,
@@ -235,7 +236,12 @@ class CodexGraphRuntime:
         on_progress: RunProgressCallback | None = None,
     ) -> CodexGraphExecution:
         self._validate_inputs(graph, selection, budget, project, task)
-        self._cancel_requested.clear()
+        with self._lifecycle_lock:
+            cancelled_before_start = self._cancel_requested.is_set()
+            if not cancelled_before_start:
+                begin_run = getattr(self.driver, "begin_run", None)
+                if callable(begin_run):
+                    begin_run()
         installation = self.driver.inspect_installation(refresh=True)
         run_id = uuid.uuid4().hex
         started_at = self._utc_now()
@@ -247,6 +253,35 @@ class CodexGraphRuntime:
                 events.append(event)
             if on_progress is not None:
                 on_progress(event)
+
+        if cancelled_before_start:
+            message = "The user cancelled the Codex graph run before it started."
+            report(
+                CodexProgressEvent(
+                    timestamp=self._utc_now(),
+                    level="warning",
+                    event_type="run.cancelled",
+                    message=message,
+                )
+            )
+            result = CodexGraphExecution(
+                schema_version=1,
+                run_id=run_id,
+                graph_id=graph.graph_id,
+                task_id=graph.task_id,
+                project_root=graph.project_root,
+                provider="codex",
+                status="cancelled",
+                started_at=started_at,
+                finished_at=self._utc_now(),
+                installation=installation,
+                node_results=(),
+                events=tuple(events),
+                error_code="cancelled",
+                error_message=message,
+            )
+            result.validate()
+            return result
 
         if not installation.ready:
             message = installation.message
@@ -447,7 +482,8 @@ class CodexGraphRuntime:
         return result
 
     def cancel(self) -> None:
-        self._cancel_requested.set()
+        with self._lifecycle_lock:
+            self._cancel_requested.set()
         self.driver.cancel()
 
     @staticmethod

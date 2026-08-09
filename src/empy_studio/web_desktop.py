@@ -8,7 +8,7 @@ import subprocess
 import threading
 import time
 import uuid
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, cast
@@ -37,6 +37,12 @@ from empy_studio.core.project_brain import (
     ProjectBrainIndex,
     build_load_save_project_brain_index,
 )
+from empy_studio.desktop.codex_execution_workspace_adapter import (
+    CodexExecutionWorkspaceAdapter,
+)
+from empy_studio.desktop.verification_workspace_adapter import (
+    VerificationWorkspaceAdapter,
+)
 from empy_studio.drivers import (
     CodexDriver,
     CodexGraphExecution,
@@ -54,9 +60,11 @@ from empy_studio.review_workspace import ReviewReport, ReviewWorkspaceAdapter
 from empy_studio.token_usage import TokenUsage
 from empy_studio.vault import initialize_vault
 from empy_studio.verification_pipeline import (
+    VerificationCancelled,
     VerificationEvent,
     VerificationReport,
     VerificationRuntime,
+    VerificationTimedOut,
     finalize_verification,
 )
 from empy_studio.workspace import SQLiteWorkspaceStore
@@ -155,6 +163,10 @@ class GuidedState:
     lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
     driver: CodexDriver = field(init=False, repr=False)
     review_store: ReviewWorkspaceAdapter = field(init=False, repr=False)
+    execution_store: CodexExecutionWorkspaceAdapter = field(init=False, repr=False)
+    verification_store: VerificationWorkspaceAdapter = field(init=False, repr=False)
+    runtime: CodexGraphRuntime | None = field(init=False, default=None, repr=False)
+    cancel_event: threading.Event | None = field(init=False, default=None, repr=False)
 
     def __post_init__(self) -> None:
         self.workspace_root = self.workspace_root.expanduser().resolve()
@@ -162,6 +174,8 @@ class GuidedState:
         self.store = SQLiteWorkspaceStore(self.workspace_root / "workspace.sqlite3")
         self.driver = CodexDriver(artifact_root=self.workspace_root / "codex-runs")
         self.review_store = ReviewWorkspaceAdapter(self.workspace_root)
+        self.execution_store = CodexExecutionWorkspaceAdapter(self.workspace_root)
+        self.verification_store = VerificationWorkspaceAdapter(self.workspace_root)
         saved_language = self.store.get_setting("language", "fa")
         self.language = saved_language if saved_language in {"fa", "en"} else "fa"
         saved_project = self.store.get_setting("active_project_id")
@@ -376,6 +390,76 @@ class GuidedState:
             self.error = None
             self.message = "تیکت قبلی بازیابی شد." if restore else "تیکت انتخاب شد."
         self.store.set_setting("active_task_id", task.task_id)
+        self._restore_task_artifacts(task.task_id)
+
+    def _run_manifest_path(self, workspace_run_id: str) -> Path:
+        return self.workspace_root / "run-manifests" / f"{workspace_run_id}.json"
+
+    def _write_run_manifest(
+        self,
+        workspace_run_id: str,
+        *,
+        codex_run_id: str,
+        verification_id: str | None = None,
+        review_id: str | None = None,
+    ) -> Path:
+        destination = self._run_manifest_path(workspace_run_id)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        value = {
+            "schema_version": 1,
+            "workspace_run_id": workspace_run_id,
+            "codex_run_id": codex_run_id,
+            "verification_id": verification_id,
+            "review_id": review_id,
+        }
+        temporary = destination.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps(value, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(destination)
+        return destination
+
+    def _restore_task_artifacts(self, task_id: str) -> None:
+        runs = self.store.list_task_runs(task_id)
+        if not runs:
+            return
+        latest = runs[0]
+        manifest_path = (
+            Path(latest.evidence_path)
+            if latest.evidence_path
+            else None
+        )
+        if manifest_path is None or not manifest_path.is_file():
+            return
+        try:
+            value = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if not isinstance(value, dict):
+                raise TypeError("run manifest must be an object")
+            codex_run_id = str(value["codex_run_id"])
+            restored_run = self.execution_store.get_run(codex_run_id)
+            if restored_run is None:
+                return
+            restored_verification = None
+            verification_id = value.get("verification_id")
+            if verification_id:
+                restored_verification = self.verification_store.load(str(verification_id))
+            restored_review = None
+            review_id = value.get("review_id")
+            if review_id:
+                restored_review = self.review_store.load(str(review_id))
+        except (OSError, KeyError, TypeError, ValueError):
+            return
+        with self.lock:
+            self.run = restored_run
+            self.verification = restored_verification
+            self.review = restored_review
+            self.node_states = {
+                item.node_id: item.status for item in restored_run.node_results
+            }
+            if self.export is None:
+                self.phase = "result" if restored_review is not None else "run"
+            self.message = "نتیجهٔ تیکت بازیابی شد."
 
     def create_plan(self, raw_tasks: str, task_id: str | None = None) -> None:
         if self.detection is None or self.active_project_id is None:
@@ -476,8 +560,15 @@ class GuidedState:
             state="running",
             driver_name="codex",
         )
+        runtime = CodexGraphRuntime(
+            driver=self.driver,
+            run_root=self.workspace_root / "codex-runs",
+        )
+        cancel_event = threading.Event()
         with self.lock:
             self.running = True
+            self.runtime = runtime
+            self.cancel_event = cancel_event
             self.phase = "run"
             self.error = None
             self.message = "اجرای Agentها شروع شد."
@@ -485,12 +576,81 @@ class GuidedState:
         thread = threading.Thread(target=self._run_worker, args=(run.run_id,), daemon=True, name="empy-web-run")
         thread.start()
 
+    def cancel_run(self) -> None:
+        with self.lock:
+            if not self.running or self.runtime is None:
+                raise RuntimeError("There is no active run to cancel.")
+            runtime = self.runtime
+            cancel_event = self.cancel_event
+            self.message = "درخواست توقف اجرا ثبت شد."
+        if cancel_event is not None:
+            cancel_event.set()
+        runtime.cancel()
+        self.add_log("Run cancellation requested.", "warning")
+
+    def _save_runtime_result(
+        self,
+        workspace_run_id: str,
+        result: CodexGraphExecution,
+        *,
+        verification_id: str | None = None,
+        review_id: str | None = None,
+    ) -> Path:
+        self.execution_store.save_run(result)
+        return self._write_run_manifest(
+            workspace_run_id,
+            codex_run_id=result.run_id,
+            verification_id=verification_id,
+            review_id=review_id,
+        )
+
+    def _record_terminal_result(
+        self,
+        workspace_run_id: str,
+        result: CodexGraphExecution,
+        *,
+        state: str,
+        message: str,
+        level: str,
+        verification_id: str | None = None,
+        review_id: str | None = None,
+    ) -> None:
+        self.run = result
+        manifest_path = self._save_runtime_result(
+            workspace_run_id,
+            result,
+            verification_id=verification_id,
+            review_id=review_id,
+        )
+        self.store.update_run(
+            workspace_run_id,
+            state=state,
+            summary=message,
+            driver_name="codex",
+            evidence_path=str(manifest_path),
+        )
+        with self.lock:
+            self.running = False
+            self.runtime = None
+            self.cancel_event = None
+            self.phase = "run" if state != "completed" else "result"
+            self.error = message if state != "completed" else None
+            self.message = (
+                "اجرا لغو شد."
+                if state == "cancelled"
+                else "اجرا با خطا متوقف شد."
+                if state == "failed"
+                else "نتیجه برای Review آماده است."
+            )
+        self.add_log(message, level)
+
     def _run_worker(self, workspace_run_id: str) -> None:
         graph = self.graph
         context = self.context
         budget = self.budget
         detection = self.detection
         task = self.task
+        result: CodexGraphExecution | None = None
         if (
             graph is None
             or context is None
@@ -508,7 +668,10 @@ class GuidedState:
             self.add_log(event.message, event.level)
 
         try:
-            runtime = CodexGraphRuntime(driver=self.driver, run_root=self.workspace_root / "codex-runs")
+            with self.lock:
+                runtime = self.runtime
+            if runtime is None:
+                raise RuntimeError("The run runtime was not initialized.")
             result = runtime.run(
                 graph=graph,
                 selection=context,
@@ -519,46 +682,147 @@ class GuidedState:
             )
             self.run = result
             for node in result.node_results:
-                self.node_states[node.node_id] = "completed" if node.status == "completed" else "failed"
+                self.node_states[node.node_id] = node.status
             if result.status != "completed":
-                raise RuntimeError(result.error_message or f"Codex run ended as {result.status}")
+                terminal_message = result.error_message or f"Codex run ended as {result.status}"
+                terminal_state = "cancelled" if result.status == "cancelled" else "failed"
+                self._record_terminal_result(
+                    workspace_run_id,
+                    result,
+                    state=terminal_state,
+                    message=terminal_message,
+                    level="warning" if result.status == "cancelled" else "error",
+                )
+                return
+            cancel_event = self.cancel_event
+            if cancel_event is not None and cancel_event.is_set():
+                raise VerificationCancelled("Verification was cancelled before it started.")
             verification = VerificationRuntime().run(
                 detection=detection,
-                evidence_root=self.workspace_root / "verification-evidence",
+                evidence_root=self.verification_store.evidence_root,
                 on_event=self._verification_event,
+                cancel_event=cancel_event,
             )
+            if cancel_event is not None and cancel_event.is_set():
+                raise VerificationCancelled("Verification was cancelled.")
             if verification.finalize_allowed:
                 verification = finalize_verification(verification)
             review = self.review_store.create(detection.descriptor.root)
             self.verification = verification
             self.review = review
+            self.verification_store.save(verification)
+            final_result = (
+                result
+                if verification.finalize_allowed
+                else replace(
+                    result,
+                    status="failed",
+                    error_code="process_failed",
+                    error_message="Verification failed; review is required before export.",
+                )
+            )
+            self.run = final_result
+            manifest_path = self._save_runtime_result(
+                workspace_run_id,
+                final_result,
+                verification_id=verification.verification_id,
+                review_id=review.review_id,
+            )
             self.store.update_run(
                 workspace_run_id,
                 state="completed" if verification.finalize_allowed else "failed",
                 summary="Run and verification completed" if verification.finalize_allowed else "Verification failed",
                 driver_name="codex",
-                evidence_path=verification.evidence_path,
+                evidence_path=str(manifest_path),
             )
             if self.active_task_id is not None:
                 self.store.update_task(self.active_task_id, status="review")
             with self.lock:
                 self.running = False
+                self.runtime = None
+                self.cancel_event = None
                 self.phase = "result"
                 self.message = "نتیجه برای Review آماده است."
+                self.error = None
+        except VerificationCancelled as exc:
+            cancelled = (
+                replace(
+                    result,
+                    status="cancelled",
+                    error_code="cancelled",
+                    error_message=str(exc),
+                )
+                if result is not None
+                else None
+            )
+            if cancelled is None:
+                self._record_failure(workspace_run_id, str(exc), state="cancelled")
+            else:
+                self._record_terminal_result(
+                    workspace_run_id,
+                    cancelled,
+                    state="cancelled",
+                    message=str(exc),
+                    level="warning",
+                )
+        except VerificationTimedOut as exc:
+            failed = (
+                replace(
+                    result,
+                    status="failed",
+                    error_code="timeout",
+                    error_message=str(exc),
+                )
+                if result is not None
+                else None
+            )
+            if failed is None:
+                self._record_failure(workspace_run_id, str(exc))
+            else:
+                self._record_terminal_result(
+                    workspace_run_id,
+                    failed,
+                    state="failed",
+                    message=str(exc),
+                    level="error",
+                )
         except (OSError, RuntimeError, ValueError) as exc:
-            self._record_failure(workspace_run_id, str(exc))
+            if result is not None and result.status == "completed":
+                failed = replace(
+                    result,
+                    status="failed",
+                    error_code="process_failed",
+                    error_message=str(exc),
+                )
+                self._record_terminal_result(
+                    workspace_run_id,
+                    failed,
+                    state="failed",
+                    message=str(exc),
+                    level="error",
+                )
+            else:
+                self._record_failure(workspace_run_id, str(exc))
 
-    def _record_failure(self, workspace_run_id: str, message: str) -> None:
+    def _record_failure(
+        self,
+        workspace_run_id: str,
+        message: str,
+        *,
+        state: str = "failed",
+    ) -> None:
         try:
-            self.store.update_run(workspace_run_id, state="failed", summary=message, driver_name="codex")
+            self.store.update_run(workspace_run_id, state=state, summary=message, driver_name="codex")
         except KeyError:
             pass
         with self.lock:
             self.running = False
+            self.runtime = None
+            self.cancel_event = None
             self.phase = "run"
             self.error = message
-            self.message = "اجرا متوقف شد."
-        self.add_log(message, "error")
+            self.message = "اجرا لغو شد." if state == "cancelled" else "اجرا متوقف شد."
+        self.add_log(message, "warning" if state == "cancelled" else "error")
 
     def _verification_event(self, event: VerificationEvent) -> None:
         if event.text.strip():
@@ -612,6 +876,8 @@ class GuidedState:
 
     def reset(self) -> None:
         with self.lock:
+            if self.running:
+                raise RuntimeError("Stop the active run before switching projects.")
             self.active_project_id = None
             self.active_task_id = None
             self.imported = None
@@ -627,6 +893,8 @@ class GuidedState:
             self.verification = None
             self.review = None
             self.export = None
+            self.runtime = None
+            self.cancel_event = None
             self.phase = "project"
             self.error = None
             self.message = ""
@@ -695,6 +963,8 @@ class GuidedState:
                     "provider_usage": provider_usage,
                     "estimate_source": "provider_neutral_local_estimate",
                     "benchmark": self.benchmark.to_dict() if self.benchmark is not None else None,
+                    "run_status": self.run.status if self.run is not None else None,
+                    "run_error": self.run.error_message if self.run is not None else None,
                     "running": self.running,
                     "logs": list(self.logs),
                     "verification": verification,
@@ -861,6 +1131,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             state.run_benchmark()
         elif path == "/api/run":
             state.start_run()
+        elif path == "/api/cancel":
+            state.cancel_run()
         elif path == "/api/decision":
             state.decide_all(str(body.get("decision", "")))
         elif path == "/api/export":

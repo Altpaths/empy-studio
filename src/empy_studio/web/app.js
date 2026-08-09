@@ -9,7 +9,7 @@ const t = {
     importButton: "واردکردن پروژه", folder: "انتخاب پوشه", tasks: "تیکت جدید", taskHint: "درخواست را مثل توضیح به یک همکار بنویسید…",
     plan: "تحلیل و ساخت برنامه", start: "شروع اجرا", accept: "تأیید تغییرات", revert: "بازگردانی تغییرات", export: "خروجی ZIP پروژه",
     newProject: "پروژه‌ی دیگر", noProject: "هنوز پروژه‌ای ثبت نشده است.", noTask: "هنوز تیکتی ثبت نشده است.", engine: "وضعیت Codex",
-    ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", result: "نتیجه و بررسی", resume: "ادامه تیکت",
+    ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", cancel: "توقف اجرا", cancelled: "اجرا لغو شد", failed: "اجرا متوقف شد", backToTicket: "بازگشت به تیکت", result: "نتیجه و بررسی", resume: "ادامه تیکت",
     benchmark: "بنچمارک محلی", runBenchmark: "اجرای بنچمارک", full: "تخمین کامل", bounded: "تخمین محدود", saved: "صرفه‌جویی", brain: "Project Brain",
   },
   en: {
@@ -17,7 +17,7 @@ const t = {
     importButton: "Import project", folder: "Choose folder", tasks: "New ticket", taskHint: "Describe the work as you would to a teammate…",
     plan: "Analyze and build plan", start: "Start run", accept: "Accept changes", revert: "Restore changes", export: "Export project ZIP",
     newProject: "Another project", noProject: "No projects have been registered.", noTask: "No tickets have been registered.", engine: "Codex status",
-    ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", result: "Result and review", resume: "Resume ticket",
+    ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", cancel: "Stop run", cancelled: "Run cancelled", failed: "Run stopped", backToTicket: "Back to ticket", result: "Result and review", resume: "Resume ticket",
     benchmark: "Local benchmark", runBenchmark: "Run benchmark", full: "Full estimate", bounded: "Bounded estimate", saved: "Saved", brain: "Project Brain",
   },
 };
@@ -63,7 +63,13 @@ function renderBenchmark() {
   return `<section class="benchmark"><div class="row"><div><h2>${text().benchmark}</h2><p class="muted">${language === "fa" ? "تخمین محلی و بدون Provider؛ فقط مسیرهای نسبی امن نمایش داده می‌شود." : "Local provider-free estimate; only safe relative paths are shown."}</p></div><small>${escapeHtml((benchmark?.source_estimate || budget.source || state.estimate_source || ""))}</small></div><div class="stats">${rows}</div></section>`;
 }
 function renderRun() {
-  const nodes = state.plan?.nodes || []; return `<div class="card"><h1>${text().run}</h1><div class="node-list">${nodes.map(node => `<div class="node ${node.status}"><span>${escapeHtml(node.status)}</span><strong>${escapeHtml(node.title)}</strong></div>`).join("")}</div><pre class="log">${(state.logs || []).map(item => `[${escapeHtml(item.time)}] ${escapeHtml(item.text)}`).join("\n")}</pre></div>`;
+  const nodes = state.plan?.nodes || [];
+  const title = state.running ? text().run : state.run_status === "cancelled" ? text().cancelled : text().failed;
+  const error = state.run_error ? `<p class="muted">${escapeHtml(state.run_error)}</p>` : "";
+  const action = state.running
+    ? `<button type="button" class="danger" data-action="cancel-run">${text().cancel}</button>`
+    : `<button type="button" class="secondary" data-action="go-task">${text().backToTicket}</button>`;
+  return `<div class="card"><h1>${title}</h1>${error}<div class="node-list">${nodes.map(node => `<div class="node ${node.status}"><span>${escapeHtml(node.status)}</span><strong>${escapeHtml(node.title)}</strong></div>`).join("")}</div><pre class="log">${(state.logs || []).map(item => `[${escapeHtml(item.time)}] ${escapeHtml(item.text)}`).join("\n")}</pre><div class="actions">${action}</div></div>`;
 }
 function renderResult() {
   const review = state.review || {files:[], pending_count:0}; const verification = state.verification || {};
@@ -99,6 +105,7 @@ async function handleAction(action, target) {
     }
     case "run-benchmark": await runAction(() => api("/api/benchmark", {})); break;
     case "start-run": await runAction(() => api("/api/run", {})); break;
+    case "cancel-run": await runAction(() => api("/api/cancel", {})); break;
     case "decide": await runAction(() => api("/api/decision", {decision: target.dataset.decision})); break;
     case "export-project": await runAction(() => api("/api/export", {})); break;
     case "reset-project": await runAction(() => api("/api/reset", {})); break;

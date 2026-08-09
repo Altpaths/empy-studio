@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
 
 from empy_studio.core.project_service import DefaultProjectService
 from empy_studio.verification_pipeline import (
+    VerificationCancelled,
     VerificationRuntime,
     finalize_verification,
     map_project_verification,
@@ -97,6 +100,50 @@ def test_passing_report_can_finalize(tmp_path: Path) -> None:
     )
     finalized = finalize_verification(report)
     assert finalized.finalized_at is not None
+
+
+def test_verification_cancellation_terminates_blocking_check(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("demo", encoding="utf-8")
+    manifest = tmp_path / ".empy" / "verification.json"
+    manifest.parent.mkdir()
+    manifest.write_text(
+        json.dumps(
+            {
+                "checks": [
+                    {
+                        "id": "blocking",
+                        "label": "blocking check",
+                        "category": "tests",
+                        "command": [sys.executable, "-c", "import time; time.sleep(30)"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    cancel_event = threading.Event()
+    errors: list[BaseException] = []
+
+    def run() -> None:
+        try:
+            VerificationRuntime().run(
+                detection=DefaultProjectService().detect(tmp_path),
+                evidence_root=tmp_path / "evidence",
+                cancel_event=cancel_event,
+                timeout_seconds=10,
+            )
+        except BaseException as exc:  # noqa: BLE001 - assert the worker terminates with the mapped error.
+            errors.append(exc)
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    time.sleep(0.2)
+    cancel_event.set()
+    worker.join(timeout=5)
+
+    assert not worker.is_alive()
+    assert len(errors) == 1
+    assert isinstance(errors[0], VerificationCancelled)
 
 def test_manifest_rejects_unknown_category(tmp_path: Path) -> None:
     (tmp_path / "README.md").write_text("demo", encoding="utf-8")

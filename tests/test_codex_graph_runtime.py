@@ -196,6 +196,24 @@ def test_runtime_executes_dependency_order(tmp_path: Path) -> None:
     assert result.usage.provider == "codex"
 
 
+def test_runtime_honors_cancel_before_worker_enters_run(tmp_path: Path) -> None:
+    detection, selection, budget, graph = prepared(tmp_path)
+    driver = FakeDriver()
+    runtime = CodexGraphRuntime(driver=driver, run_root=tmp_path / "runs")
+    runtime.cancel()
+
+    result = runtime.run(
+        graph=graph,
+        selection=selection,
+        budget=budget,
+        project=detection.descriptor,
+    )
+
+    assert result.status == "cancelled"
+    assert result.error_code == "cancelled"
+    assert driver.requests == []
+
+
 def test_failed_node_stops_and_skips_remaining_nodes(tmp_path: Path) -> None:
     detection, selection, budget, graph = prepared(tmp_path)
     driver = FakeDriver(fail_first=True)

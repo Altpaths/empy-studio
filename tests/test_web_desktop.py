@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from empy_studio.review_workspace import ReviewReport
 from empy_studio.verification_pipeline import VerificationReport
 from empy_studio.web_desktop import GuidedState, RequestHandler
@@ -174,6 +176,31 @@ def test_benchmark_endpoint_requires_auth_and_valid_plan(tmp_path: Path) -> None
         assert "Build a plan" in str(exc)
     else:
         raise AssertionError("benchmark without a plan succeeded")
+
+
+def test_cancel_run_requests_runtime_stop(tmp_path: Path) -> None:
+    state = GuidedState(tmp_path / "workspace")
+    calls: list[str] = []
+
+    class RuntimeStub:
+        def cancel(self) -> None:
+            calls.append("cancel")
+
+    state.runtime = RuntimeStub()  # type: ignore[assignment]
+    state.running = True
+
+    state.cancel_run()
+
+    assert calls == ["cancel"]
+    assert state.message == "درخواست توقف اجرا ثبت شد."
+    assert state.logs[-1]["text"] == "Run cancellation requested."
+
+
+def test_cancel_run_requires_active_runtime(tmp_path: Path) -> None:
+    state = GuidedState(tmp_path / "workspace")
+
+    with pytest.raises(RuntimeError, match="active run"):
+        state.cancel_run()
 
 
 def test_brain_index_survives_restart(tmp_path: Path) -> None:

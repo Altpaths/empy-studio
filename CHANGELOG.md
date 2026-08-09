@@ -1,5 +1,13 @@
 ## Unreleased
 
+### Ticket 17 — Real-project acceptance and terminal run safety
+
+- Added a deterministic PHP acceptance harness covering isolated import, two sequential tickets, reopen, Review accept/revert, verified ZIP export, and second-project isolation.
+- Exercised the same flow against the read-only Holda witness; the original witness digest remained unchanged.
+- Added durable Codex, Verification, and Review evidence links so terminal results can be reopened with the ticket.
+- Added an authenticated bilingual Stop run action with bounded cancellation for Provider and project verification processes.
+- Fixed early-cancellation races, verification hangs, stale terminal UI states, and misleading skipped-node status rendering.
+
 ### Ticket 16 — Security and privacy hardening
 
 - Added `empy security audit` for deterministic, validated JSON security evidence.
