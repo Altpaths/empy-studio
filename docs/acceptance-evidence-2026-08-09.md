@@ -38,6 +38,9 @@ Observed result:
 - Export verification: `verified: true`
 - Acceptance ZIP SHA-256:
   `a994a8f4789258e2892aed6f9f2ebec5ec4d1f06ac7c59c94789b21692965c7a`
+- A workspace restart restored the active project, active ticket, task
+  contract, plan, graph, and ticket history; selecting an older ticket also
+  rematerialized its approved workflow.
 
 The temporary acceptance workspace was:
 `/var/folders/f4/4dnx2gx111j1xbwz0lvkz63m0000gn/T/empy-e2e-fixed-jpvs9bh1`.
@@ -57,6 +60,7 @@ approved ownership.
 ## Remaining scope
 
 The continuity path is now exercised end-to-end, but the full product roadmap
-still requires clean-machine UI acceptance, richer reopen/resume behavior,
-additional providers, packaging/signing, and the remaining T01–T18 acceptance
-criteria. The PR remains draft until those gates are reviewed.
+still requires clean-machine UI acceptance, restoration of completed
+run/review/release artifacts on restart, additional providers,
+packaging/signing, and the remaining T01–T18 acceptance criteria. The PR
+remains draft until those gates are reviewed.

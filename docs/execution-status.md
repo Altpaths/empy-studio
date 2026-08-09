@@ -33,6 +33,8 @@ new product behavior is merged.
   and sensitive paths were filtered.
 - Real delivery: single-root ZIP, manifest, checksum, and extraction
   verification passed.
+- Workspace restart now restores the active project, active ticket, contract,
+  plan, graph, and selectable ticket history.
 - Detailed evidence: [`acceptance-evidence-2026-08-09.md`](acceptance-evidence-2026-08-09.md)
 - The PR is intentionally still draft; main has not been merged without the
   final integration decision.
