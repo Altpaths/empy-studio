@@ -31,6 +31,22 @@ def laravel_project(
     )
 
 
+def php_project(
+    root: Path,
+):
+    (root / "composer.json").write_text(
+        '{"name":"demo/php-app"}\n',
+        encoding="utf-8",
+    )
+    (root / "index.php").write_text(
+        "<?php echo 'ok';\n",
+        encoding="utf-8",
+    )
+    (root / "src").mkdir()
+    (root / "tests").mkdir()
+    return DefaultProjectService().detect(root)
+
+
 def task(
     root: Path,
 ) -> ProductTask:
@@ -91,6 +107,19 @@ def test_plan_has_valid_dependencies(
         set(step.depends_on) <= known
         for step in value.steps
     )
+
+
+def test_plain_php_plan_includes_application_and_test_scopes(
+    tmp_path: Path,
+) -> None:
+    value = generate_execution_plan(
+        task=task(tmp_path),
+        project=php_project(tmp_path),
+    )
+
+    assert value.project_type == "php"
+    assert "src/" in value.likely_paths
+    assert "tests/" in value.likely_paths
 
 
 def test_approval_freezes_plan(

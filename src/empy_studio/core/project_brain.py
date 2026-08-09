@@ -10,6 +10,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Final
 
+from .path_policy import is_sensitive_relative_path
+
 SCHEMA_VERSION: Final[int] = 1
 DEFAULT_MAX_SCAN_FILES: Final[int] = 5_000
 DEFAULT_MAX_FILE_BYTES: Final[int] = 1_048_576
@@ -54,34 +56,6 @@ EXCLUDED_DIRECTORIES: Final[frozenset[str]] = frozenset(
         "target",
         "out",
     }
-)
-
-SENSITIVE_FILE_NAMES: Final[frozenset[str]] = frozenset(
-    {
-        ".env",
-        ".npmrc",
-        ".pypirc",
-        ".netrc",
-        "credentials",
-        "credentials.json",
-        "secrets.json",
-        "secret.json",
-        "id_rsa",
-        "id_dsa",
-        "id_ecdsa",
-        "id_ed25519",
-        "authorized_keys",
-        "known_hosts",
-    }
-)
-
-SENSITIVE_SUFFIXES: Final[tuple[str, ...]] = (
-    ".pem",
-    ".key",
-    ".p12",
-    ".pfx",
-    ".jks",
-    ".keystore",
 )
 
 GENERATED_SUFFIXES: Final[tuple[str, ...]] = (
@@ -344,6 +318,10 @@ def build_project_brain_index(
             skipped_paths.append(relative)
             continue
 
+        if _is_sensitive(relative):
+            skipped_paths.append(relative)
+            continue
+
         if stat.st_size > max_file_bytes:
             skipped_paths.append(relative)
             continue
@@ -446,8 +424,6 @@ def _should_skip_path(relative_path: str, *, is_directory: bool) -> bool:
         return name in EXCLUDED_DIRECTORIES
     if any(part in EXCLUDED_DIRECTORIES for part in parts[:-1]):
         return True
-    if _is_sensitive(relative_path):
-        return True
     if name in {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock"}:
         return True
     if any(name.endswith(suffix) for suffix in GENERATED_SUFFIXES):
@@ -456,19 +432,7 @@ def _should_skip_path(relative_path: str, *, is_directory: bool) -> bool:
 
 
 def _is_sensitive(relative_path: str) -> bool:
-    path = Path(relative_path)
-    lowered_parts = tuple(part.lower() for part in path.parts)
-    name = path.name.lower()
-    if name in SENSITIVE_FILE_NAMES:
-        return True
-    if name.startswith(".env"):
-        return True
-    if any(name.endswith(suffix) for suffix in SENSITIVE_SUFFIXES):
-        return True
-    return any(
-        part in {"secrets", "credentials", ".ssh", ".gnupg"}
-        for part in lowered_parts[:-1]
-    )
+    return is_sensitive_relative_path(relative_path)
 
 
 def _build_record(

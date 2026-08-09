@@ -44,6 +44,20 @@ def _laravel_project(root: Path):
     )
     (root / ".env").write_text("APP_KEY=secret\n", encoding="utf-8")
     (root / "private.pem").write_text("PRIVATE KEY\n", encoding="utf-8")
+    (root / "config").mkdir()
+    (root / "config" / "config.php").write_text(
+        "<?php return ['password' => 'secret'];\n",
+        encoding="utf-8",
+    )
+    (root / "config" / "config.example.php").write_text(
+        "<?php return ['password' => ''];\n",
+        encoding="utf-8",
+    )
+    (root / "storage" / "logs").mkdir(parents=True)
+    (root / "storage" / "logs" / "app.log").write_text(
+        "sensitive runtime log\n",
+        encoding="utf-8",
+    )
     (root / "node_modules").mkdir()
     (root / "node_modules" / "ignored.js").write_text(
         "secret dependency content\n",
@@ -131,6 +145,10 @@ def test_sensitive_files_and_dependency_directories_are_protected(tmp_path: Path
     assert not any(path.startswith("node_modules/") for path in selected_paths)
     assert ".env" in protected_paths
     assert "private.pem" in protected_paths
+    assert "config/config.php" in protected_paths
+    assert "storage/logs/app.log" in protected_paths
+    assert "config/config.php" not in selected_paths
+    assert "storage/logs/app.log" not in selected_paths
     assert any(item.relative_path == "node_modules/" for item in selection.exclusions)
 
 

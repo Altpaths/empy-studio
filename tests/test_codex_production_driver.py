@@ -86,6 +86,25 @@ def test_missing_installation_has_clear_remediation(
     assert installation.remediation is not None
 
 
+def test_maps_codex_app_server_initialization_failure_to_sandbox_error() -> None:
+    code, message = CodexDriver.map_error(
+        "failed to initialize in-process app-server client: Operation not permitted",
+        1,
+    )
+
+    assert code == "sandbox_error"
+    assert "host permissions" in message
+
+
+def test_keeps_plain_project_permission_failures_distinct() -> None:
+    code, _message = CodexDriver.map_error(
+        "permission denied: /workspace/src/app.py",
+        1,
+    )
+
+    assert code == "permission_denied"
+
+
 def test_detects_authenticated_codex(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

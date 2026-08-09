@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -79,6 +80,28 @@ class DefaultProjectService:
                 markers.append("resources/")
             return "laravel", tuple(markers)
 
+        if (
+            (root / "composer.json").is_file()
+            or (root / "index.php").is_file()
+        ) and self._has_php_sources(root):
+            markers = ["php"]
+            for marker in (
+                "composer.json",
+                "index.php",
+                "src/",
+                "app/",
+                "public/",
+                "public_html/",
+                "tests/",
+            ):
+                if marker.endswith("/"):
+                    exists = (root / marker.rstrip("/")).is_dir()
+                else:
+                    exists = (root / marker).is_file()
+                if exists and marker not in markers:
+                    markers.append(marker)
+            return "php", tuple(markers)
+
         if (root / "pyproject.toml").is_file():
             markers = ["pyproject.toml"]
             if (root / "src").is_dir():
@@ -121,6 +144,21 @@ class DefaultProjectService:
             if (root / name).exists():
                 markers.append(name)
         return tuple(markers)
+
+    def _has_php_sources(
+        self,
+        root: Path,
+    ) -> bool:
+        for current, directories, files in os.walk(root, followlinks=False):
+            directories[:] = [
+                directory
+                for directory in directories
+                if directory not in IGNORED_DIRECTORY_NAMES
+                and not (Path(current) / directory).is_symlink()
+            ]
+            if any(filename.lower().endswith(".php") for filename in files):
+                return True
+        return False
 
     def _has_tests(
         self,
