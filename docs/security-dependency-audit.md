@@ -37,6 +37,20 @@ Text files are checked for:
 
 Potential secrets and high-risk source patterns block the audit.
 
+## CLI
+
+Run the deterministic audit from the project environment:
+
+```bash
+empy security audit \
+  --project-root /path/to/project \
+  --evidence /path/to/security-audit.json
+```
+
+The command writes validated JSON evidence and exits with a non-zero status
+when blocking findings or a `pip check` failure is detected. Command output is
+redacted before it is stored in the evidence file.
+
 ## Evidence
 
 The JSON report contains:
@@ -47,6 +61,10 @@ The JSON report contains:
 - blocking-finding count;
 - project SHA-256;
 - overall `passed` or `failed` status.
+
+Digesting and source scanning skip symlinked files. A configured source
+directory containing a symlink is rejected so that an audit cannot silently
+cross a project boundary.
 
 This evidence supports the `security_review` and `dependency_audit` Release
 Candidate gates.

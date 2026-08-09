@@ -279,6 +279,24 @@ _SECRET_RULES: tuple[
     ),
 )
 
+_REDACTED_VALUE = "<redacted>"
+_URL_CREDENTIALS = re.compile(
+    r"(?i)(://[^\s:@]+:)[^@\s]+(@)"
+)
+
+
+def _redact_sensitive_output(value: str) -> str:
+    redacted = value
+    for _, pattern, _ in _SECRET_RULES:
+        redacted = pattern.sub(
+            _REDACTED_VALUE,
+            redacted,
+        )
+    return _URL_CREDENTIALS.sub(
+        rf"\1{_REDACTED_VALUE}\2",
+        redacted,
+    )
+
 
 def _default_runner(
     command: list[str],
@@ -310,6 +328,8 @@ def _project_digest(
     }
 
     for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            continue
         if not path.is_file():
             continue
         if any(
@@ -377,7 +397,7 @@ def load_declared_dependencies(
         records.append(
             DependencyRecord(
                 name=_dependency_name(value),
-                specifier=value,
+                specifier=_redact_sensitive_output(value),
                 source="project.dependencies",
             )
         )
@@ -406,7 +426,7 @@ def load_declared_dependencies(
             records.append(
                 DependencyRecord(
                     name=_dependency_name(value),
-                    specifier=value,
+                    specifier=_redact_sensitive_output(value),
                     source=(
                         "project.optional-dependencies."
                         + str(group)
@@ -461,6 +481,8 @@ def _scan_secrets(
     }
 
     for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            continue
         if not path.is_file():
             continue
         if any(
@@ -658,6 +680,8 @@ def _scan_python_source(
     for path in sorted(
         source_root.rglob("*.py")
     ):
+        if path.is_symlink():
+            continue
         try:
             tree = ast.parse(
                 path.read_text(
@@ -706,9 +730,16 @@ def run_security_audit(
     root = Path(
         config.project_root
     ).expanduser().resolve()
-    source_root = (
-        root / config.source_directory
-    ).resolve()
+    source_candidate = root / config.source_directory
+    relative_source = source_candidate.relative_to(root)
+    current = root
+    for part in relative_source.parts:
+        current /= part
+        if current.is_symlink():
+            raise ValueError(
+                "source_directory cannot contain symlinks"
+            )
+    source_root = source_candidate.resolve()
 
     if (
         root not in source_root.parents
@@ -761,8 +792,12 @@ def run_security_audit(
                 name=name,
                 command=tuple(command),
                 returncode=result.returncode,
-                stdout=result.stdout,
-                stderr=result.stderr,
+                stdout=_redact_sensitive_output(
+                    result.stdout
+                ),
+                stderr=_redact_sensitive_output(
+                    result.stderr
+                ),
             )
         )
 
@@ -778,8 +813,12 @@ def run_security_audit(
                         "dependency.pip_check_failed"
                     ),
                     message=(
-                        result.stderr.strip()
-                        or result.stdout.strip()
+                        _redact_sensitive_output(
+                            result.stderr.strip()
+                        )
+                        or _redact_sensitive_output(
+                            result.stdout.strip()
+                        )
                         or "pip check failed"
                     ),
                 )

@@ -1,5 +1,12 @@
 ## Unreleased
 
+### Ticket 16 — Security and privacy hardening
+
+- Added `empy security audit` for deterministic, validated JSON security evidence.
+- Redacted secret-like command output and dependency URL credentials before evidence persistence.
+- Rejected symlinked source paths and skipped symlinked files during project digest and scans.
+- Preserved explicit provider sandbox boundaries and verified installer/archive safety through the full test suite.
+
 ### Ticket 8 — Production Codex driver hardening
 
 - Added no-token host preflight diagnostics for PATH-alias, app-server, state,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from .capability_cli import build_schedule
 from .codex_cli import (
@@ -41,6 +42,7 @@ from .release_cli import (
     release_validate_command,
 )
 from .runtime_cli import run_manifest
+from .security_cli import security_audit_command
 from .vault import initialize_vault, vault_status
 from .verifier import verify
 
@@ -65,6 +67,30 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser = sub.add_parser("verify", help="Run local checks and preserve external checks as pending")
     verify_parser.add_argument("--manifest", required=True)
     verify_parser.add_argument("--output")
+
+    security_parser = sub.add_parser(
+        "security",
+        help="Run deterministic security and privacy checks",
+    )
+    security_sub = security_parser.add_subparsers(
+        dest="security_command",
+        required=True,
+    )
+    security_audit = security_sub.add_parser(
+        "audit",
+        help="Scan a project and write validated security evidence",
+    )
+    security_audit.add_argument("--project-root", required=True)
+    security_audit.add_argument("--evidence", required=True)
+    security_audit.add_argument(
+        "--python-executable",
+        default=sys.executable,
+    )
+    security_audit.add_argument(
+        "--source-directory",
+        default="src",
+    )
+    security_audit.add_argument("--output")
 
     vault = sub.add_parser("vault", help="Create and inspect a persistent Project Vault")
     vault_sub = vault.add_subparsers(dest="vault_command", required=True)
@@ -566,6 +592,19 @@ def main() -> None:
         )
     elif args.command == "verify":
         emit(verify(load_json(args.manifest)), args.output)
+    elif (
+        args.command == "security"
+        and args.security_command == "audit"
+    ):
+        result = security_audit_command(
+            args.project_root,
+            args.evidence,
+            python_executable=args.python_executable,
+            source_directory=args.source_directory,
+        )
+        emit(result, args.output)
+        if result.get("status") != "passed":
+            raise SystemExit(1)
     elif args.command == "doctor":
         emit(doctor(args.project_root, args.vault), args.output)
     elif args.command == "bootstrap":
