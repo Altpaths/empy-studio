@@ -59,4 +59,4 @@ new product behavior is merged.
   the EMPY logo at `src/empy_studio/web/empy-logo.png`.
 - Final verification for this wave passed: 515 tests, Ruff, MyPy, compileall,
   CLI help, release validation, and browser asset smoke. The resulting local
-  `main` head is `a8c82cd`.
+  `main` head is `e073451`.
