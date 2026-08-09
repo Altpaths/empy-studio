@@ -106,7 +106,7 @@ All notable changes to Empy Studio are documented here.
 - file manifests with SHA-256 checksums
 - durable project identity, decisions, tickets, and release records
 
-## [0.1.0] — Developer Preview
+## [0.1.0] - 2026-08-09
 
 ### Added
 

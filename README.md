@@ -165,7 +165,25 @@ empy done
 Build a synchronized release:
 
 ```bash
-empy release build
+empy release validate \
+  --manifest release-manifest.json \
+  --changelog CHANGELOG.md
+
+empy release build \
+  --manifest release-manifest.json \
+  --source-root . \
+  --include src \
+  --include tests \
+  --include docs \
+  --include examples \
+  --include README.md \
+  --include README.fa.md \
+  --include CHANGELOG.md \
+  --include LICENSE \
+  --include pyproject.toml \
+  --include release-manifest.json \
+  --changelog CHANGELOG.md \
+  --output-dir dist
 ```
 
 The builder creates a versioned ZIP, JSON manifest, SHA-256 checksum, and release notes. It does not create a Git tag or publish remotely without a separate explicit action.

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "product": "Empy Studio",
+  "version": "0.1.0",
+  "tag": "v0.1.0",
+  "channel": "stable",
+  "release_name": "Empy Studio 0.1.0 — Developer Preview",
+  "notes_file": "RELEASE_NOTES.md",
+  "changelog_file": "CHANGELOG.md",
+  "artifacts": [],
+  "previous_version": null,
+  "metadata": {
+    "release_scope": "open-source developer preview"
+  }
+}

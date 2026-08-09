@@ -41,3 +41,21 @@ new product behavior is merged.
 - Detailed evidence: [`acceptance-evidence-2026-08-09.md`](acceptance-evidence-2026-08-09.md)
 - The PR is intentionally still draft; main has not been merged without the
   final integration decision.
+
+## 2026-08-09 — approved integration and product hardening
+
+- The approved continuity wave is integrated locally on `main` at commit
+  `9098110`, with the six commits after the integrated baseline preserved in
+  history.
+- The duplicate legacy `release build` dispatch was removed. The CLI now has
+  one manifest-driven release route, and a regression test covers its actual
+  dispatch rather than only parser construction.
+- A canonical `release-manifest.json` and a complete release-build example are
+  now present in the repository, so the documented release path is executable.
+- Project Brain reuse avoids a second full repository walk when the index is
+  valid; the UI reports measured provider usage separately from the local
+  token-efficiency estimate.
+- The bilingual Desktop UI uses delegated actions, CSP-safe event handling, and
+  the EMPY logo at `src/empy_studio/web/empy-logo.png`.
+- Final verification for this wave: 515 tests, Ruff, MyPy, compileall, CLI help,
+  and browser asset smoke are required before publishing the integrated commit.

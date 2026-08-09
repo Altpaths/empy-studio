@@ -33,7 +33,6 @@ from .plugin_manager_cli import (
     rollback_plugin_command,
     upgrade_plugin_command,
 )
-from .release import build_release
 from .release_cli import (
     release_build_command,
     release_inspect_command,
@@ -390,16 +389,6 @@ def main() -> None:
         emit(merge(load_json(args.graph), load_json(args.sprint)), args.output)
     elif args.command == "done":
         emit(evaluate_done(args.project_root), args.output)
-    elif args.command == "release" and args.release_command == "build":
-        emit(
-            build_release(
-                args.project_root,
-                output_dir=args.output_dir,
-                version=args.version,
-                skip_done_check=args.skip_done_check,
-            ),
-            args.output,
-        )
     elif args.command == "capabilities" and args.capabilities_command == "plan":
         emit(build_schedule(args.manifest), args.output)
     elif args.command == "runtime" and args.runtime_command == "run":
