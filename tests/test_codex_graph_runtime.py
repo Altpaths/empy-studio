@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -236,6 +237,33 @@ def test_runtime_rejects_dirty_git_worktree(
     assert result.status == "failed"
     assert result.error_code == "dirty_worktree"
     assert len(driver.requests) == 0
+
+
+def test_git_snapshot_uses_relative_paths(tmp_path: Path) -> None:
+    detection, _, _, _ = prepared(tmp_path)
+    root = detection.descriptor.root
+    subprocess.run(("git", "init", "-q"), cwd=root, check=True)
+    subprocess.run(("git", "config", "user.email", "tests@example.com"), cwd=root, check=True)
+    subprocess.run(("git", "config", "user.name", "Empy Tests"), cwd=root, check=True)
+    subprocess.run(("git", "add", "."), cwd=root, check=True)
+    subprocess.run(("git", "commit", "-q", "-m", "baseline"), cwd=root, check=True)
+    (root / "src" / "feature.py").write_text("def feature():\n    return False\n", encoding="utf-8")
+
+    snapshot = CodexGraphRuntime._git_snapshot(root)
+
+    assert snapshot is not None
+    assert snapshot.status == {"src/feature.py": " M"}
+
+
+def test_absolute_provider_paths_are_normalized_to_project_relative(tmp_path: Path) -> None:
+    root = (tmp_path / "project").resolve()
+    root.mkdir()
+
+    assert CodexGraphRuntime._normalize_changed_path(str(root / "src" / "feature.py"), root) == (
+        "src/feature.py"
+    )
+    assert CodexGraphRuntime._normalize_changed_path("./src/feature.py", root) == "src/feature.py"
+    assert CodexGraphRuntime._normalize_changed_path("/outside/file.py", root) == "/outside/file.py"
 
 
 def test_runtime_fails_node_that_changes_unowned_file(

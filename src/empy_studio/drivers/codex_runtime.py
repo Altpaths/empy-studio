@@ -348,8 +348,12 @@ class CodexGraphRuntime:
                     before_snapshot,
                     after_snapshot,
                 )
+                provider_changes = {
+                    self._normalize_changed_path(path, project.root)
+                    for path in node_result.changed_files
+                }
                 changed_files = tuple(
-                    sorted(set(node_result.changed_files) | audited_changes)
+                    sorted(provider_changes | audited_changes)
                 )
                 node_result = replace(
                     node_result,
@@ -504,7 +508,6 @@ class CodexGraphRuntime:
                     "--porcelain=v1",
                     "-z",
                     "--untracked-files=all",
-                    "--relative",
                     "--",
                     ".",
                 ],
@@ -523,6 +526,19 @@ class CodexGraphRuntime:
             head=head,
             status=CodexGraphRuntime._parse_git_status(status_result.stdout),
         )
+
+    @staticmethod
+    def _normalize_changed_path(path: str, root: Path) -> str:
+        normalized = path.replace("\\", "/")
+        candidate = Path(normalized)
+        if candidate.is_absolute():
+            try:
+                return candidate.resolve().relative_to(root.resolve()).as_posix()
+            except ValueError:
+                return candidate.as_posix()
+        while normalized.startswith("./"):
+            normalized = normalized[2:]
+        return normalized
 
     @staticmethod
     def _parse_git_status(output: str) -> dict[str, str]:
