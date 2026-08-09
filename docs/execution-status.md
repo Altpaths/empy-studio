@@ -25,7 +25,7 @@ new product behavior is merged.
 ## 2026-08-09 — continuity wave
 
 - Current branch: `codex/product-continuity-roadmap`
-- Current suite: 493 passed
+- Current suite: 495 passed
 - Real Codex graph acceptance: discovery, backend implementation, and quality
   nodes completed on an imported project.
 - Real verification: tests, compile, and Ruff passed.
@@ -35,6 +35,7 @@ new product behavior is merged.
   verification passed.
 - Workspace restart now restores the active project, active ticket, contract,
   plan, graph, and selectable ticket history.
+- Workspace schema v2 records and restores verified project release history.
 - Detailed evidence: [`acceptance-evidence-2026-08-09.md`](acceptance-evidence-2026-08-09.md)
 - The PR is intentionally still draft; main has not been merged without the
   final integration decision.

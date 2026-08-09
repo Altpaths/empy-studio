@@ -11,7 +11,7 @@ roadmap finished.
 - Branch: `codex/product-continuity-roadmap`
 - PR: [#31](https://github.com/Altpaths/empy-studio/pull/31)
 - Python: 3.12.13 on Apple Silicon
-- Full suite after the current wave: `493 passed`
+- Full suite after the current wave: `495 passed`
 - Ruff: `All checks passed!`
 - `python -m compileall -q src`: passed
 - `empy-web --help`: passed
@@ -41,6 +41,8 @@ Observed result:
 - A workspace restart restored the active project, active ticket, task
   contract, plan, graph, and ticket history; selecting an older ticket also
   rematerialized its approved workflow.
+- Verified project releases are persisted in workspace schema v2 and are
+  restored with archive, manifest, checksum, SHA-256, file count, and status.
 
 The temporary acceptance workspace was:
 `/var/folders/f4/4dnx2gx111j1xbwz0lvkz63m0000gn/T/empy-e2e-fixed-jpvs9bh1`.
