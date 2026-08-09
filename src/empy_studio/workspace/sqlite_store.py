@@ -270,6 +270,50 @@ class SQLiteWorkspaceStore:
             ).fetchall()
         return tuple(self._task_from_row(row) for row in rows)
 
+    def update_task(
+        self,
+        task_id: str,
+        *,
+        title: str | None = None,
+        request_text: str | None = None,
+        task_kind: str | None = None,
+        status: str | None = None,
+        contract: Mapping[str, Any] | None = None,
+    ) -> WorkspaceTask:
+        current = self.get_task(task_id)
+        updated = WorkspaceTask(
+            task_id=current.task_id,
+            project_id=current.project_id,
+            title=title if title is not None else current.title,
+            request_text=request_text if request_text is not None else current.request_text,
+            task_kind=task_kind if task_kind is not None else current.task_kind,
+            status=status if status is not None else current.status,
+            contract=dict(contract) if contract is not None else current.contract,
+            created_at=current.created_at,
+            updated_at=utc_now_iso(),
+        )
+        updated.validate()
+        with self._connection() as connection:
+            result = connection.execute(
+                """
+                UPDATE tasks SET title = ?, request_text = ?, task_kind = ?,
+                    status = ?, contract_json = ?, updated_at = ?
+                WHERE task_id = ?
+                """,
+                (
+                    updated.title,
+                    updated.request_text,
+                    updated.task_kind,
+                    updated.status,
+                    json.dumps(updated.contract, ensure_ascii=False, sort_keys=True),
+                    updated.updated_at,
+                    task_id,
+                ),
+            )
+        if result.rowcount == 0:
+            raise KeyError(task_id)
+        return self.get_task(task_id)
+
     def create_run(
         self,
         *,

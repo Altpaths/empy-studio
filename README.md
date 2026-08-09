@@ -66,6 +66,17 @@ pip install -e ".[dev]"
 pytest
 ```
 
+Launch the bilingual guided desktop UI locally:
+
+```bash
+empy-web
+```
+
+The UI is local-only, keeps its SQLite workspace under the Empy Studio
+application data directory, and works on an isolated project copy. See
+[`docs/web-desktop.md`](docs/web-desktop.md) for the product flow and API
+boundary.
+
 Inspect the CLI:
 
 ```bash

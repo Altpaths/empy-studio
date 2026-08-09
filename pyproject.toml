@@ -29,6 +29,7 @@ dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
 
 [project.scripts]
 empy = "empy_studio.cli:main"
+empy-web = "empy_studio.web_desktop:main"
 
 empy-desktop = "empy_studio.desktop.shell:launch_desktop"
 [project.urls]

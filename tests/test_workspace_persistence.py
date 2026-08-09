@@ -67,12 +67,19 @@ def test_tasks_runs_and_settings_are_persistent(tmp_path: Path) -> None:
         evidence_path="runs/evidence.json",
     )
     store.set_setting("appearance", {"theme": "system"})
+    store.update_task(
+        task.task_id,
+        status="planned",
+        contract={"constraints": ["Do not redesign"], "plan_id": "plan-1"},
+    )
 
     reopened = SQLiteWorkspaceStore(database)
 
     assert reopened.get_task(task.task_id).contract == {
-        "constraints": ["Do not redesign"]
+        "constraints": ["Do not redesign"],
+        "plan_id": "plan-1",
     }
+    assert reopened.get_task(task.task_id).status == "planned"
     assert reopened.get_run(run.run_id).state == "completed"
     assert reopened.get_setting("appearance") == {"theme": "system"}
 
