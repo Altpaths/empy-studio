@@ -123,6 +123,35 @@ def test_prompt_contains_bounded_context_and_safety_rules(tmp_path: Path) -> Non
     assert str(node.token_limit) in prompt
 
 
+def test_prompt_contains_approved_user_task_contract(tmp_path: Path) -> None:
+    _, selection, _, graph = prepared(tmp_path)
+    node = graph.nodes[0]
+    task = ProductTask(
+        task_id=graph.task_id,
+        project_root=graph.project_root,
+        kind="feature",
+        title="Add a greeting helper",
+        objective="Add a shout helper without changing greet.",
+        requirements=("Create shout(name) in the backend service.", "Keep greet unchanged."),
+        constraints=("Do not modify tests.",),
+        definition_of_done=("The helper is importable.", "Relevant tests pass."),
+        status="ready_for_planning",
+    )
+
+    prompt = build_codex_node_prompt(
+        graph=graph,
+        selection=selection,
+        node=node,
+        task=task,
+    )
+
+    assert "Approved user task" in prompt
+    assert task.objective in prompt
+    assert task.requirements[0] in prompt
+    assert task.constraints[0] in prompt
+    assert task.definition_of_done[0] in prompt
+
+
 def test_runtime_executes_dependency_order(tmp_path: Path) -> None:
     detection, selection, budget, graph = prepared(tmp_path)
     driver = FakeDriver()

@@ -8,12 +8,47 @@ import subprocess
 import uuid
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal
 
 ReviewDecision = Literal["pending", "accepted", "reverted"]
 ReviewStatus = Literal["pending", "complete"]
 ChangeKind = Literal["added", "modified", "deleted", "renamed", "unmerged", "unknown"]
+
+_REVIEW_EXCLUDED_NAMES = frozenset(
+    {
+        ".DS_Store",
+        ".env",
+        ".git",
+        ".idea",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".venv",
+        "__MACOSX",
+        "__pycache__",
+        "build",
+        "coverage",
+        "dist",
+        "node_modules",
+        "vendor",
+        "venv",
+    }
+)
+_REVIEW_EXCLUDED_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".jks", ".keystore")
+
+
+def _reviewable_path(relative_path: str) -> bool:
+    normalized = relative_path.replace("\\", "/").strip("/")
+    path = PurePosixPath(normalized)
+    if not normalized or path.is_absolute() or ".." in path.parts:
+        return False
+    return not any(
+        part in _REVIEW_EXCLUDED_NAMES
+        or part.startswith(".env.")
+        or part.lower().endswith(_REVIEW_EXCLUDED_SUFFIXES)
+        for part in path.parts
+    )
 
 
 def _now() -> str:
@@ -159,7 +194,12 @@ class ReviewRuntime:
             raise RuntimeError("Review Workspace requires a Git repository")
         base_revision = _run_git(root, "rev-parse", "HEAD").stdout.strip()
         status = _run_git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all").stdout
-        entries = self._parse_status(status)
+        entries = tuple(
+            item
+            for item in self._parse_status(status)
+            if _reviewable_path(item[1])
+            and (item[2] is None or _reviewable_path(item[2]))
+        )
         files = tuple(
             self._capture_file(root, code, path, original_path)
             for code, path, original_path in entries

@@ -34,3 +34,8 @@ its evidence.
 - The UI does not install a remote script automatically. Provider installation
   and authentication remain explicit user actions.
 - The UI never commits, pushes, merges, tags, or publishes a project.
+
+Hosts that already provide an external sandbox may explicitly inject a
+`CodexDriver(sandbox_mode="danger-full-access")` for a controlled integration
+test. Empy does not select that mode by default; the normal driver derives
+`read-only` or `workspace-write` from the approved node scope.

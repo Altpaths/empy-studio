@@ -341,7 +341,14 @@ class GuidedState:
         context = self.context
         budget = self.budget
         detection = self.detection
-        if graph is None or context is None or budget is None or detection is None:
+        task = self.task
+        if (
+            graph is None
+            or context is None
+            or budget is None
+            or detection is None
+            or task is None
+        ):
             self._record_failure(workspace_run_id, "Run inputs are incomplete.")
             return
 
@@ -358,6 +365,7 @@ class GuidedState:
                 selection=context,
                 budget=budget,
                 project=detection.descriptor,
+                task=task,
                 on_progress=progress,
             )
             self.run = result

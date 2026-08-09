@@ -14,6 +14,7 @@ from empy_studio.core import (
     ContextPack,
     ContextSelection,
     DriverExecutionRequest,
+    ProductTask,
     ProjectDescriptor,
     TokenBudget,
 )
@@ -123,9 +124,16 @@ def build_codex_node_prompt(
     graph: AgentRunGraph,
     selection: ContextSelection,
     node: AgentRunNode,
+    task: ProductTask | None = None,
 ) -> str:
     graph.validate()
     selection.validate()
+    if task is not None:
+        task.validate()
+        if task.task_id != graph.task_id:
+            raise ValueError("product task and agent graph do not match")
+        if Path(task.project_root).expanduser().resolve() != Path(graph.project_root).expanduser().resolve():
+            raise ValueError("product task and agent graph project roots do not match")
     if graph.selection_id != selection.selection_id:
         raise ValueError("agent graph and context selection do not match")
     pack = _pack_for_node(selection, node)
@@ -143,11 +151,32 @@ def build_codex_node_prompt(
             f"## {item.relative_path} [{mode}]{truncation}\n"
             f"Score: {item.score}; reasons: {', '.join(item.reasons)}\n\n"
             f"```text\n{item.content.rstrip()}\n```"
-        )
+    )
     context = "\n\n".join(context_sections) or "No file content was selected for this node."
+    task_contract = (
+        "## Approved user task\n"
+        f"Task ID: {task.task_id}\n"
+        f"Task kind: {task.kind}\n"
+        f"Task title: {task.title}\n"
+        f"Task objective: {task.objective}\n\n"
+        "### Requirements\n"
+        + "\n".join(f"- {item}" for item in task.requirements)
+        + "\n\n### Constraints\n"
+        + ("\n".join(f"- {item}" for item in task.constraints) or "- None")
+        + "\n\n### Definition of done\n"
+        + "\n".join(f"- {item}" for item in task.definition_of_done)
+        + "\n"
+        if task is not None
+        else (
+            "## Approved user task\n"
+            "The task contract was not materialized for this compatibility call. "
+            "Follow the bounded node objective only.\n"
+        )
+    )
     return (
         "# Empy Studio approved Codex execution\n\n"
         "Execute exactly one approved Agent Run Graph node. Do not expand the scope.\n\n"
+        f"{task_contract}\n"
         f"Project: {selection.project_brain.display_name}\n"
         f"Project type: {selection.project_brain.project_type}\n"
         f"Project summary: {selection.project_brain.summary}\n"
@@ -199,9 +228,10 @@ class CodexGraphRuntime:
         selection: ContextSelection,
         budget: TokenBudget,
         project: ProjectDescriptor,
+        task: ProductTask | None = None,
         on_progress: RunProgressCallback | None = None,
     ) -> CodexGraphExecution:
-        self._validate_inputs(graph, selection, budget, project)
+        self._validate_inputs(graph, selection, budget, project, task)
         self._cancel_requested.clear()
         installation = self.driver.inspect_installation(refresh=True)
         run_id = uuid.uuid4().hex
@@ -297,6 +327,7 @@ class CodexGraphRuntime:
                     graph=graph,
                     selection=selection,
                     node=node,
+                    task=task,
                 )
                 request = DriverExecutionRequest(
                     project=project,
@@ -420,11 +451,18 @@ class CodexGraphRuntime:
         selection: ContextSelection,
         budget: TokenBudget,
         project: ProjectDescriptor,
+        task: ProductTask | None = None,
     ) -> None:
         graph.validate()
         selection.validate()
         budget.validate()
         project.validate()
+        if task is not None:
+            task.validate()
+            if task.task_id != graph.task_id:
+                raise ValueError("product task and agent graph do not match")
+            if Path(task.project_root).expanduser().resolve() != project.root.resolve():
+                raise ValueError("product task and selected project do not match")
         if graph.status != "ready":
             raise ValueError("Codex execution requires a ready Agent Run Graph")
         if budget.status != "locked":

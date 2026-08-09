@@ -54,6 +54,22 @@ def test_capture_produces_readable_changed_file_diffs(tmp_path: Path) -> None:
     assert "+new line" in added.diff_text
 
 
+def test_capture_ignores_generated_cache_and_sensitive_paths(tmp_path: Path) -> None:
+    root = _repository(tmp_path)
+    (root / "src").mkdir()
+    (root / "src" / "change.py").write_text("value = 1\n", encoding="utf-8")
+    (root / "__pycache__").mkdir()
+    (root / "__pycache__" / "generated.pyc").write_bytes(b"cache")
+    (root / ".pytest_cache").mkdir()
+    (root / ".pytest_cache" / "state").write_text("cache", encoding="utf-8")
+    (root / ".env.local").write_text("TOKEN=secret\n", encoding="utf-8")
+    (root / "private.key").write_text("secret", encoding="utf-8")
+
+    report = ReviewRuntime().capture(root)
+
+    assert tuple(item.relative_path for item in report.files) == ("src/change.py",)
+
+
 def test_accept_keeps_change_and_records_explicit_decision(tmp_path: Path) -> None:
     root = _repository(tmp_path)
     (root / "tracked.txt").write_text("accepted\n", encoding="utf-8")

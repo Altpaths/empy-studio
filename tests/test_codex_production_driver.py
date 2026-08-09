@@ -129,6 +129,17 @@ def test_build_command_uses_read_only_without_owned_paths(tmp_path: Path) -> Non
     assert command[-1] == "-"
 
 
+def test_build_command_allows_explicit_host_sandbox_override(tmp_path: Path) -> None:
+    driver = CodexDriver(artifact_root=tmp_path, sandbox_mode="danger-full-access")
+    command = driver.build_command(
+        request(tmp_path),
+        executable="/usr/local/bin/codex",
+        final_message_path=tmp_path / "final.md",
+    )
+
+    assert command[command.index("--sandbox") + 1] == "danger-full-access"
+
+
 def test_streams_json_events_and_preserves_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
