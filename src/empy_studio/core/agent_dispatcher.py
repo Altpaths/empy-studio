@@ -469,6 +469,13 @@ def _ownership_score(
     return pattern_score, context_score, -sequence
 
 
+def _matches_ownership_pattern(agent: AgentDefinition, relative_path: str) -> bool:
+    return any(
+        fnmatch.fnmatch(relative_path, pattern)
+        for pattern in agent.ownership_patterns
+    )
+
+
 def _pack_by_step(selection: ContextSelection) -> dict[str, ContextPack]:
     values = {pack.step_id: pack for pack in selection.packs}
     if len(values) != len(selection.packs):
@@ -501,7 +508,10 @@ def _build_ownership(
         pack = packs[step.step_id]
         for context_file in pack.files:
             readers.setdefault(context_file.relative_path, set()).add(agent.agent_id)
-            if step.suggested_agent in WRITING_ROLES:
+            if (
+                step.suggested_agent in WRITING_ROLES
+                and _matches_ownership_pattern(agent, context_file.relative_path)
+            ):
                 file_candidates.setdefault(context_file.relative_path, []).append(
                     (step.step_id, context_file.score)
                 )
@@ -644,6 +654,18 @@ def build_agent_run_graph(
                 owned_files=owned_files,
                 read_only_files=read_only_files,
             )
+        )
+
+    writing_nodes = tuple(
+        node
+        for node in nodes
+        if node.agent_role in WRITING_ROLES
+    )
+    if writing_nodes and not any(node.owned_files for node in writing_nodes):
+        roles = ", ".join(sorted({node.agent_role for node in writing_nodes}))
+        raise ValueError(
+            "approved implementation plan has no writable files for "
+            f"writing roles ({roles}); refine the task scope or project index"
         )
 
     node_waves = tuple(

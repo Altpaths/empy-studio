@@ -28,6 +28,11 @@ CodexAvailability = Literal[
     "unauthenticated",
     "unavailable",
 ]
+CodexSandboxMode = Literal[
+    "read-only",
+    "workspace-write",
+    "danger-full-access",
+]
 CodexNodeStatus = Literal[
     "pending",
     "running",
@@ -173,6 +178,8 @@ class CodexDriver(BaseDriver):
         executable: str = "codex",
         artifact_root: str | Path | None = None,
         enabled: bool = True,
+        fallback_executables: Sequence[str | Path] | None = None,
+        sandbox_mode: CodexSandboxMode | None = None,
         command_runner: CommandRunner | None = None,
         process_factory: ProcessFactory | None = None,
         monotonic: Clock = time.monotonic,
@@ -180,6 +187,21 @@ class CodexDriver(BaseDriver):
     ) -> None:
         self.requested_executable = executable
         self.enabled = enabled
+        self.sandbox_mode = sandbox_mode
+        default_fallbacks: tuple[str | Path, ...] = (
+            "/opt/homebrew/bin/codex",
+            "/usr/local/bin/codex",
+            Path.home() / ".npm-global" / "bin" / "codex",
+            Path.home() / ".local" / "bin" / "codex",
+        )
+        self.fallback_executables = tuple(
+            Path(item).expanduser()
+            for item in (
+                default_fallbacks
+                if fallback_executables is None
+                else fallback_executables
+            )
+        )
         self.artifact_root = (
             Path(artifact_root).expanduser().resolve()
             if artifact_root is not None
@@ -752,7 +774,9 @@ class CodexDriver(BaseDriver):
         final_message_path: str | Path,
     ) -> list[str]:
         request.validate()
-        sandbox = "workspace-write" if request.allowed_paths else "read-only"
+        sandbox = self.sandbox_mode or (
+            "workspace-write" if request.allowed_paths else "read-only"
+        )
         return [
             executable,
             "exec",
@@ -792,13 +816,7 @@ class CodexDriver(BaseDriver):
         resolved = shutil.which(self.requested_executable)
         if resolved is not None:
             return resolved
-        candidates = (
-            Path("/opt/homebrew/bin/codex"),
-            Path("/usr/local/bin/codex"),
-            Path.home() / ".npm-global" / "bin" / "codex",
-            Path.home() / ".local" / "bin" / "codex",
-        )
-        for candidate in candidates:
+        for candidate in self.fallback_executables:
             if candidate.is_file() and os.access(candidate, os.X_OK):
                 return str(candidate.resolve())
         return None

@@ -250,3 +250,36 @@ def test_default_registry_is_deterministic() -> None:
         "security",
         "release",
     }
+
+
+def test_writing_plan_without_owned_files_is_blocked(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname = 'demo'\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text(
+        "print('demo')\n",
+        encoding="utf-8",
+    )
+    project = DefaultProjectService().detect(tmp_path)
+    task = ProductTask(
+        task_id="ui-without-files",
+        project_root=str(tmp_path.resolve()),
+        kind="ui_improvement",
+        title="Improve the homepage UI",
+        objective="Improve the homepage layout",
+        requirements=("Update the homepage",),
+        constraints=("Do not change unrelated behavior",),
+        definition_of_done=("The homepage is improved",),
+        status="ready_for_planning",
+    )
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+    selection = build_context_selection(task=task, project=project, plan=plan)
+    budget = lock_token_budget(build_token_budget(plan=plan, selection=selection))
+
+    with pytest.raises(ValueError, match="no writable files"):
+        build_agent_run_graph(plan=plan, selection=selection, budget=budget)

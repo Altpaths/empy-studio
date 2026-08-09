@@ -2,6 +2,15 @@
 
 Empy Studio follows a narrow roadmap: make agent-assisted product delivery easier and cheaper without turning the control layer into another large platform.
 
+## Product execution contract
+
+The approved product roadmap is maintained in
+[`docs/product-roadmap-tickets.md`](docs/product-roadmap-tickets.md). It is the
+source of truth for the user-facing product work, ticket dependencies, and
+acceptance gates. The first implementation wave uses the existing GitHub
+`main` branch as the canonical source and merges the Ticket 16 GUI only after
+its contracts and persistence boundary are reconciled.
+
 ## v0.1 — Developer Preview
 
 - task graph and execution waves
