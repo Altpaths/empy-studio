@@ -157,7 +157,8 @@ def test_streams_json_events_and_preserves_evidence(
         return FakeProcess(
             stdout=(
                 '{"type":"thread.started","thread_id":"thread-11"}\n'
-                '{"type":"turn.completed"}\n'
+                '{"type":"turn.completed","usage":{"input_tokens":12,'
+                '"output_tokens":5,"cached_input_tokens":3,"total_tokens":17}}\n'
             )
         )
 
@@ -178,9 +179,48 @@ def test_streams_json_events_and_preserves_evidence(
     assert result.thread_id == "thread-11"
     assert result.summary == "Node completed"
     assert result.event_count == 2
+    assert result.usage is not None
+    assert result.usage.input == 12
+    assert result.usage.output == 5
+    assert result.usage.cached == 3
+    assert result.usage.total == 17
+    assert result.usage.source == "provider"
+    assert result.usage.provider == "codex"
     assert Path(result.events_path).is_file()
     assert any(event.event_type == "thread.started" for event in events)
     assert any(event.event_type == "run.completed" for event in events)
+
+
+def test_streaming_succeeds_when_usage_is_absent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "empy_studio.drivers.codex.shutil.which",
+        lambda value: "/usr/local/bin/codex",
+    )
+
+    def process_factory(command: list[str], **kwargs: Any) -> FakeProcess:
+        del kwargs
+        final_path = Path(command[command.index("--output-last-message") + 1])
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        final_path.write_text("No usage emitted", encoding="utf-8")
+        return FakeProcess(stdout='{"type":"turn.completed"}\n')
+
+    driver = CodexDriver(
+        artifact_root=tmp_path,
+        command_runner=ready_runner,
+        process_factory=process_factory,
+    )
+
+    result = driver.execute_streaming(
+        request(tmp_path),
+        node_id="node-step-1",
+        artifact_dir=tmp_path / "run",
+    )
+
+    assert result.status == "completed"
+    assert result.usage is None
 
 
 def test_nonzero_exit_maps_authentication_error(

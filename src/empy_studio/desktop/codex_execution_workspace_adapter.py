@@ -15,6 +15,7 @@ from empy_studio.drivers import (
     CodexProgressEvent,
     CodexRunStatus,
 )
+from empy_studio.token_usage import TokenUsage
 
 
 def _as_int(value: object, field_name: str) -> int:
@@ -46,6 +47,12 @@ def _raw_dict(value: object) -> dict[str, object] | None:
     if not isinstance(value, dict):
         return None
     return {str(key): item for key, item in value.items()}
+
+
+def _usage(value: object) -> TokenUsage | None:
+    if not isinstance(value, dict):
+        return None
+    return TokenUsage.from_dict({str(key): item for key, item in value.items()})
 
 
 class CodexExecutionWorkspaceAdapter:
@@ -159,6 +166,7 @@ class CodexExecutionWorkspaceAdapter:
                         else None
                     ),
                     error_message=_optional_string(raw.get("error_message")),
+                    usage=_usage(raw.get("usage")),
                 )
             )
 
@@ -202,6 +210,7 @@ class CodexExecutionWorkspaceAdapter:
                 else None
             ),
             error_message=_optional_string(value.get("error_message")),
+            usage=_usage(value.get("usage")),
         )
         run.validate()
         return run

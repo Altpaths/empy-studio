@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from empy_studio.desktop.codex_execution_workspace_adapter import (
@@ -11,6 +12,7 @@ from empy_studio.drivers import (
     CodexNodeExecution,
     CodexProgressEvent,
 )
+from empy_studio.token_usage import TokenUsage
 
 
 def sample_run(tmp_path: Path) -> CodexGraphExecution:
@@ -30,6 +32,14 @@ def sample_run(tmp_path: Path) -> CodexGraphExecution:
         stderr_path=str(node_dir / "stderr.log"),
         final_message_path=str(node_dir / "final-message.md"),
         command_path=str(node_dir / "command.json"),
+        usage=TokenUsage(
+            input=12,
+            output=5,
+            cached=3,
+            total=17,
+            source="provider",
+            provider="codex",
+        ),
     )
     event = CodexProgressEvent(
         timestamp="2026-08-04T00:00:00+00:00",
@@ -57,6 +67,14 @@ def sample_run(tmp_path: Path) -> CodexGraphExecution:
         ),
         node_results=(node,),
         events=(event,),
+        usage=TokenUsage(
+            input=12,
+            output=5,
+            cached=3,
+            total=17,
+            source="provider",
+            provider="codex",
+        ),
     )
     run.validate()
     return run
@@ -73,3 +91,23 @@ def test_round_trip_persists_run_evidence(tmp_path: Path) -> None:
     assert adapter.get_for_graph("graph-11") == run
     assert adapter.list_runs() == (run,)
     assert adapter.path.is_file()
+
+
+def test_loads_legacy_run_json_without_usage(tmp_path: Path) -> None:
+    adapter = CodexExecutionWorkspaceAdapter(tmp_path / "workspace")
+    run = sample_run(tmp_path)
+    payload = run.to_dict()
+    payload.pop("usage", None)
+    for node in payload["node_results"]:
+        if isinstance(node, dict):
+            node.pop("usage", None)
+    adapter.path.write_text(
+        json.dumps([payload], ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    loaded = adapter.get_run(run.run_id)
+
+    assert loaded is not None
+    assert loaded.usage is None
+    assert loaded.node_results[0].usage is None

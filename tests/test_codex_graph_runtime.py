@@ -24,6 +24,7 @@ from empy_studio.drivers import (
     CodexNodeExecution,
     build_codex_node_prompt,
 )
+from empy_studio.token_usage import TokenUsage
 
 
 def prepared(tmp_path: Path):
@@ -104,6 +105,18 @@ class FakeDriver:
             command_path=str(path / "command.json"),
             error_code="process_failed" if status == "failed" else None,
             error_message="provider failure" if status == "failed" else None,
+            usage=(
+                TokenUsage(
+                    input=10 * len(self.requests),
+                    output=3,
+                    cached=2,
+                    total=10 * len(self.requests) + 3,
+                    source="provider",
+                    provider="codex",
+                )
+                if status == "completed"
+                else None
+            ),
         )
         result.validate()
         return result
@@ -175,6 +188,12 @@ def test_runtime_executes_dependency_order(tmp_path: Path) -> None:
     )
     assert len(driver.requests) == len(graph.nodes)
     assert all(request.timeout_seconds == 120 for request in driver.requests)
+    assert result.usage is not None
+    assert result.usage.input == sum(10 * index for index in range(1, len(graph.nodes) + 1))
+    assert result.usage.output == 3 * len(graph.nodes)
+    assert result.usage.cached == 2 * len(graph.nodes)
+    assert result.usage.source == "provider"
+    assert result.usage.provider == "codex"
 
 
 def test_failed_node_stops_and_skips_remaining_nodes(tmp_path: Path) -> None:

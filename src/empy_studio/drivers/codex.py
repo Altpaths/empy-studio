@@ -19,6 +19,7 @@ from empy_studio.core import (
     DriverInspection,
     DriverStatus,
 )
+from empy_studio.token_usage import TokenUsage
 
 from .base import BaseDriver
 
@@ -125,6 +126,7 @@ class CodexNodeExecution:
     command_path: str
     error_code: CodexErrorCode | None = None
     error_message: str | None = None
+    usage: TokenUsage | None = None
 
     def validate(self) -> None:
         if not self.node_id or not self.task_id:
@@ -153,7 +155,9 @@ class CodexNodeExecution:
             )
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        value = asdict(self)
+        value["usage"] = self.usage.to_dict() if self.usage is not None else None
+        return value
 
 
 class CodexDriverError(RuntimeError):
@@ -639,6 +643,13 @@ class CodexDriver(BaseDriver):
             else ""
         )
         changed_files = self._changed_files_from_events(tuple(events))
+        usage = TokenUsage.aggregate(
+            (
+                TokenUsage.extract_from_event(event, default_provider=self.provider_id)
+                for event in events
+            ),
+            provider=self.provider_id,
+        )
 
         if terminal_status == "cancelled":
             self._status = "cancelled"
@@ -662,6 +673,7 @@ class CodexDriver(BaseDriver):
                 thread_id=thread_id,
                 event_count=len(events),
                 changed_files=changed_files,
+                usage=usage,
             )
 
         if terminal_status == "timed_out":
@@ -687,6 +699,7 @@ class CodexDriver(BaseDriver):
                 thread_id=thread_id,
                 event_count=len(events),
                 changed_files=changed_files,
+                usage=usage,
             )
 
         if parse_error is not None:
@@ -704,6 +717,7 @@ class CodexDriver(BaseDriver):
                 thread_id=thread_id,
                 event_count=len(events),
                 changed_files=changed_files,
+                usage=usage,
             )
 
         if return_code != 0:
@@ -729,6 +743,7 @@ class CodexDriver(BaseDriver):
                 thread_id=thread_id,
                 event_count=len(events),
                 changed_files=changed_files,
+                usage=usage,
             )
 
         self._status = "completed"
@@ -755,6 +770,7 @@ class CodexDriver(BaseDriver):
             stderr_path=str(stderr_path),
             final_message_path=str(final_message_path),
             command_path=str(command_path),
+            usage=usage,
         )
         result.validate()
         return result
@@ -836,6 +852,7 @@ class CodexDriver(BaseDriver):
         thread_id: str | None = None,
         event_count: int = 0,
         changed_files: tuple[str, ...] = (),
+        usage: TokenUsage | None = None,
     ) -> CodexNodeExecution:
         artifact_dir.mkdir(parents=True, exist_ok=True)
         result = CodexNodeExecution(
@@ -855,6 +872,7 @@ class CodexDriver(BaseDriver):
             command_path=str(artifact_dir / "command.json"),
             error_code=error_code,
             error_message=error_message,
+            usage=usage,
         )
         result.validate()
         return result

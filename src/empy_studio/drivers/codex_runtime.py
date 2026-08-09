@@ -18,6 +18,7 @@ from empy_studio.core import (
     ProjectDescriptor,
     TokenBudget,
 )
+from empy_studio.token_usage import TokenUsage
 
 from .codex import (
     CodexDriver,
@@ -79,6 +80,7 @@ class CodexGraphExecution:
     events: tuple[CodexProgressEvent, ...]
     error_code: CodexErrorCode | None = None
     error_message: str | None = None
+    usage: TokenUsage | None = None
 
     def validate(self) -> None:
         if self.schema_version != 1:
@@ -116,6 +118,7 @@ class CodexGraphExecution:
         value["installation"] = self.installation.to_dict()
         value["node_results"] = [item.to_dict() for item in self.node_results]
         value["events"] = [item.to_dict() for item in self.events]
+        value["usage"] = self.usage.to_dict() if self.usage is not None else None
         return value
 
 
@@ -441,6 +444,10 @@ class CodexGraphRuntime:
             events=tuple(events),
             error_code=terminal_error_code,
             error_message=terminal_error_message,
+            usage=TokenUsage.aggregate(
+                (node.usage for node in completed_nodes),
+                provider="codex",
+            ),
         )
         result.validate()
         return result
