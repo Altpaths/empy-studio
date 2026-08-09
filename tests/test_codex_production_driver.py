@@ -77,7 +77,7 @@ def test_missing_installation_has_clear_remediation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("empy_studio.drivers.codex.shutil.which", lambda value: None)
-    driver = CodexDriver(artifact_root=tmp_path)
+    driver = CodexDriver(artifact_root=tmp_path, fallback_executables=())
 
     installation = driver.inspect_installation()
 
