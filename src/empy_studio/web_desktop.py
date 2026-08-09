@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import parse_qs, urlparse
 
+from empy_studio.benchmark import BenchmarkResult, run_local_benchmark
 from empy_studio.core import (
     AgentRunGraph,
     ContextSelection,
@@ -31,11 +32,9 @@ from empy_studio.core import (
     lock_token_budget,
     mark_ready_for_planning,
 )
-from empy_studio.benchmark import (
-    BenchmarkResult,
+from empy_studio.core.project_brain import (
     ProjectBrainIndex,
     build_load_save_project_brain_index,
-    run_local_benchmark,
 )
 from empy_studio.drivers import (
     CodexDriver,
@@ -51,6 +50,7 @@ from empy_studio.project_delivery import (
     import_project_folder,
 )
 from empy_studio.review_workspace import ReviewReport, ReviewWorkspaceAdapter
+from empy_studio.token_usage import TokenUsage
 from empy_studio.vault import initialize_vault
 from empy_studio.verification_pipeline import (
     VerificationEvent,
@@ -223,11 +223,11 @@ class GuidedState:
     def _refresh_brain_index(self) -> ProjectBrainIndex:
         if self.active_project_id is None or self.detection is None:
             raise RuntimeError("Choose a project first.")
-        index = build_load_save_project_brain_index(
-            project_id=self.active_project_id,
-            project=self.detection,
-            path=self._brain_index_path(self.active_project_id),
+        result = build_load_save_project_brain_index(
+            self.detection.descriptor.root,
+            self._brain_index_path(self.active_project_id),
         )
+        index = result.index
         with self.lock:
             self.brain_index = index
         return index
@@ -321,7 +321,12 @@ class GuidedState:
         draft = generate_execution_plan(task=task, project=self.detection)
         plan = approve_execution_plan(draft, current_task=task)
         self._refresh_brain_index()
-        context = build_context_selection(task=task, project=self.detection, plan=plan)
+        context = build_context_selection(
+            task=task,
+            project=self.detection,
+            plan=plan,
+            brain_index=self.brain_index,
+        )
         budget = lock_token_budget(build_token_budget(plan=plan, selection=context))
         graph = build_agent_run_graph(plan=plan, selection=context, budget=budget)
         return plan, context, budget, graph
@@ -704,26 +709,29 @@ class GuidedState:
     def _provider_usage(self) -> dict[str, Any] | None:
         if self.run is None:
             return None
-        total = 0
-        for event in self.run.events:
-            raw = event.raw or {}
-            for key in (
-                "total_tokens",
-                "tokens",
-                "input_tokens",
-                "output_tokens",
-                "prompt_tokens",
-                "completion_tokens",
-            ):
-                value = raw.get(key)
-                if isinstance(value, int):
-                    total += value
+        usage = self.run.usage
+        if usage is None:
+            return {
+                "provider": self.run.provider,
+                "status": self.run.status,
+                "input_tokens": None,
+                "output_tokens": None,
+                "cached_input_tokens": None,
+                "total_tokens": None,
+                "available": False,
+                "source": "not_reported",
+            }
+        if not isinstance(usage, TokenUsage):
+            raise TypeError("Codex run usage must be a TokenUsage record")
         return {
             "provider": self.run.provider,
             "status": self.run.status,
-            "total_tokens": total if total else None,
-            "available": bool(total),
-            "source": "provider_events" if total else "not_reported",
+            "input_tokens": usage.input,
+            "output_tokens": usage.output,
+            "cached_input_tokens": usage.cached,
+            "total_tokens": usage.total,
+            "available": usage.total > 0,
+            "source": usage.source,
         }
 
 

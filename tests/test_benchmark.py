@@ -58,10 +58,11 @@ def test_project_brain_index_is_local_safe_and_reloadable(tmp_path: Path) -> Non
         path=tmp_path / "brain" / "project-1.json",
     )
 
-    assert second == first
+    assert second.records == first.records
+    assert second.stats()["reused_files"] == len(second.records)
     assert "src/app.py" in [item.relative_path for item in second.files]
     assert ".env" not in [item.relative_path for item in second.files]
-    assert second.stats()["file_count"] == len(second.files)
+    assert second.stats()["file_count"] == len(second.records)
 
 
 def test_benchmark_math_uses_same_task_and_bounded_selection(tmp_path: Path) -> None:

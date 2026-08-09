@@ -49,6 +49,22 @@ class TokenUsage:
     source: TokenUsageSource = "unknown"
     provider: str | None = None
 
+    @property
+    def input_tokens(self) -> int:
+        return self.input
+
+    @property
+    def output_tokens(self) -> int:
+        return self.output
+
+    @property
+    def cached_input_tokens(self) -> int:
+        return self.cached
+
+    @property
+    def total_tokens(self) -> int:
+        return self.total
+
     def __post_init__(self) -> None:
         self.validate()
 
@@ -75,11 +91,20 @@ class TokenUsage:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, object]) -> TokenUsage:
-        input_tokens = _as_int(value.get("input", 0), "input")
-        output_tokens = _as_int(value.get("output", 0), "output")
-        cached_tokens = _as_int(value.get("cached", 0), "cached")
+        input_tokens = _as_int(
+            value.get("input", value.get("input_tokens", 0)),
+            "input",
+        )
+        output_tokens = _as_int(
+            value.get("output", value.get("output_tokens", 0)),
+            "output",
+        )
+        cached_tokens = _as_int(
+            value.get("cached", value.get("cached_input_tokens", 0)),
+            "cached",
+        )
         total = _as_int(
-            value.get("total", input_tokens + output_tokens),
+            value.get("total", value.get("total_tokens", input_tokens + output_tokens)),
             "total",
         )
         source = str(value.get("source", "unknown"))

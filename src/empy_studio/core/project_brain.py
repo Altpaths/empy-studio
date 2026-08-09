@@ -5,9 +5,10 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Final, Iterable
+from typing import Final
 
 SCHEMA_VERSION: Final[int] = 1
 DEFAULT_MAX_SCAN_FILES: Final[int] = 5_000
@@ -192,7 +193,7 @@ class ProjectBrainRecord:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, object]) -> "ProjectBrainRecord":
+    def from_dict(cls, data: dict[str, object]) -> ProjectBrainRecord:
         return cls(
             relative_path=str(data["relative_path"]),
             sha256=str(data["sha256"]),
@@ -212,6 +213,7 @@ class ProjectBrainIndex:
     records: tuple[ProjectBrainRecord, ...]
     changed_paths: tuple[str, ...] = ()
     removed_paths: tuple[str, ...] = ()
+    reused_paths: tuple[str, ...] = ()
     skipped_paths: tuple[str, ...] = ()
     scan_limit_reached: bool = False
 
@@ -222,12 +224,13 @@ class ProjectBrainIndex:
             "records": [record.to_dict() for record in self.records],
             "changed_paths": list(self.changed_paths),
             "removed_paths": list(self.removed_paths),
+            "reused_paths": list(self.reused_paths),
             "skipped_paths": list(self.skipped_paths),
             "scan_limit_reached": self.scan_limit_reached,
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, object]) -> "ProjectBrainIndex":
+    def from_dict(cls, data: dict[str, object]) -> ProjectBrainIndex:
         return cls(
             schema_version=int(data.get("schema_version", SCHEMA_VERSION)),
             project_root=str(data.get("project_root") or ""),
@@ -238,18 +241,38 @@ class ProjectBrainIndex:
             ),
             changed_paths=tuple(str(item) for item in data.get("changed_paths", ())),
             removed_paths=tuple(str(item) for item in data.get("removed_paths", ())),
+            reused_paths=tuple(str(item) for item in data.get("reused_paths", ())),
             skipped_paths=tuple(str(item) for item in data.get("skipped_paths", ())),
             scan_limit_reached=bool(data.get("scan_limit_reached", False)),
         )
 
+    def stats(self) -> dict[str, object]:
+        return {
+            "source": "local_project_brain_index",
+            "file_count": len(self.records),
+            "total_bytes": sum(record.size for record in self.records),
+            "indexed_files": len(self.records),
+            "reused_files": len(self.reused_paths),
+            "changed_files": len(self.changed_paths),
+            "removed_files": len(self.removed_paths),
+            "skipped_files": len(self.skipped_paths),
+            "scan_limit_reached": self.scan_limit_reached,
+        }
+
     def record_map(self) -> dict[str, ProjectBrainRecord]:
         return {record.relative_path: record for record in self.records}
+
+    @property
+    def files(self) -> tuple[ProjectBrainRecord, ...]:
+        """Compatibility alias for callers that used the first index shape."""
+
+        return self.records
 
     def save(self, path: Path | str) -> None:
         save_project_brain_index(self, path)
 
     @classmethod
-    def load(cls, path: Path | str) -> "ProjectBrainIndex":
+    def load(cls, path: Path | str) -> ProjectBrainIndex:
         return load_project_brain_index(path)
 
 
@@ -266,7 +289,7 @@ def load_project_brain_index(path: Path | str) -> ProjectBrainIndex:
     raw = Path(path).read_text(encoding="utf-8")
     data = json.loads(raw)
     if not isinstance(data, dict):
-        raise ValueError("project brain index must be a JSON object")
+        raise TypeError("project brain index must be a JSON object")
     return ProjectBrainIndex.from_dict(data)
 
 
@@ -351,6 +374,7 @@ def build_project_brain_index(
         records=sorted_records,
         changed_paths=tuple(sorted(changed_paths)),
         removed_paths=tuple(removed_paths),
+        reused_paths=tuple(sorted(reused_paths)),
         skipped_paths=tuple(sorted(dict.fromkeys(skipped_paths))),
         scan_limit_reached=scan_limit_reached,
     )
@@ -420,9 +444,7 @@ def _should_skip_path(relative_path: str, *, is_directory: bool) -> bool:
         return True
     if any(name.endswith(suffix) for suffix in GENERATED_SUFFIXES):
         return True
-    if path.suffix.lower() in BINARY_EXTENSIONS:
-        return True
-    return False
+    return path.suffix.lower() in BINARY_EXTENSIONS
 
 
 def _is_sensitive(relative_path: str) -> bool:

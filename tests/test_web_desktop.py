@@ -5,7 +5,6 @@ from types import SimpleNamespace
 
 from empy_studio.review_workspace import ReviewReport
 from empy_studio.verification_pipeline import VerificationReport
-
 from empy_studio.web_desktop import GuidedState, RequestHandler
 
 
@@ -184,10 +183,12 @@ def test_brain_index_survives_restart(tmp_path: Path) -> None:
     first = GuidedState(tmp_path / "empy-workspace")
     first.import_path(str(source))
     project_id = first.active_project_id
+    brain_root = first.brain_index.project_root if first.brain_index is not None else None
 
     reopened = GuidedState(tmp_path / "empy-workspace")
 
     assert project_id is not None
     assert reopened.active_project_id == project_id
     assert reopened.brain_index is not None
-    assert reopened.brain_index.project_id == project_id
+    assert brain_root is not None
+    assert reopened.brain_index.project_root == brain_root
