@@ -44,6 +44,14 @@ Observed result:
 - Verified project releases are persisted in workspace schema v2 and are
   restored with archive, manifest, checksum, SHA-256, file count, and status.
 
+## Interactive UI smoke test
+
+Against a local loopback server, the in-app browser loaded the guided page,
+switched between Persian and English, displayed the Codex readiness state,
+rendered the imported project's three-node plan, displayed ticket history with
+`Resume ticket`, and rebuilt the plan after resuming the ticket. An unauthenticated
+`GET /api/state` returned HTTP `403`.
+
 The temporary acceptance workspace was:
 `/var/folders/f4/4dnx2gx111j1xbwz0lvkz63m0000gn/T/empy-e2e-fixed-jpvs9bh1`.
 The archive, manifest, checksum, run evidence, and verification evidence were

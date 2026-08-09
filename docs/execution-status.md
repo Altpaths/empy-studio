@@ -36,6 +36,8 @@ new product behavior is merged.
 - Workspace restart now restores the active project, active ticket, contract,
   plan, graph, and selectable ticket history.
 - Workspace schema v2 records and restores verified project release history.
+- Interactive loopback UI smoke test passed for bilingual toggle, plan,
+  ticket history/resume, Codex readiness, and unauthorized API rejection.
 - Detailed evidence: [`acceptance-evidence-2026-08-09.md`](acceptance-evidence-2026-08-09.md)
 - The PR is intentionally still draft; main has not been merged without the
   final integration decision.
