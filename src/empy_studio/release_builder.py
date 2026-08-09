@@ -20,6 +20,20 @@ from .release_manifest import ReleaseManifest
 from .release_version import ReleaseVersion
 
 RELEASE_BUILD_SCHEMA_VERSION = 1
+_RELEASE_EXCLUDED_DIRS = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "__pycache__",
+    }
+)
+_RELEASE_EXCLUDED_SUFFIXES = frozenset(
+    {
+        ".pyc",
+        ".pyo",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -179,9 +193,18 @@ def _archive_members(
             if not child.is_file():
                 continue
 
-            relative = child.relative_to(
+            relative_path = child.relative_to(
                 source_root
-            ).as_posix()
+            )
+            if any(
+                part in _RELEASE_EXCLUDED_DIRS
+                for part in relative_path.parts
+            ):
+                continue
+            if child.suffix.lower() in _RELEASE_EXCLUDED_SUFFIXES:
+                continue
+
+            relative = relative_path.as_posix()
             members[relative] = child
 
     return tuple(

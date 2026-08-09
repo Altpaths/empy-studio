@@ -168,6 +168,40 @@ def test_archive_contains_only_selected_paths(
         ]
 
 
+def test_archive_excludes_generated_python_files(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    package = source / "src" / "package"
+    cache = package / "__pycache__"
+    cache.mkdir(parents=True)
+    (package / "app.py").write_text(
+        "print('hello')\n",
+        encoding="utf-8",
+    )
+    (cache / "app.cpython-312.pyc").write_bytes(
+        b"generated",
+    )
+
+    result = build_release(
+        manifest(),
+        source_root=source,
+        include_paths=("src",),
+        changelog_path=write_changelog(
+            tmp_path
+        ),
+        output_dir=tmp_path / "dist",
+    )
+
+    with zipfile.ZipFile(
+        result.archive_path,
+        "r",
+    ) as archive:
+        assert archive.namelist() == [
+            "src/package/app.py"
+        ]
+
+
 def test_sha256_sidecar_matches_archive(
     tmp_path: Path,
 ) -> None:
