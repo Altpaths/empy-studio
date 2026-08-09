@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -8,9 +9,9 @@ from empy_studio.core import ProjectDescriptor
 from empy_studio.workspace import SQLiteWorkspaceStore
 
 
-def test_workspace_starts_at_schema_version_one(tmp_path: Path) -> None:
+def test_workspace_starts_at_schema_version_two(tmp_path: Path) -> None:
     store = SQLiteWorkspaceStore(tmp_path / "workspace.sqlite3")
-    assert store.schema_version() == 1
+    assert store.schema_version() == 2
 
 
 def test_projects_survive_store_restart(tmp_path: Path) -> None:
@@ -72,6 +73,16 @@ def test_tasks_runs_and_settings_are_persistent(tmp_path: Path) -> None:
         status="planned",
         contract={"constraints": ["Do not redesign"], "plan_id": "plan-1"},
     )
+    release = store.create_release(
+        task_id=task.task_id,
+        project_id=project.project_id,
+        archive_path="releases/project.zip",
+        manifest_path="releases/project.manifest.json",
+        checksum_path="releases/project.zip.sha256",
+        sha256="abc123",
+        file_count=4,
+        verified=True,
+    )
 
     reopened = SQLiteWorkspaceStore(database)
 
@@ -82,6 +93,8 @@ def test_tasks_runs_and_settings_are_persistent(tmp_path: Path) -> None:
     assert reopened.get_task(task.task_id).status == "planned"
     assert reopened.get_run(run.run_id).state == "completed"
     assert reopened.get_setting("appearance") == {"theme": "system"}
+    assert reopened.list_task_releases(task.task_id)[0].release_id == release.release_id
+    assert reopened.list_releases(project.project_id)[0].file_count == 4
 
 
 def test_removing_project_cascades_tasks_and_runs(tmp_path: Path) -> None:
@@ -113,8 +126,6 @@ def test_removing_project_cascades_tasks_and_runs(tmp_path: Path) -> None:
 
 
 def test_future_schema_is_rejected(tmp_path: Path) -> None:
-    import sqlite3
-
     database = tmp_path / "workspace.sqlite3"
     connection = sqlite3.connect(database)
     connection.execute(
@@ -128,3 +139,18 @@ def test_future_schema_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="newer"):
         SQLiteWorkspaceStore(database)
+
+
+def test_schema_one_workspace_migrates_releases_table(tmp_path: Path) -> None:
+    database = tmp_path / "workspace.sqlite3"
+    SQLiteWorkspaceStore(database)
+    connection = sqlite3.connect(database)
+    connection.execute("UPDATE schema_meta SET value = '1' WHERE key = 'schema_version'")
+    connection.execute("DROP TABLE releases")
+    connection.commit()
+    connection.close()
+
+    migrated = SQLiteWorkspaceStore(database)
+
+    assert migrated.schema_version() == 2
+    assert migrated.list_releases("missing") == ()

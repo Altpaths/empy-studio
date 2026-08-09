@@ -20,6 +20,7 @@ from empy_studio.core import (
     ExecutionPlan,
     ProductTask,
     ProjectDetection,
+    TaskKind,
     TokenBudget,
     approve_execution_plan,
     build_agent_run_graph,
@@ -175,7 +176,7 @@ class GuidedState:
                     "root": project.root,
                     "type": project.project_type,
                     "last_opened_at": project.last_opened_at,
-                    "tasks": [
+                        "tasks": [
                         {
                             "id": task.task_id,
                             "title": task.title,
@@ -183,6 +184,18 @@ class GuidedState:
                             "updated_at": task.updated_at,
                         }
                         for task in self.store.list_tasks(project.project_id)
+                    ],
+                    "releases": [
+                        {
+                            "id": release.release_id,
+                            "task_id": release.task_id,
+                            "sha256": release.sha256,
+                            "file_count": release.file_count,
+                            "verified": release.verified,
+                            "archive_path": release.archive_path,
+                            "created_at": release.created_at,
+                        }
+                        for release in self.store.list_releases(project.project_id)
                     ],
                 }
             )
@@ -256,10 +269,13 @@ class GuidedState:
         raw_task = contract.get("task") if isinstance(contract, dict) else None
         if not isinstance(raw_task, dict):
             raise TypeError("saved task contract is missing its task payload")
+        kind_value = str(raw_task["kind"])
+        if kind_value not in {"bug_fix", "feature", "ui_improvement", "audit", "release", "custom"}:
+            raise ValueError("saved task contract has an unsupported task kind")
         task = ProductTask(
             task_id=str(raw_task["task_id"]),
             project_root=str(raw_task["project_root"]),
-            kind=str(raw_task["kind"]),
+            kind=cast(TaskKind, kind_value),
             title=str(raw_task["title"]),
             objective=str(raw_task["objective"]),
             requirements=tuple(str(item) for item in raw_task["requirements"]),
@@ -291,6 +307,21 @@ class GuidedState:
             raise ValueError("task does not belong to the selected project")
         task = self._task_from_contract(saved)
         plan, context, budget, graph = self._materialize_workflow(task)
+        releases = self.store.list_task_releases(task.task_id)
+        latest_release = releases[0] if releases else None
+        restored_export = (
+            ExportedProject(
+                project_root=self.detection.descriptor.root,
+                archive_path=Path(latest_release.archive_path),
+                manifest_path=Path(latest_release.manifest_path),
+                checksum_path=Path(latest_release.checksum_path),
+                sha256=latest_release.sha256,
+                file_count=latest_release.file_count,
+                verified=latest_release.verified,
+            )
+            if latest_release is not None
+            else None
+        )
         with self.lock:
             self.active_task_id = task.task_id
             self.task = task
@@ -301,7 +332,7 @@ class GuidedState:
             self.run = None
             self.verification = None
             self.review = None
-            self.export = None
+            self.export = restored_export
             self.node_states = {node.node_id: "waiting" for node in graph.nodes}
             self.phase = "plan"
             self.error = None
@@ -508,6 +539,17 @@ class GuidedState:
         )
         exported = export_project_zip(self.detection.descriptor.root, target)
         self.export = exported
+        if self.active_project_id is not None and self.active_task_id is not None:
+            self.store.create_release(
+                task_id=self.active_task_id,
+                project_id=self.active_project_id,
+                archive_path=str(exported.archive_path),
+                manifest_path=str(exported.manifest_path),
+                checksum_path=str(exported.checksum_path),
+                sha256=exported.sha256,
+                file_count=exported.file_count,
+                verified=exported.verified,
+            )
         self.message = "فایل ZIP تک‌ریشه و قابل استخراج آماده شد."
         if self.active_task_id is not None:
             self.store.update_task(self.active_task_id, status="released")

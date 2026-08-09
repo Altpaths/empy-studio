@@ -96,3 +96,33 @@ class WorkspaceRun:
             raise ValueError(f"unsupported run state: {self.state}")
         if not self.summary.strip():
             raise ValueError("summary cannot be empty")
+
+
+@dataclass(frozen=True)
+class WorkspaceRelease:
+    release_id: str
+    task_id: str
+    project_id: str
+    archive_path: str
+    manifest_path: str
+    checksum_path: str
+    sha256: str
+    file_count: int
+    verified: bool
+    created_at: str
+
+    def validate(self) -> None:
+        for name, value in (
+            ("release_id", self.release_id),
+            ("task_id", self.task_id),
+            ("project_id", self.project_id),
+            ("archive_path", self.archive_path),
+            ("manifest_path", self.manifest_path),
+            ("checksum_path", self.checksum_path),
+            ("sha256", self.sha256),
+            ("created_at", self.created_at),
+        ):
+            if not value.strip():
+                raise ValueError(f"{name} cannot be empty")
+        if self.file_count < 0:
+            raise ValueError("file_count cannot be negative")

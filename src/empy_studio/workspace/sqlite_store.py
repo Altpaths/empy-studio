@@ -12,12 +12,13 @@ from typing import Any
 from empy_studio.core import ProjectDescriptor
 from empy_studio.core.workspace_models import (
     WorkspaceProject,
+    WorkspaceRelease,
     WorkspaceRun,
     WorkspaceTask,
     utc_now_iso,
 )
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def default_workspace_path() -> Path:
@@ -120,6 +121,29 @@ class SQLiteWorkspaceStore:
                 CREATE INDEX idx_tasks_project ON tasks(project_id, updated_at DESC);
                 CREATE INDEX idx_runs_project ON runs(project_id, updated_at DESC);
                 CREATE INDEX idx_runs_task ON runs(task_id, updated_at DESC);
+                """
+            )
+            connection.execute(
+                "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('schema_version', '1')"
+            )
+            current = 1
+        if current < 2:
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS releases (
+                    release_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+                    project_id TEXT NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+                    archive_path TEXT NOT NULL,
+                    manifest_path TEXT NOT NULL,
+                    checksum_path TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    file_count INTEGER NOT NULL,
+                    verified INTEGER NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_releases_project ON releases(project_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_releases_task ON releases(task_id, created_at DESC);
                 """
             )
             connection.execute(
@@ -402,6 +426,71 @@ class SQLiteWorkspaceStore:
             ).fetchall()
         return tuple(self._run_from_row(row) for row in rows)
 
+    def create_release(
+        self,
+        *,
+        task_id: str,
+        project_id: str,
+        archive_path: str,
+        manifest_path: str,
+        checksum_path: str,
+        sha256: str,
+        file_count: int,
+        verified: bool,
+        release_id: str | None = None,
+    ) -> WorkspaceRelease:
+        release = WorkspaceRelease(
+            release_id=release_id or uuid.uuid4().hex,
+            task_id=task_id,
+            project_id=project_id,
+            archive_path=archive_path,
+            manifest_path=manifest_path,
+            checksum_path=checksum_path,
+            sha256=sha256,
+            file_count=file_count,
+            verified=verified,
+            created_at=utc_now_iso(),
+        )
+        release.validate()
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO releases(
+                    release_id, task_id, project_id, archive_path, manifest_path,
+                    checksum_path, sha256, file_count, verified, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    release.release_id,
+                    release.task_id,
+                    release.project_id,
+                    release.archive_path,
+                    release.manifest_path,
+                    release.checksum_path,
+                    release.sha256,
+                    release.file_count,
+                    int(release.verified),
+                    release.created_at,
+                ),
+            )
+        return release
+
+    def list_releases(self, project_id: str) -> tuple[WorkspaceRelease, ...]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM releases WHERE project_id = ? ORDER BY created_at DESC",
+                (project_id,),
+            ).fetchall()
+        return tuple(self._release_from_row(row) for row in rows)
+
+    def list_task_releases(self, task_id: str) -> tuple[WorkspaceRelease, ...]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM releases WHERE task_id = ? ORDER BY created_at DESC",
+                (task_id,),
+            ).fetchall()
+        return tuple(self._release_from_row(row) for row in rows)
+
     def set_setting(self, key: str, value: Any) -> None:
         if not key.strip():
             raise ValueError("setting key cannot be empty")
@@ -470,4 +559,19 @@ class SQLiteWorkspaceStore:
             ),
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
+        )
+
+    @staticmethod
+    def _release_from_row(row: sqlite3.Row) -> WorkspaceRelease:
+        return WorkspaceRelease(
+            release_id=str(row["release_id"]),
+            task_id=str(row["task_id"]),
+            project_id=str(row["project_id"]),
+            archive_path=str(row["archive_path"]),
+            manifest_path=str(row["manifest_path"]),
+            checksum_path=str(row["checksum_path"]),
+            sha256=str(row["sha256"]),
+            file_count=int(row["file_count"]),
+            verified=bool(row["verified"]),
+            created_at=str(row["created_at"]),
         )
