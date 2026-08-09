@@ -12,6 +12,7 @@ from empy_studio.core import (
     ProductTask,
     approve_execution_plan,
     build_context_selection,
+    context_selector,
     generate_execution_plan,
 )
 from empy_studio.core.planner import PlanStep
@@ -180,7 +181,10 @@ def test_symlink_is_never_followed(tmp_path: Path) -> None:
     )
 
 
-def test_optional_project_brain_boosts_indexed_symbol_relevance(tmp_path: Path) -> None:
+def test_optional_project_brain_boosts_indexed_symbol_relevance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "brain-demo"\n',
         encoding="utf-8",
@@ -230,6 +234,11 @@ def test_optional_project_brain_boosts_indexed_symbol_relevance(tmp_path: Path) 
         ),
     )
     brain = build_project_brain_index(tmp_path).index
+    monkeypatch.setattr(
+        context_selector.os,
+        "walk",
+        lambda *_args, **_kwargs: pytest.fail("context selection should use the Project Brain index"),
+    )
     policy = ContextPolicy(
         max_files_per_pack=1,
         max_bytes_per_file=512,

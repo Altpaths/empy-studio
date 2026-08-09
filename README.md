@@ -42,6 +42,11 @@ Empy Studio addresses these failures with a small set of enforceable contracts.
 - **Runtime verification** — command, artifact, and external-check status tracking.
 - **Validated learning** — reusable patterns are promoted only after evidence.
 - **Complete delivery** — one synchronized release package by default.
+- **Incremental Project Brain** — unchanged project records are reused and
+  bounded Context Packs avoid repeating repository-wide discovery on each
+  ticket.
+- **Token evidence** — local context estimates and provider-reported Codex
+  usage are shown separately; missing provider usage is never guessed.
 
 ## Designed to stay small
 

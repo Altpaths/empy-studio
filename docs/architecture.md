@@ -5,9 +5,9 @@ Empy Studio separates durable project knowledge from short-lived agent context.
 ```text
                  Project Vault
                       │
-Request → Planner → Task Graph → Agent Host
+Request → Project Brain → Planner → Task Graph → Agent Host
                       │              │
-                File Ownership   Handoffs
+          bounded Context Packs  Handoffs
                       │              │
                       └── Verification ──┐
                                         ↓
@@ -23,6 +23,18 @@ Request → Planner → Task Graph → Agent Host
 ### Orchestrator
 
 Creates dependency-aware tasks, execution waves, agent roles, and write scopes.
+
+### Project Brain and context selector
+
+`core/project_brain.py` maintains a safe, incremental manifest of project files,
+lightweight language/import/symbol hints, and content hashes. On a follow-up
+ticket, unchanged records are reused and the context selector consumes the
+manifest instead of walking the repository again. The selector still reads
+only the small files selected for the approved agent packs.
+
+The local benchmark compares a full-repository estimate with the bounded packs.
+It is deliberately provider-neutral; provider-reported usage is captured
+separately by the driver and never presented as a local estimate.
 
 ### Runtime verifier
 

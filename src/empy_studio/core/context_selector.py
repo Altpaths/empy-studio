@@ -412,6 +412,12 @@ def _discover_candidates(
     policy: ContextPolicy,
     brain_index: ProjectBrainIndex | None = None,
 ) -> tuple[tuple[_Candidate, ...], tuple[ContextExclusion, ...]]:
+    if (
+        brain_index is not None
+        and Path(brain_index.project_root).expanduser().resolve() == root.resolve()
+    ):
+        return _discover_indexed_candidates(root, policy, brain_index)
+
     candidates: list[_Candidate] = []
     exclusions: list[ContextExclusion] = []
     excluded_directories = set(policy.excluded_directories)
@@ -504,6 +510,96 @@ def _discover_candidates(
                     )
                 )
                 return tuple(candidates), tuple(exclusions)
+
+    return tuple(candidates), tuple(exclusions)
+
+
+def _discover_indexed_candidates(
+    root: Path,
+    policy: ContextPolicy,
+    brain_index: ProjectBrainIndex,
+) -> tuple[tuple[_Candidate, ...], tuple[ContextExclusion, ...]]:
+    """Use the Project Brain manifest instead of walking the repository again."""
+
+    candidates: list[_Candidate] = []
+    exclusions: list[ContextExclusion] = []
+    excluded_directories = {item.lower() for item in policy.excluded_directories}
+
+    for record in brain_index.records:
+        relative = record.relative_path
+        parts = Path(relative).parts
+        if any(part.lower() in excluded_directories for part in parts[:-1]):
+            exclusions.append(
+                ContextExclusion(
+                    relative_path=relative,
+                    reason="excluded directory",
+                    protected=False,
+                )
+            )
+            continue
+        if _is_sensitive(relative):
+            exclusions.append(
+                ContextExclusion(
+                    relative_path=relative,
+                    reason="sensitive file rule",
+                    protected=True,
+                )
+            )
+            continue
+
+        path = (root / relative).resolve()
+        if root not in path.parents or path.is_symlink():
+            exclusions.append(
+                ContextExclusion(
+                    relative_path=relative,
+                    reason="indexed path is outside the project or is a symlink",
+                    protected=True,
+                )
+            )
+            continue
+        try:
+            stat = path.stat()
+        except OSError:
+            exclusions.append(
+                ContextExclusion(
+                    relative_path=relative,
+                    reason="file metadata could not be read",
+                    protected=False,
+                )
+            )
+            continue
+        if stat.st_size > policy.max_candidate_file_bytes:
+            exclusions.append(
+                ContextExclusion(
+                    relative_path=relative,
+                    reason="candidate exceeds maximum file size",
+                    protected=False,
+                )
+            )
+            continue
+
+        current_record = (
+            record
+            if stat.st_size == record.size and stat.st_mtime_ns == record.mtime_ns
+            else None
+        )
+        candidates.append(
+            _Candidate(
+                path=path,
+                relative_path=relative,
+                size_bytes=stat.st_size,
+                brain_record=current_record,
+            )
+        )
+        if len(candidates) >= policy.max_candidates:
+            exclusions.append(
+                ContextExclusion(
+                    relative_path="./",
+                    reason="candidate scan limit reached",
+                    protected=False,
+                )
+            )
+            break
 
     return tuple(candidates), tuple(exclusions)
 

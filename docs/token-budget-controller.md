@@ -2,8 +2,9 @@
 
 ## Purpose
 
-Ticket 9 adds a provider-neutral budget boundary between the visible Context
-Packs and any future agent dispatch. It does not execute an AI provider.
+The controller is the provider-neutral budget boundary between visible Context
+Packs and agent dispatch. It remains responsible for preflight limits; the
+Codex driver separately records provider-reported usage when the CLI emits it.
 
 The controller makes four limits explicit before a run:
 
@@ -27,18 +28,24 @@ estimate, response allowance, retry pool, handoff pool, planning allowance and
 reserve. A caller may also provide a smaller explicit `hard_total_limit`; Empy
 rejects a budget that cannot fit inside it.
 
-## Token estimate
+## Token estimate and measured usage
 
-Ticket 9 intentionally does not depend on a provider tokenizer. ASCII content
-uses a conservative four-characters-per-token estimate. Non-ASCII content uses
-a two-characters-per-token estimate. Future provider drivers may replace this
-estimate with exact usage while preserving the same budget contracts.
+Preflight planning uses a deterministic estimate and never blocks on a provider
+tokenizer. ASCII content uses a conservative four-characters-per-token
+estimate; non-ASCII content uses a two-characters-per-token estimate. The
+Project Brain and bounded Context Packs reduce the amount sent to an agent.
+
+After a Codex run, `TokenUsage` records input, output, cached-input, total,
+provider, and source fields from structured events. If a provider omits usage,
+Empy reports `not_reported` rather than turning an estimate into a false exact
+value. The local benchmark and provider usage are shown as separate signals.
 
 ## Locking
 
 A budget starts as `draft`. The user can change the preset and recalculate it.
 Selecting **Lock Run Limits** freezes the budget. A run state cannot be created
-from an unlocked budget.
+from an unlocked budget. Actual provider usage is evidence after the run; it
+does not silently rewrite the approved hard limit.
 
 ## Loop prevention
 

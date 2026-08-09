@@ -43,19 +43,19 @@ function banner() {
 }
 function projectList() {
   const projects = state.projects || [];
-  return projects.length ? projects.map(project => `<button class="project ${project.id === state.active_project?.id ? "active" : ""}" onclick="selectProject('${escapeHtml(project.id)}')"><strong>${escapeHtml(project.name)}</strong><small>${escapeHtml(project.type)} · ${project.tasks.length} ${language === "fa" ? "تیکت" : "tickets"}</small></button>`).join("") : `<p class="muted">${text().noProject}</p>`;
+  return projects.length ? projects.map(project => `<button type="button" class="project ${project.id === state.active_project?.id ? "active" : ""}" data-action="select-project" data-project-id="${escapeHtml(project.id)}"><strong>${escapeHtml(project.name)}</strong><small>${escapeHtml(project.type)} · ${project.tasks.length} ${language === "fa" ? "تیکت" : "tickets"}</small></button>`).join("") : `<p class="muted">${text().noProject}</p>`;
 }
 function renderProject() {
   const engine = state.engine || {};
-  return `<div class="grid"><div class="card"><h1>${text().project}</h1><p class="muted">${language === "fa" ? "Empy یک کپی ایزوله می‌سازد و اصل پروژه را تغییر نمی‌دهد." : "Empy creates an isolated copy and never changes the original project."}</p><input id="path" placeholder="${text().import}"><div class="actions"><button class="primary" onclick="importPath()">${text().importButton}</button><button class="secondary" onclick="chooseFolder()">${text().folder}</button></div></div><div class="card"><h2>${text().project}</h2><div class="project-list">${projectList()}</div><div class="engine"><strong>${text().engine}: ${engine.ready ? text().ready : text().unavailable}</strong><small>${escapeHtml(engine.message || "")}</small></div></div></div>`;
+  return `<div class="grid"><div class="card"><h1>${text().project}</h1><p class="muted">${language === "fa" ? "Empy یک کپی ایزوله می‌سازد و اصل پروژه را تغییر نمی‌دهد." : "Empy creates an isolated copy and never changes the original project."}</p><input id="path" placeholder="${text().import}"><div class="actions"><button type="button" class="primary" data-action="import-path">${text().importButton}</button><button type="button" class="secondary" data-action="choose-folder">${text().folder}</button></div></div><div class="card"><h2>${text().project}</h2><div class="project-list">${projectList()}</div><div class="engine"><strong>${text().engine}: ${engine.ready ? text().ready : text().unavailable}</strong><small>${escapeHtml(engine.message || "")}</small></div></div></div>`;
 }
 function renderTask() {
   const tasks = state.tasks || [];
-  return `<div class="card"><div class="row"><div><h1>${text().tasks}</h1><p class="muted">${escapeHtml(state.active_project?.name || "")}</p></div><button class="secondary" onclick="resetProject()">${text().newProject}</button></div><textarea id="tasks" placeholder="${text().taskHint}"></textarea><div class="actions"><button class="primary" onclick="buildPlan()">${text().plan}</button></div><h2>${language === "fa" ? "تاریخچه تیکت‌ها" : "Ticket history"}</h2><div class="task-list">${tasks.length ? tasks.map(task => `<button class="task ${task.id === state.active_task_id ? "active" : ""}" onclick="selectTask('${escapeHtml(task.id)}')"><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.status)} · ${text().resume}</small></button>`).join("") : `<p class="muted">${text().noTask}</p>`}</div></div>`;
+  return `<div class="card"><div class="row"><div><h1>${text().tasks}</h1><p class="muted">${escapeHtml(state.active_project?.name || "")}</p></div><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div><textarea id="tasks" placeholder="${text().taskHint}"></textarea><div class="actions"><button type="button" class="primary" data-action="build-plan">${text().plan}</button></div><h2>${language === "fa" ? "تاریخچه تیکت‌ها" : "Ticket history"}</h2><div class="task-list">${tasks.length ? tasks.map(task => `<button type="button" class="task ${task.id === state.active_task_id ? "active" : ""}" data-action="select-task" data-task-id="${escapeHtml(task.id)}"><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.status)} · ${text().resume}</small></button>`).join("") : `<p class="muted">${text().noTask}</p>`}</div></div>`;
 }
 function renderPlan() {
   const plan = state.plan || {}; const nodes = plan.nodes || [];
-  return `<div class="card"><h1>${language === "fa" ? "برنامه آماده است" : "Plan is ready"}</h1><div class="stats"><div><small>${text().files}</small><strong>${plan.selected_files || 0}</strong></div><div><small>${text().tokens}</small><strong>${Number(plan.token_limit || 0).toLocaleString()}</strong></div><div><small>${language === "fa" ? "ایجنت" : "agents"}</small><strong>${plan.agents || 0}</strong></div></div>${renderBenchmark()}<div class="node-list">${nodes.map(node => `<div class="node"><span>${escapeHtml(node.role)}</span><strong>${escapeHtml(node.title)}</strong><small>${node.owned_files?.length || 0} ${text().files}</small></div>`).join("")}</div><div class="actions"><button class="primary" onclick="startRun()" ${state.engine?.ready ? "" : "disabled"}>${text().start}</button><button class="secondary" onclick="runBenchmark()">${text().runBenchmark}</button><button class="secondary" onclick="goTask()">${language === "fa" ? "ویرایش تیکت" : "Edit ticket"}</button></div></div>`;
+  return `<div class="card"><h1>${language === "fa" ? "برنامه آماده است" : "Plan is ready"}</h1><div class="stats"><div><small>${text().files}</small><strong>${plan.selected_files || 0}</strong></div><div><small>${text().tokens}</small><strong>${Number(plan.token_limit || 0).toLocaleString()}</strong></div><div><small>${language === "fa" ? "ایجنت" : "agents"}</small><strong>${plan.agents || 0}</strong></div></div>${renderBenchmark()}<div class="node-list">${nodes.map(node => `<div class="node"><span>${escapeHtml(node.role)}</span><strong>${escapeHtml(node.title)}</strong><small>${node.owned_files?.length || 0} ${text().files}</small></div>`).join("")}</div><div class="actions"><button type="button" class="primary" data-action="start-run" ${state.engine?.ready ? "" : "disabled"}>${text().start}</button><button type="button" class="secondary" data-action="run-benchmark">${text().runBenchmark}</button><button type="button" class="secondary" data-action="go-task">${language === "fa" ? "ویرایش تیکت" : "Edit ticket"}</button></div></div>`;
 }
 function renderBenchmark() {
   const brain = state.brain || {}; const budget = state.budget || {}; const benchmark = state.benchmark || null; const usage = state.provider_usage || {};
@@ -67,9 +67,9 @@ function renderRun() {
 }
 function renderResult() {
   const review = state.review || {files:[], pending_count:0}; const verification = state.verification || {};
-  return `<div class="card"><h1>${text().result}</h1><div class="quality ${verification.finalized_at ? "pass" : "fail"}">${verification.finalized_at ? "✓" : "!"} ${escapeHtml(verification.status || "unknown")}</div><div class="file-list">${(review.files || []).map(file => `<div class="file"><strong>${escapeHtml(file.relative_path)}</strong><small>${escapeHtml(file.decision)}</small><pre>${escapeHtml(file.diff_text || "")}</pre></div>`).join("") || `<p class="muted">${language === "fa" ? "تغییری ثبت نشده است." : "No changes recorded."}</p>`}</div><div class="actions"><button class="primary" onclick="decide('accept')">${text().accept}</button><button class="danger" onclick="decide('revert')">${text().revert}</button><button class="secondary" onclick="exportProject()" ${review.pending_count || !verification.finalized_at ? "disabled" : ""}>${text().export}</button></div></div>`;
+  return `<div class="card"><h1>${text().result}</h1><div class="quality ${verification.finalized_at ? "pass" : "fail"}">${verification.finalized_at ? "✓" : "!"} ${escapeHtml(verification.status || "unknown")}</div><div class="file-list">${(review.files || []).map(file => `<div class="file"><strong>${escapeHtml(file.relative_path)}</strong><small>${escapeHtml(file.decision)}</small><pre>${escapeHtml(file.diff_text || "")}</pre></div>`).join("") || `<p class="muted">${language === "fa" ? "تغییری ثبت نشده است." : "No changes recorded."}</p>`}</div><div class="actions"><button type="button" class="primary" data-action="decide" data-decision="accept">${text().accept}</button><button type="button" class="danger" data-action="decide" data-decision="revert">${text().revert}</button><button type="button" class="secondary" data-action="export-project" ${review.pending_count || !verification.finalized_at ? "disabled" : ""}>${text().export}</button></div></div>`;
 }
-function renderSaved() { return `<div class="card center"><h1>✓</h1><h2>${language === "fa" ? "خروجی آماده است" : "Export is ready"}</h2><p class="muted">${escapeHtml(state.export?.archive_path || "")}</p><button class="secondary" onclick="resetProject()">${text().newProject}</button></div>`; }
+function renderSaved() { return `<div class="card center"><h1>✓</h1><h2>${language === "fa" ? "خروجی آماده است" : "Export is ready"}</h2><p class="muted">${escapeHtml(state.export?.archive_path || "")}</p><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div>`; }
 function render() {
   if (!state) return; language = state.language || language; banner(); let html = "";
   if (state.export) html = renderSaved(); else if (!state.active_project) html = renderProject(); else if (state.phase === "task") html = renderTask(); else if (state.phase === "plan") html = renderPlan(); else if (state.phase === "run") html = renderRun(); else html = renderResult();
@@ -78,16 +78,42 @@ function render() {
 }
 async function refresh() { try { state = await api("/api/state"); render(); } catch (error) { document.querySelector("#notice").textContent = error.message; document.querySelector("#notice").classList.remove("hidden"); } }
 function loading() { document.querySelector("#screen").innerHTML = `<div class="card center"><div class="spinner"></div><p>${language === "fa" ? "لطفاً صبر کنید…" : "Please wait…"}</p></div>`; }
-window.importPath = async () => { loading(); try { state = await api("/api/import", {path: document.querySelector("#path").value}); render(); } catch (error) { await refresh(); } };
-window.chooseFolder = async () => { loading(); try { state = await api("/api/select-folder", {}); render(); } catch (error) { await refresh(); } };
-window.selectProject = async id => { loading(); try { state = await api("/api/project/select", {project_id:id}); render(); } catch (error) { await refresh(); } };
-window.selectTask = async id => { loading(); try { state = await api("/api/task/select", {task_id:id}); render(); } catch (error) { await refresh(); } };
-window.buildPlan = async () => { loading(); try { state = await api("/api/plan", {tasks: document.querySelector("#tasks").value}); render(); } catch (error) { await refresh(); } };
-window.runBenchmark = async () => { loading(); try { state = await api("/api/benchmark", {}); render(); } catch (error) { await refresh(); } };
-window.startRun = async () => { loading(); try { state = await api("/api/run", {}); render(); } catch (error) { await refresh(); } };
-window.decide = async decision => { loading(); try { state = await api("/api/decision", {decision}); render(); } catch (error) { await refresh(); } };
-window.exportProject = async () => { loading(); try { state = await api("/api/export", {}); render(); } catch (error) { await refresh(); } };
-window.goTask = () => { state.phase = "task"; render(); };
-window.resetProject = async () => { loading(); try { state = await api("/api/reset", {}); render(); } catch (error) { await refresh(); } };
-document.querySelector("#language").onclick = async () => { language = language === "fa" ? "en" : "fa"; try { state = await api("/api/language", {language}); render(); } catch (error) { await refresh(); } };
+async function runAction(action) {
+  loading();
+  try { state = await action(); render(); } catch (error) { await refresh(); }
+}
+async function handleAction(action, target) {
+  switch (action) {
+    case "import-path": {
+      const path = document.querySelector("#path")?.value.trim() || "";
+      await runAction(() => api("/api/import", {path}));
+      break;
+    }
+    case "choose-folder": await runAction(() => api("/api/select-folder", {})); break;
+    case "select-project": await runAction(() => api("/api/project/select", {project_id: target.dataset.projectId})); break;
+    case "select-task": await runAction(() => api("/api/task/select", {task_id: target.dataset.taskId})); break;
+    case "build-plan": {
+      const tasks = document.querySelector("#tasks")?.value.trim() || "";
+      await runAction(() => api("/api/plan", {tasks}));
+      break;
+    }
+    case "run-benchmark": await runAction(() => api("/api/benchmark", {})); break;
+    case "start-run": await runAction(() => api("/api/run", {})); break;
+    case "decide": await runAction(() => api("/api/decision", {decision: target.dataset.decision})); break;
+    case "export-project": await runAction(() => api("/api/export", {})); break;
+    case "reset-project": await runAction(() => api("/api/reset", {})); break;
+    case "go-task": state.phase = "task"; render(); break;
+    default: break;
+  }
+}
+document.querySelector("#screen").addEventListener("click", event => {
+  const target = event.target instanceof Element ? event.target.closest("[data-action]") : null;
+  if (!target || target.disabled) return;
+  event.preventDefault();
+  void handleAction(target.dataset.action, target);
+});
+document.querySelector("#language").addEventListener("click", () => {
+  language = language === "fa" ? "en" : "fa";
+  void runAction(() => api("/api/language", {language}));
+});
 refresh();

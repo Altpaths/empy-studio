@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import mimetypes
 import secrets
 import subprocess
 import threading
@@ -74,13 +75,17 @@ DEFAULT_DEFINITION_OF_DONE = (
 )
 
 
+def _content_type_for_asset(target: Path) -> str:
+    return mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+
+
 def _now() -> str:
     return time.strftime("%H:%M:%S")
 
 
 def _json_safe(value: Any) -> Any:
     if is_dataclass(value):
-        return _json_safe(asdict(value))
+        return _json_safe(asdict(cast(Any, value)))
     if hasattr(value, "to_dict"):
         return _json_safe(value.to_dict())
     if isinstance(value, Path):
@@ -673,7 +678,7 @@ class GuidedState:
             provider_usage = self._provider_usage()
             review = self.review.to_dict() if self.review is not None else None
             verification = self.verification.to_dict() if self.verification is not None else None
-            return _json_safe(
+            return cast(dict[str, Any], _json_safe(
                 {
                     "language": self.language,
                     "phase": "saved" if self.export else self.phase,
@@ -704,7 +709,7 @@ class GuidedState:
                         "remediation": inspection.remediation,
                     },
                 }
-            )
+            ))
 
     def _provider_usage(self) -> dict[str, Any] | None:
         if self.run is None:
@@ -797,7 +802,9 @@ class RequestHandler(BaseHTTPRequestHandler):
     def _send_static(self, target: Path, content_type: str) -> None:
         body = target.read_bytes()
         self.send_response(200)
-        self.send_header("Content-Type", f"{content_type}; charset=utf-8")
+        if content_type.startswith("text/") or content_type == "application/javascript":
+            content_type = f"{content_type}; charset=utf-8"
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -813,8 +820,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             if self.app.web_root not in target.parents or not target.is_file():
                 self.send_error(404)
                 return
-            content_type = "text/css" if target.suffix == ".css" else "application/javascript"
-            self._send_static(target, content_type)
+            self._send_static(target, _content_type_for_asset(target))
             return
         if not self._authorized():
             self._send_json({"error": "unauthorized"}, 403)
@@ -899,7 +905,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     workspace = args.workspace or (Path.home() / "Library" / "Application Support" / "Empy Studio")
     server = create_server(workspace=workspace, token=args.token, port=args.port)
-    host, actual_port = server.server_address
+    address = cast(tuple[str, int], server.server_address)
+    host, actual_port = address
     url = f"http://{host}:{actual_port}/?token={server.token}"
     print(url, flush=True)
     if not args.no_open:

@@ -21,6 +21,12 @@ opens it in the default browser. API requests without the token are rejected.
    evidence.
 5. Accept or revert the changes and export a direct single-root project ZIP.
 
+The header uses the EMPY brand asset. The plan screen exposes a provider-free
+local benchmark for full versus bounded context, while completed runs expose
+provider usage only when the driver receives structured usage events. Project
+Brain reuse and context selection are persisted per imported project so a
+follow-up ticket does not repeat the full discovery pass.
+
 The SQLite workspace records project and ticket history. Resetting the current
 screen clears the active selection but does not delete an imported project or
 its evidence.
@@ -34,6 +40,9 @@ its evidence.
 - The UI does not install a remote script automatically. Provider installation
   and authentication remain explicit user actions.
 - The UI never commits, pushes, merges, tags, or publishes a project.
+- Browser actions use one event-delegation boundary rather than inline global
+  handlers, keeping the local UI compatible with a stricter content-security
+  policy.
 
 Hosts that already provide an external sandbox may explicitly inject a
 `CodexDriver(sandbox_mode="danger-full-access")` for a controlled integration
