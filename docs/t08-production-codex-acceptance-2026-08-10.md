@@ -1,8 +1,8 @@
 # Ticket 8 — Production Codex driver acceptance evidence
 
 Date: 2026-08-10
-Branch: `agent/t08-production-codex-20260810`
-Baseline: `e53512c`
+Branch: `agent/t08-cli-compat-20260810`
+Baseline: `141ea60`
 
 ## FACT
 
@@ -16,30 +16,36 @@ Baseline: `e53512c`
   starting a model turn or reading credential files.
 - Host readiness failures are persisted as an actionable `sandbox_error`; the
   runtime never silently downgrades a node to unrestricted access.
-- Targeted acceptance: 27 tests passed.
-- Full suite: 527 tests passed in 6.88 seconds.
+- The adapter no longer emits the removed Codex `--ask-for-approval` option.
+- Explicitly selected non-Git projects receive `--skip-git-repo-check`; Git
+  projects retain the normal trust check.
+- Targeted acceptance: 26 tests passed after the compatibility fix.
+- Full suite: 527 tests passed in 6.85 seconds.
 - Ruff: passed for `src` and `tests`.
 - MyPy: `Success: no issues found in 115 source files`.
 - Python `compileall`: passed.
-- A real local Codex preflight check found `codex-cli 0.146.0`, successful
-  authentication, and the host diagnostic `path_aliases`.
+- The normal macOS Terminal now reports `codex-cli 0.147.0`, successful
+  authentication, and a clean `codex exec --help` check.
+- A direct, ephemeral, read-only provider smoke returned
+  `EMPY_T08_SMOKE_OK`; usage was 12,776 input and 11 output tokens.
+- The real Empy adapter smoke completed against an isolated non-Git fixture,
+  returned `EMPY_T08_ADAPTER_OK`, persisted 4 JSONL events, and exited with
+  return code 0.
 
-## BLOCKED
+## RESOLVED
 
-- A real provider model turn was not run on this host. Codex emits
-  `could not create PATH aliases: Operation not permitted` during local
-  commands, so Empy correctly reports the environment as unavailable with
-  `sandbox_error`. This is an external host-permission limitation, not a
-  failed unit or fake-CLI acceptance test.
+- The initial live acceptance exposed two real CLI compatibility failures:
+  the legacy approval flag and missing non-Git trust-check bypass. Both were
+  fixed in the isolated branch and revalidated with the real provider.
 
-## INFERENCE
+## ENVIRONMENT NOTE
 
-- The fake-CLI subprocess contract and the existing deterministic tests cover
-  the driver event, usage, timeout, cancellation, and evidence paths without
-  spending provider tokens. A live provider acceptance must still be repeated
-  after the host Codex installation is repaired.
+- Running Codex from a more restricted nested sandbox can still produce a
+  host state-database or PATH-helper permission error. Empy preserves that as
+  a fail-closed `sandbox_error`; it does not disable the sandbox automatically.
 
-## UNKNOWN
+## LIMITATION
 
-- Whether the current Codex installation can complete a real model turn after
-  its PATH-alias and local app-server permissions are repaired.
+- This smoke intentionally performs no project edit. A multi-node,
+  write-enabled acceptance remains part of the separate real-project
+  acceptance gate.

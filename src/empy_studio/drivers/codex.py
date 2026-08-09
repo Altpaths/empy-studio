@@ -858,7 +858,7 @@ class CodexDriver(BaseDriver):
         sandbox = self.sandbox_mode or (
             "workspace-write" if request.allowed_paths else "read-only"
         )
-        return [
+        command = [
             executable,
             "exec",
             "--json",
@@ -866,10 +866,19 @@ class CodexDriver(BaseDriver):
             str(request.project.root),
             "--sandbox",
             sandbox,
-            "--output-last-message",
-            str(final_message_path),
-            "-",
         ]
+
+        if not (request.project.root / ".git").exists():
+            command.append("--skip-git-repo-check")
+
+        command.extend(
+            [
+                "--output-last-message",
+                str(final_message_path),
+                "-",
+            ]
+        )
+        return command
 
     @staticmethod
     def map_error(stderr: str, return_code: int) -> tuple[CodexErrorCode, str]:

@@ -6,6 +6,11 @@
   and sandbox initialization failures.
 - Propagated actionable `sandbox_error` readiness failures through the driver,
   graph runtime, and persisted run evidence.
+- Updated the Codex adapter for the current CLI by removing the obsolete
+  `--ask-for-approval` flag and adding an explicit trust-check bypass only for
+  selected non-Git projects.
+- Verified the real adapter with a read-only provider smoke on an isolated
+  fixture; no project or Holda files were changed.
 - Kept bounded sandbox selection and explicit `danger-full-access` behavior
   unchanged; no automatic safety downgrade is performed.
 

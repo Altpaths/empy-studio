@@ -197,6 +197,7 @@ def test_build_command_uses_read_only_without_owned_paths(tmp_path: Path) -> Non
     assert command[:3] == ["/usr/local/bin/codex", "exec", "--json"]
     assert command[command.index("--sandbox") + 1] == "read-only"
     assert "--ask-for-approval" not in command
+    assert "--skip-git-repo-check" in command
     assert command[-1] == "-"
 
 

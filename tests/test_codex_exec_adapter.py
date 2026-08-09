@@ -68,8 +68,11 @@ def test_builds_explicit_bounded_command(
     ]
     assert "--sandbox" in command
     assert "workspace-write" in command
-    assert "--ask-for-approval" in command
-    assert "never" in command
+    # Current Codex CLI exposes sandbox selection for `exec`; it no longer
+    # accepts the legacy `--ask-for-approval` option. Non-interactive `exec`
+    # must remain prompt-free through the adapter contract.
+    assert "--ask-for-approval" not in command
+    assert "--skip-git-repo-check" in command
     assert command[-1] == "-"
 
 

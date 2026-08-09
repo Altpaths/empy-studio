@@ -99,11 +99,17 @@ def build_codex_exec_command(
         manifest.project_root,
         "--sandbox",
         policy.sandbox,
-        "--ask-for-approval",
-        policy.approval_policy,
-        "--output-last-message",
-        str(final_message_path),
     ]
+
+    if not (Path(manifest.project_root) / ".git").exists():
+        command.append("--skip-git-repo-check")
+
+    command.extend(
+        [
+            "--output-last-message",
+            str(final_message_path),
+        ]
+    )
 
     if policy.model is not None:
         command.extend(["--model", policy.model])

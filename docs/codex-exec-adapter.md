@@ -12,7 +12,7 @@ codex exec
   --json
   --cd <project-root>
   --sandbox <policy>
-  --ask-for-approval <policy>
+  --skip-git-repo-check  # only for an explicitly selected non-Git project
   --output-last-message <evidence/final-message.md>
   -
 ```
@@ -52,6 +52,8 @@ The adapter:
 - never uses `shell=True`;
 - passes arguments as an argv list;
 - defaults to `workspace-write`;
-- requires `never` approval policy for non-interactive execution;
+- requires a non-interactive policy that cannot wait for human approval;
+- does not emit the removed legacy `--ask-for-approval` CLI option;
+- explicitly bypasses Codex's trust check only for a selected non-Git project;
 - does not read credential files;
 - does not place API keys in command evidence.
