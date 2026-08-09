@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import os
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from empy_studio.core import (
     build_context_selection,
     generate_execution_plan,
 )
+from empy_studio.core.planner import PlanStep
+from empy_studio.core.project_brain import build_project_brain_index
 
 
 def _laravel_project(root: Path):
@@ -175,3 +178,74 @@ def test_symlink_is_never_followed(tmp_path: Path) -> None:
         item.relative_path == "resources/views/outside.txt" and item.protected
         for item in selection.exclusions
     )
+
+
+def test_optional_project_brain_boosts_indexed_symbol_relevance(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "brain-demo"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "alpha.py").write_text(
+        "class PaymentGateway:\n    pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "src" / "zeta.py").write_text(
+        "class Unrelated:\n    pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_alpha.py").write_text(
+        "def test_gateway():\n    assert True\n",
+        encoding="utf-8",
+    )
+    task = ProductTask(
+        task_id="task-brain-context",
+        project_root=str(tmp_path.resolve()),
+        kind="feature",
+        title="Wire PaymentGateway",
+        objective="Use the PaymentGateway integration point",
+        requirements=("Update the implementation",),
+        constraints=(),
+        definition_of_done=("Tests pass",),
+        status="ready_for_planning",
+    )
+    project = DefaultProjectService().detect(tmp_path)
+    approved = approve_execution_plan(
+        generate_execution_plan(task=task, project=project), current_task=task
+    )
+    plan = replace(
+        approved,
+        likely_paths=("src/",),
+        steps=(
+            PlanStep(
+                step_id="step-backend",
+                title="Update integration",
+                objective="Wire PaymentGateway",
+                depends_on=(),
+                suggested_agent="backend",
+                estimated_files=1,
+                risk="low",
+            ),
+        ),
+    )
+    brain = build_project_brain_index(tmp_path).index
+    policy = ContextPolicy(
+        max_files_per_pack=1,
+        max_bytes_per_file=512,
+        max_total_bytes_per_pack=512,
+        max_candidate_file_bytes=2048,
+        max_candidates=20,
+    )
+
+    selection = build_context_selection(
+        task=task,
+        project=project,
+        plan=plan,
+        policy=policy,
+        brain_index=brain,
+    )
+
+    backend_pack = next(pack for pack in selection.packs if pack.agent_role == "backend")
+    assert backend_pack.files[0].relative_path == "src/alpha.py"
+    assert "indexed imports or symbols match task" in backend_pack.files[0].reasons

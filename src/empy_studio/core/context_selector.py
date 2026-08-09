@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Final
 
 from .planner import AgentRole, ExecutionPlan, PlanStep
+from .project_brain import ProjectBrainIndex, ProjectBrainRecord
 from .project_service import ProjectDetection
 from .task_intake import ProductTask
 
@@ -353,6 +354,7 @@ class _Candidate:
     path: Path
     relative_path: str
     size_bytes: int
+    brain_record: ProjectBrainRecord | None = None
 
 
 class _SkipCandidate(Exception):
@@ -408,10 +410,12 @@ def _looks_textual(path: Path, raw: bytes) -> bool:
 def _discover_candidates(
     root: Path,
     policy: ContextPolicy,
+    brain_index: ProjectBrainIndex | None = None,
 ) -> tuple[tuple[_Candidate, ...], tuple[ContextExclusion, ...]]:
     candidates: list[_Candidate] = []
     exclusions: list[ContextExclusion] = []
     excluded_directories = set(policy.excluded_directories)
+    brain_records = brain_index.record_map() if brain_index else {}
 
     for current, directories, files in os.walk(root, followlinks=False):
         current_path = Path(current)
@@ -488,6 +492,7 @@ def _discover_candidates(
                     path=path,
                     relative_path=relative,
                     size_bytes=size,
+                    brain_record=brain_records.get(relative),
                 )
             )
             if len(candidates) >= policy.max_candidates:
@@ -526,6 +531,7 @@ def _score_candidate(
     step: PlanStep,
     plan: ExecutionPlan,
     project: ProjectDetection,
+    brain_index: ProjectBrainIndex | None = None,
 ) -> tuple[int, tuple[str, ...]]:
     relative = candidate.relative_path
     path_tokens = _tokens(relative.replace("/", " ").replace(".", " "))
@@ -599,6 +605,26 @@ def _score_candidate(
     }:
         score += 4
 
+    if candidate.brain_record is not None:
+        score += 6
+        reasons.append("project brain indexed file")
+        hint_text = " ".join(
+            (
+                candidate.brain_record.language,
+                candidate.brain_record.summary,
+                *candidate.brain_record.imports,
+                *candidate.brain_record.symbols,
+            )
+        )
+        hint_overlap = task_tokens & _tokens(hint_text)
+        if hint_overlap:
+            score += min(45, len(hint_overlap) * 9)
+            reasons.append("indexed imports or symbols match task")
+
+    if brain_index is not None and relative in brain_index.changed_paths:
+        score += 30
+        reasons.append("changed in project brain")
+
     if lowered.startswith("docs/") and role not in {"discovery", "release"}:
         score = max(0, score - 10)
 
@@ -665,6 +691,7 @@ def _build_pack(
     candidates: tuple[_Candidate, ...],
     policy: ContextPolicy,
     exclusions: list[ContextExclusion],
+    brain_index: ProjectBrainIndex | None = None,
 ) -> ContextPack:
     task_text = " ".join(
         (
@@ -686,6 +713,7 @@ def _build_pack(
             step=step,
             plan=plan,
             project=project,
+            brain_index=brain_index,
         )
         if score > 0:
             scored.append((score, candidate.relative_path, reasons, candidate))
@@ -750,6 +778,7 @@ def build_context_selection(
     project: ProjectDetection,
     plan: ExecutionPlan,
     policy: ContextPolicy | None = None,
+    brain_index: ProjectBrainIndex | None = None,
 ) -> ContextSelection:
     task.validate()
     project.descriptor.validate()
@@ -767,7 +796,11 @@ def build_context_selection(
     if Path(task.project_root).expanduser().resolve() != project_root:
         raise ValueError("task and project roots do not match")
 
-    candidates, initial_exclusions = _discover_candidates(project_root, selected_policy)
+    candidates, initial_exclusions = _discover_candidates(
+        project_root,
+        selected_policy,
+        brain_index=brain_index,
+    )
     exclusions = list(initial_exclusions)
     packs = tuple(
         _build_pack(
@@ -778,6 +811,7 @@ def build_context_selection(
             candidates=candidates,
             policy=selected_policy,
             exclusions=exclusions,
+            brain_index=brain_index,
         )
         for step in plan.steps
     )
