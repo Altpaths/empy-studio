@@ -17,6 +17,12 @@ DEFAULT_BINARY_PROBE_BYTES: Final[int] = 8_192
 DEFAULT_SUMMARY_CHARS: Final[int] = 240
 MAX_HINTS: Final[int] = 24
 
+
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(str(item) for item in value)
+
 EXCLUDED_DIRECTORIES: Final[frozenset[str]] = frozenset(
     {
         ".git",
@@ -197,11 +203,11 @@ class ProjectBrainRecord:
         return cls(
             relative_path=str(data["relative_path"]),
             sha256=str(data["sha256"]),
-            size=int(data["size"]),
-            mtime_ns=int(data["mtime_ns"]),
+            size=int(str(data["size"])),
+            mtime_ns=int(str(data["mtime_ns"])),
             language=str(data.get("language") or "text"),
-            imports=tuple(str(item) for item in data.get("imports", ())),
-            symbols=tuple(str(item) for item in data.get("symbols", ())),
+            imports=_string_tuple(data.get("imports")),
+            symbols=_string_tuple(data.get("symbols")),
             summary=str(data.get("summary") or ""),
         )
 
@@ -231,18 +237,20 @@ class ProjectBrainIndex:
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> ProjectBrainIndex:
+        raw_records = data.get("records")
+        records = raw_records if isinstance(raw_records, (list, tuple)) else ()
         return cls(
-            schema_version=int(data.get("schema_version", SCHEMA_VERSION)),
+            schema_version=int(str(data.get("schema_version", SCHEMA_VERSION))),
             project_root=str(data.get("project_root") or ""),
             records=tuple(
                 ProjectBrainRecord.from_dict(item)
-                for item in data.get("records", ())
+                for item in records
                 if isinstance(item, dict)
             ),
-            changed_paths=tuple(str(item) for item in data.get("changed_paths", ())),
-            removed_paths=tuple(str(item) for item in data.get("removed_paths", ())),
-            reused_paths=tuple(str(item) for item in data.get("reused_paths", ())),
-            skipped_paths=tuple(str(item) for item in data.get("skipped_paths", ())),
+            changed_paths=_string_tuple(data.get("changed_paths")),
+            removed_paths=_string_tuple(data.get("removed_paths")),
+            reused_paths=_string_tuple(data.get("reused_paths")),
+            skipped_paths=_string_tuple(data.get("skipped_paths")),
             scan_limit_reached=bool(data.get("scan_limit_reached", False)),
         )
 
