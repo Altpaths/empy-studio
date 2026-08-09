@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "phase": 4,
-  "ticket": 11,
-  "title": "Codex Driver Productionization",
+  "ticket": 8,
+  "title": "Production Codex Driver",
   "status": "implemented",
   "driver_module": "src/empy_studio/drivers/codex.py",
   "graph_runtime_module": "src/empy_studio/drivers/codex_runtime.py",
@@ -22,6 +22,7 @@
   ],
   "runtime_contracts": [
     "installation and authentication preflight",
+    "no-token host readiness diagnostics",
     "non-interactive JSONL execution",
     "stdin prompt delivery",
     "dependency-order execution",
@@ -36,13 +37,17 @@
     "patch synchronization",
     "conflict resolution"
   ],
-  "next_ticket": 12,
+  "next_ticket": 9,
   "validation": {
-    "pytest": "441 passed",
+    "pytest": "526 passed",
+    "ruff": "passed",
+    "mypy": "115 source files passed",
     "compileall": "passed",
     "tests": [
-      "tests/test_codex_production_driver.py",
-      "tests/test_codex_graph_runtime.py",
+    "tests/test_codex_production_driver.py",
+    "tests/test_codex_doctor.py",
+    "tests/test_codex_graph_runtime.py",
+    "tests/test_codex_runtime.py",
       "tests/test_codex_execution_workspace_adapter.py",
       "tests/test_desktop_shell.py"
     ]

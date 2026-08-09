@@ -1,5 +1,14 @@
 ## Unreleased
 
+### Ticket 8 — Production Codex driver hardening
+
+- Added no-token host preflight diagnostics for PATH-alias, app-server, state,
+  and sandbox initialization failures.
+- Propagated actionable `sandbox_error` readiness failures through the driver,
+  graph runtime, and persisted run evidence.
+- Kept bounded sandbox selection and explicit `danger-full-access` behavior
+  unchanged; no automatic safety downgrade is performed.
+
 ### Ticket 15 — Diff Review, Accept & Revert
 
 - Added a Desktop Review Workspace with changed-file status and readable diffs.

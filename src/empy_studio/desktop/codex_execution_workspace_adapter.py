@@ -137,6 +137,11 @@ class CodexExecutionWorkspaceAdapter:
             authenticated=bool(raw_installation["authenticated"]),
             message=str(raw_installation["message"]),
             remediation=_optional_string(raw_installation.get("remediation")),
+            error_code=(
+                cast(CodexErrorCode, str(raw_installation["error_code"]))
+                if raw_installation.get("error_code") is not None
+                else None
+            ),
         )
 
         nodes: list[CodexNodeExecution] = []

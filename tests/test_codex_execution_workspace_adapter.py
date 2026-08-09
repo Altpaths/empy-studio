@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from empy_studio.desktop.codex_execution_workspace_adapter import (
@@ -111,3 +112,30 @@ def test_loads_legacy_run_json_without_usage(tmp_path: Path) -> None:
     assert loaded is not None
     assert loaded.usage is None
     assert loaded.node_results[0].usage is None
+
+
+def test_round_trip_persists_host_readiness_error_code(tmp_path: Path) -> None:
+    adapter = CodexExecutionWorkspaceAdapter(tmp_path / "workspace")
+    ready = sample_run(tmp_path)
+    run = replace(
+        ready,
+        status="unavailable",
+        installation=replace(
+            ready.installation,
+            availability="unavailable",
+            message="Codex host preflight is unavailable.",
+            remediation="Fix the host permissions and refresh.",
+            error_code="sandbox_error",
+        ),
+        node_results=(),
+        usage=None,
+        error_code="sandbox_error",
+        error_message="Codex host preflight is unavailable.",
+    )
+
+    adapter.save_run(run)
+    loaded = adapter.get_run(run.run_id)
+
+    assert loaded == run
+    assert loaded is not None
+    assert loaded.installation.error_code == "sandbox_error"

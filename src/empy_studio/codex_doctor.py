@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .codex_materializer import load_materialized_manifest
+from .codex_preflight import detect_codex_host_diagnostic
 from .codex_workflow import CodexRunManifest
 
 DEFAULT_COMMAND_TIMEOUT = 10.0
@@ -77,6 +78,20 @@ def _warning(
     )
 
 
+def _host_diagnostic_details(
+    stdout: str,
+    stderr: str,
+) -> dict[str, str]:
+    diagnostic = detect_codex_host_diagnostic(stdout, stderr)
+    if diagnostic is None:
+        return {}
+    return {
+        "host_diagnostic": diagnostic.code,
+        "host_message": diagnostic.message,
+        "host_remediation": diagnostic.remediation,
+    }
+
+
 def _check_codex_executable(
     executable: str,
 ) -> tuple[DoctorCheck, str | None]:
@@ -119,6 +134,10 @@ def _check_codex_version(
         ),
         returncode=result.returncode,
         version=output,
+        **_host_diagnostic_details(
+            result.stdout or "",
+            result.stderr or "",
+        ),
     )
 
 
@@ -147,6 +166,10 @@ def _check_codex_exec(
             else "Codex exec is unavailable"
         ),
         returncode=result.returncode,
+        **_host_diagnostic_details(
+            result.stdout or "",
+            result.stderr or "",
+        ),
     )
 
 
@@ -164,6 +187,10 @@ def _check_codex_authentication(
             True,
             "Codex authentication is available",
             authentication_status=output,
+            **_host_diagnostic_details(
+                result.stdout or "",
+                result.stderr or "",
+            ),
         )
 
     return _result(
@@ -173,6 +200,10 @@ def _check_codex_authentication(
         returncode=result.returncode,
         authentication_status=output,
         remediation="Run `codex login` and complete authentication.",
+        **_host_diagnostic_details(
+            result.stdout or "",
+            result.stderr or "",
+        ),
     )
 
 
@@ -346,6 +377,30 @@ def diagnose_codex_environment(
                     ),
                 ]
             )
+            host_checks = [
+                check
+                for check in checks
+                if check.details.get("host_diagnostic")
+            ]
+            if host_checks:
+                source = host_checks[0]
+                checks.append(
+                    _result(
+                        "codex_host_preflight",
+                        False,
+                        str(
+                            source.details.get(
+                                "host_message",
+                                "Codex host preflight is not ready.",
+                            )
+                        ),
+                        diagnostic=source.details.get("host_diagnostic"),
+                        remediation=source.details.get(
+                            "host_remediation",
+                            "Refresh the environment after fixing the host issue.",
+                        ),
+                    )
+                )
 
         checks.append(_check_project_root(manifest))
         checks.extend(_check_materialized_run(manifest))

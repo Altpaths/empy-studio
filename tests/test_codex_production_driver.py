@@ -96,6 +96,58 @@ def test_maps_codex_app_server_initialization_failure_to_sandbox_error() -> None
     assert "host permissions" in message
 
 
+def test_preflight_rejects_known_host_path_alias_failure_without_model_call(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "empy_studio.drivers.codex.shutil.which",
+        lambda value: "/usr/local/bin/codex",
+    )
+
+    def host_warning_runner(
+        command: list[str],
+        **kwargs: Any,
+    ) -> subprocess.CompletedProcess[str]:
+        del kwargs
+        warning = "WARNING: could not create PATH aliases: Operation not permitted"
+        if command[-1] == "--version":
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="codex-cli 1.2.3\n",
+                stderr=warning,
+            )
+        if command[-2:] == ["exec", "--help"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="Usage: codex exec\n",
+                stderr=warning,
+            )
+        if command[-2:] == ["login", "status"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="Logged in\n",
+                stderr=warning,
+            )
+        raise AssertionError(command)
+
+    driver = CodexDriver(
+        artifact_root=tmp_path,
+        command_runner=host_warning_runner,
+    )
+
+    installation = driver.inspect_installation()
+
+    assert installation.availability == "unavailable"
+    assert installation.authenticated is True
+    assert installation.error_code == "sandbox_error"
+    assert "PATH aliases" in installation.message
+    assert installation.remediation is not None
+
+
 def test_keeps_plain_project_permission_failures_distinct() -> None:
     code, _message = CodexDriver.map_error(
         "permission denied: /workspace/src/app.py",
