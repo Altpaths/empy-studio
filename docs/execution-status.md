@@ -57,5 +57,6 @@ new product behavior is merged.
   token-efficiency estimate.
 - The bilingual Desktop UI uses delegated actions, CSP-safe event handling, and
   the EMPY logo at `src/empy_studio/web/empy-logo.png`.
-- Final verification for this wave: 515 tests, Ruff, MyPy, compileall, CLI help,
-  and browser asset smoke are required before publishing the integrated commit.
+- Final verification for this wave passed: 515 tests, Ruff, MyPy, compileall,
+  CLI help, release validation, and browser asset smoke. The resulting local
+  `main` head is `a8c82cd`.
