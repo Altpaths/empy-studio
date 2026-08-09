@@ -29,6 +29,7 @@ def test_guided_state_persists_project_and_follow_up_ticket(tmp_path: Path) -> N
 
     assert first.active_project_id is not None
     assert first.active_task_id is not None
+    first_task_id = first.active_task_id
     assert first.phase == "plan"
     assert first.plan is not None
     assert any(node.owned_files for node in first.graph.nodes if node.agent_role == "backend")
@@ -39,9 +40,17 @@ def test_guided_state_persists_project_and_follow_up_ticket(tmp_path: Path) -> N
     assert projects[0]["id"] == first.active_project_id
     assert len(projects[0]["tasks"]) == 1
     assert reopened.active_project_id == first.active_project_id
+    assert reopened.active_task_id == first_task_id
+    assert reopened.task is not None
+    assert reopened.plan is not None
+    assert reopened.phase == "plan"
 
     reopened.create_plan("Add a bounded follow-up to the backend service")
     assert len(reopened.public()["active_project"]["tasks"]) == 2
+    reopened.select_task(first_task_id)
+    assert reopened.active_task_id == first_task_id
+    assert reopened.task is not None
+    assert reopened.task.title == "Update the backend service"
 
 
 def test_reset_keeps_project_history(tmp_path: Path) -> None:

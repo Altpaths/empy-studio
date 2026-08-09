@@ -9,14 +9,14 @@ const t = {
     importButton: "واردکردن پروژه", folder: "انتخاب پوشه", tasks: "تیکت جدید", taskHint: "درخواست را مثل توضیح به یک همکار بنویسید…",
     plan: "تحلیل و ساخت برنامه", start: "شروع اجرا", accept: "تأیید تغییرات", revert: "بازگردانی تغییرات", export: "خروجی ZIP پروژه",
     newProject: "پروژه‌ی دیگر", noProject: "هنوز پروژه‌ای ثبت نشده است.", noTask: "هنوز تیکتی ثبت نشده است.", engine: "وضعیت Codex",
-    ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", result: "نتیجه و بررسی",
+    ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", result: "نتیجه و بررسی", resume: "ادامه تیکت",
   },
   en: {
     subtitle: "Coordinated project development with bounded agents", project: "Projects", import: "Project folder or ZIP path",
     importButton: "Import project", folder: "Choose folder", tasks: "New ticket", taskHint: "Describe the work as you would to a teammate…",
     plan: "Analyze and build plan", start: "Start run", accept: "Accept changes", revert: "Restore changes", export: "Export project ZIP",
     newProject: "Another project", noProject: "No projects have been registered.", noTask: "No tickets have been registered.", engine: "Codex status",
-    ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", result: "Result and review",
+    ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", result: "Result and review", resume: "Resume ticket",
   },
 };
 function text() { return t[language]; }
@@ -49,7 +49,7 @@ function renderProject() {
 }
 function renderTask() {
   const tasks = state.tasks || [];
-  return `<div class="card"><div class="row"><div><h1>${text().tasks}</h1><p class="muted">${escapeHtml(state.active_project?.name || "")}</p></div><button class="secondary" onclick="resetProject()">${text().newProject}</button></div><textarea id="tasks" placeholder="${text().taskHint}"></textarea><div class="actions"><button class="primary" onclick="buildPlan()">${text().plan}</button></div><h2>${language === "fa" ? "تاریخچه تیکت‌ها" : "Ticket history"}</h2><div class="task-list">${tasks.length ? tasks.map(task => `<div class="task"><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.status)}</small></div>`).join("") : `<p class="muted">${text().noTask}</p>`}</div></div>`;
+  return `<div class="card"><div class="row"><div><h1>${text().tasks}</h1><p class="muted">${escapeHtml(state.active_project?.name || "")}</p></div><button class="secondary" onclick="resetProject()">${text().newProject}</button></div><textarea id="tasks" placeholder="${text().taskHint}"></textarea><div class="actions"><button class="primary" onclick="buildPlan()">${text().plan}</button></div><h2>${language === "fa" ? "تاریخچه تیکت‌ها" : "Ticket history"}</h2><div class="task-list">${tasks.length ? tasks.map(task => `<button class="task ${task.id === state.active_task_id ? "active" : ""}" onclick="selectTask('${escapeHtml(task.id)}')"><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.status)} · ${text().resume}</small></button>`).join("") : `<p class="muted">${text().noTask}</p>`}</div></div>`;
 }
 function renderPlan() {
   const plan = state.plan || {}; const nodes = plan.nodes || [];
@@ -74,6 +74,7 @@ function loading() { document.querySelector("#screen").innerHTML = `<div class="
 window.importPath = async () => { loading(); try { state = await api("/api/import", {path: document.querySelector("#path").value}); render(); } catch (error) { await refresh(); } };
 window.chooseFolder = async () => { loading(); try { state = await api("/api/select-folder", {}); render(); } catch (error) { await refresh(); } };
 window.selectProject = async id => { loading(); try { state = await api("/api/project/select", {project_id:id}); render(); } catch (error) { await refresh(); } };
+window.selectTask = async id => { loading(); try { state = await api("/api/task/select", {task_id:id}); render(); } catch (error) { await refresh(); } };
 window.buildPlan = async () => { loading(); try { state = await api("/api/plan", {tasks: document.querySelector("#tasks").value}); render(); } catch (error) { await refresh(); } };
 window.startRun = async () => { loading(); try { state = await api("/api/run", {}); render(); } catch (error) { await refresh(); } };
 window.decide = async decision => { loading(); try { state = await api("/api/decision", {decision}); render(); } catch (error) { await refresh(); } };

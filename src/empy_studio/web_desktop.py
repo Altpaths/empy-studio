@@ -153,6 +153,12 @@ class GuidedState:
         saved_project = self.store.get_setting("active_project_id")
         if isinstance(saved_project, str):
             self.select_project(saved_project, restore=True)
+            saved_task = self.store.get_setting("active_task_id")
+            if isinstance(saved_task, str):
+                try:
+                    self.select_task(saved_task, restore=True)
+                except (KeyError, OSError, RuntimeError, TypeError, ValueError):
+                    self.store.set_setting("active_task_id", None)
 
     def add_log(self, message: str, level: str = "info") -> None:
         with self.lock:
@@ -216,6 +222,8 @@ class GuidedState:
             self.error = None
             self.message = "پروژه بازیابی شد." if restore else "پروژه انتخاب شد."
         self.store.set_setting("active_project_id", project.project_id)
+        if not restore:
+            self.store.set_setting("active_task_id", None)
 
     def import_path(self, path: str) -> None:
         selected = Path(path).expanduser().resolve()
@@ -242,6 +250,64 @@ class GuidedState:
             self.detection = detection
             self.message = "پروژه در یک کپی ایزوله ذخیره شد."
 
+    @staticmethod
+    def _task_from_contract(saved: Any) -> ProductTask:
+        contract = saved.contract if hasattr(saved, "contract") else None
+        raw_task = contract.get("task") if isinstance(contract, dict) else None
+        if not isinstance(raw_task, dict):
+            raise TypeError("saved task contract is missing its task payload")
+        task = ProductTask(
+            task_id=str(raw_task["task_id"]),
+            project_root=str(raw_task["project_root"]),
+            kind=str(raw_task["kind"]),
+            title=str(raw_task["title"]),
+            objective=str(raw_task["objective"]),
+            requirements=tuple(str(item) for item in raw_task["requirements"]),
+            constraints=tuple(str(item) for item in raw_task["constraints"]),
+            definition_of_done=tuple(str(item) for item in raw_task["definition_of_done"]),
+            status="ready_for_planning",
+        )
+        task.validate()
+        return task
+
+    def _materialize_workflow(
+        self,
+        task: ProductTask,
+    ) -> tuple[ExecutionPlan, ContextSelection, TokenBudget, AgentRunGraph]:
+        if self.detection is None:
+            raise RuntimeError("Choose a project first.")
+        draft = generate_execution_plan(task=task, project=self.detection)
+        plan = approve_execution_plan(draft, current_task=task)
+        context = build_context_selection(task=task, project=self.detection, plan=plan)
+        budget = lock_token_budget(build_token_budget(plan=plan, selection=context))
+        graph = build_agent_run_graph(plan=plan, selection=context, budget=budget)
+        return plan, context, budget, graph
+
+    def select_task(self, task_id: str, *, restore: bool = False) -> None:
+        if self.active_project_id is None or self.detection is None:
+            raise RuntimeError("Choose a project first.")
+        saved = self.store.get_task(task_id)
+        if saved.project_id != self.active_project_id:
+            raise ValueError("task does not belong to the selected project")
+        task = self._task_from_contract(saved)
+        plan, context, budget, graph = self._materialize_workflow(task)
+        with self.lock:
+            self.active_task_id = task.task_id
+            self.task = task
+            self.plan = plan
+            self.context = context
+            self.budget = budget
+            self.graph = graph
+            self.run = None
+            self.verification = None
+            self.review = None
+            self.export = None
+            self.node_states = {node.node_id: "waiting" for node in graph.nodes}
+            self.phase = "plan"
+            self.error = None
+            self.message = "تیکت قبلی بازیابی شد." if restore else "تیکت انتخاب شد."
+        self.store.set_setting("active_task_id", task.task_id)
+
     def create_plan(self, raw_tasks: str, task_id: str | None = None) -> None:
         if self.detection is None or self.active_project_id is None:
             raise RuntimeError("Choose a project first.")
@@ -262,11 +328,7 @@ class GuidedState:
             definition_of_done_text=DEFAULT_DEFINITION_OF_DONE,
         )
         ready = mark_ready_for_planning(task)
-        draft = generate_execution_plan(task=ready, project=self.detection)
-        plan = approve_execution_plan(draft, current_task=ready)
-        context = build_context_selection(task=ready, project=self.detection, plan=plan)
-        budget = lock_token_budget(build_token_budget(plan=plan, selection=context))
-        graph = build_agent_run_graph(plan=plan, selection=context, budget=budget)
+        plan, context, budget, graph = self._materialize_workflow(ready)
         contract = {
             "task": asdict(ready),
             "plan": plan.to_dict(),
@@ -508,6 +570,7 @@ class GuidedState:
                     "error": self.error,
                     "projects": self._project_records(),
                     "active_project": project,
+                    "active_task_id": self.active_task_id,
                     "tasks": tasks,
                     "task": asdict(self.task) if self.task is not None else None,
                     "plan": plan,
@@ -640,6 +703,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             state.import_path(selected)
         elif path == "/api/project/select":
             state.select_project(str(body["project_id"]))
+        elif path == "/api/task/select":
+            state.select_task(str(body["task_id"]))
         elif path == "/api/plan":
             state.create_plan(str(body.get("tasks", "")), body.get("task_id"))
         elif path == "/api/run":
