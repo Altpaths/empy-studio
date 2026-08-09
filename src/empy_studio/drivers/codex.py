@@ -264,6 +264,10 @@ class CodexDriver(BaseDriver):
     def status(self) -> DriverStatus:
         return self._status
 
+    def begin_run(self) -> None:
+        """Clear cancellation left by a previous, already-terminal run."""
+        self._cancel_requested.clear()
+
     def inspect(self, *, refresh: bool = False) -> DriverInspection:
         if not self.enabled:
             inspection = DriverInspection(
@@ -538,7 +542,6 @@ class CodexDriver(BaseDriver):
         )
 
         started_at = self._utc_now()
-        self._cancel_requested.clear()
         self._status = "running"
         self._emit(
             on_progress,
@@ -550,6 +553,20 @@ class CodexDriver(BaseDriver):
 
         process_environment = os.environ.copy()
         process_environment.setdefault("NO_COLOR", "1")
+
+        if self._cancel_requested.is_set():
+            self._status = "cancelled"
+            return self._terminal_result(
+                request=request,
+                node_id=node_id,
+                artifact_dir=run_dir,
+                status="cancelled",
+                started_at=started_at,
+                return_code=None,
+                summary="Codex execution was cancelled before the process started.",
+                error_code="cancelled",
+                error_message="The user cancelled this Codex run.",
+            )
 
         try:
             process = self.process_factory(
