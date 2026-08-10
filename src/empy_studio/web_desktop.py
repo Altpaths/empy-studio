@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 from dataclasses import asdict, dataclass, field, is_dataclass, replace
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, cast
@@ -105,6 +106,49 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(key): _json_safe(item) for key, item in value.items()}
     return value
+
+
+def _duration_seconds(started_at: str | None, finished_at: str | None) -> float | None:
+    if not started_at or not finished_at:
+        return None
+    try:
+        started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        finished = datetime.fromisoformat(finished_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return max(0.0, round((finished - started).total_seconds(), 3))
+
+
+def _usage_summary(
+    usage: TokenUsage | None,
+    *,
+    provider: str,
+    status: str,
+    estimated_tokens: int | None = None,
+) -> dict[str, Any]:
+    if usage is None:
+        return {
+            "provider": provider,
+            "status": status,
+            "input_tokens": None,
+            "output_tokens": None,
+            "cached_input_tokens": None,
+            "total_tokens": None,
+            "estimated_tokens": estimated_tokens,
+            "available": False,
+            "source": "not_reported",
+        }
+    return {
+        "provider": provider,
+        "status": status,
+        "input_tokens": usage.input,
+        "output_tokens": usage.output,
+        "cached_input_tokens": usage.cached,
+        "total_tokens": usage.total,
+        "estimated_tokens": estimated_tokens,
+        "available": usage.total > 0,
+        "source": usage.source,
+    }
 
 
 def _split_task_lines(raw: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -965,6 +1009,7 @@ class GuidedState:
                     "benchmark": self.benchmark.to_dict() if self.benchmark is not None else None,
                     "run_status": self.run.status if self.run is not None else None,
                     "run_error": self.run.error_message if self.run is not None else None,
+                    "run_report": self._execution_report(),
                     "running": self.running,
                     "logs": list(self.logs),
                     "verification": verification,
@@ -985,28 +1030,121 @@ class GuidedState:
         if self.run is None:
             return None
         usage = self.run.usage
-        if usage is None:
-            return {
-                "provider": self.run.provider,
-                "status": self.run.status,
-                "input_tokens": None,
-                "output_tokens": None,
-                "cached_input_tokens": None,
-                "total_tokens": None,
-                "available": False,
-                "source": "not_reported",
-            }
-        if not isinstance(usage, TokenUsage):
+        if usage is not None and not isinstance(usage, TokenUsage):
             raise TypeError("Codex run usage must be a TokenUsage record")
+        return _usage_summary(
+            usage,
+            provider=self.run.provider,
+            status=self.run.status,
+        )
+
+    def _workspace_reference(self, value: str) -> str:
+        """Expose evidence locations without leaking absolute host paths."""
+        try:
+            candidate = Path(value).expanduser().resolve()
+            return candidate.relative_to(self.workspace_root).as_posix()
+        except (OSError, ValueError):
+            return Path(value).name or "evidence"
+
+    def _execution_report(self) -> dict[str, Any] | None:
+        if self.run is None:
+            return None
+
+        graph_nodes = {node.node_id: node for node in self.graph.nodes} if self.graph else {}
+        results = {node.node_id: node for node in self.run.node_results}
+        node_reports: list[dict[str, Any]] = []
+        for node_id, graph_node in graph_nodes.items():
+            result = results.get(node_id)
+            status = result.status if result is not None else self.node_states.get(node_id, "waiting")
+            estimated_tokens = graph_node.token_limit
+            usage = result.usage if result is not None else None
+            if usage is not None and not isinstance(usage, TokenUsage):
+                raise TypeError("Codex node usage must be a TokenUsage record")
+            evidence = None
+            if result is not None:
+                evidence = {
+                    "events": self._workspace_reference(result.events_path),
+                    "stderr": self._workspace_reference(result.stderr_path),
+                    "final_message": self._workspace_reference(result.final_message_path),
+                    "command": self._workspace_reference(result.command_path),
+                }
+            node_reports.append(
+                {
+                    "id": node_id,
+                    "agent_id": graph_node.agent_id,
+                    "role": graph_node.agent_role,
+                    "title": graph_node.title,
+                    "status": status,
+                    "wave": graph_node.wave,
+                    "duration_seconds": (
+                        _duration_seconds(result.started_at, result.finished_at)
+                        if result is not None
+                        else None
+                    ),
+                    "summary": result.summary if result is not None else graph_node.objective,
+                    "error": result.error_message if result is not None else None,
+                    "changed_files": list(result.changed_files) if result is not None else [],
+                    "event_count": result.event_count if result is not None else 0,
+                    "token_limit": estimated_tokens,
+                    "usage": _usage_summary(
+                        usage,
+                        provider=self.run.provider,
+                        status=status,
+                        estimated_tokens=estimated_tokens,
+                    ),
+                    "evidence": evidence,
+                }
+            )
+
+        verification_results = self.verification.results if self.verification is not None else ()
+        passed_checks = sum(item.status == "pass" for item in verification_results)
+        failed_checks = sum(item.status != "pass" for item in verification_results)
+        review_files = self.review.files if self.review is not None else ()
+        benchmark = self.benchmark
+        estimates = {
+            "bounded_context_tokens": (
+                benchmark.bounded_context_estimate_tokens
+                if benchmark is not None
+                else self.budget.estimated_context_tokens if self.budget is not None else None
+            ),
+            "full_context_tokens": benchmark.full_context_estimate_tokens if benchmark is not None else None,
+            "saved_tokens": benchmark.saved_tokens if benchmark is not None else None,
+            "savings_percentage": benchmark.savings_percentage if benchmark is not None else None,
+            "source": "provider_neutral_local_estimate",
+        }
         return {
+            "run_id": self.run.run_id,
             "provider": self.run.provider,
             "status": self.run.status,
-            "input_tokens": usage.input,
-            "output_tokens": usage.output,
-            "cached_input_tokens": usage.cached,
-            "total_tokens": usage.total,
-            "available": usage.total > 0,
-            "source": usage.source,
+            "started_at": self.run.started_at,
+            "finished_at": self.run.finished_at,
+            "duration_seconds": _duration_seconds(self.run.started_at, self.run.finished_at),
+            "summary": self.run.error_message or (
+                "Run completed" if self.run.status == "completed" else "Run ended"
+            ),
+            "error": self.run.error_message,
+            "nodes": node_reports,
+            "usage": self._provider_usage(),
+            "estimates": estimates,
+            "verification": {
+                "status": self.verification.status if self.verification is not None else "not_run",
+                "passed_checks": passed_checks,
+                "failed_checks": failed_checks,
+                "total_checks": len(verification_results),
+                "finalized": bool(self.verification and self.verification.finalized_at),
+            },
+            "review": {
+                "changed_files": len(review_files),
+                "pending": self.review.pending_count if self.review is not None else 0,
+                "accepted": self.review.accepted_count if self.review is not None else 0,
+                "reverted": self.review.reverted_count if self.review is not None else 0,
+                "ready": self.review is not None and self.review.pending_count == 0,
+            },
+            "export": {
+                "available": self.export is not None,
+                "verified": bool(self.export and self.export.verified),
+                "file_count": self.export.file_count if self.export is not None else None,
+            },
         }
 
 

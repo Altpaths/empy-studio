@@ -20,3 +20,6 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert 'data-action="' in app_js
     assert "onclick=" not in app_js
     assert "window.importPath" not in app_js
+    assert "renderRunReport" in app_js
+    assert "run_report" in app_js
+    assert ".report" in (WEB_ROOT / "app.css").read_text(encoding="utf-8")

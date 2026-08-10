@@ -5,7 +5,13 @@ from types import SimpleNamespace
 
 import pytest
 
+from empy_studio.drivers import (
+    CodexGraphExecution,
+    CodexInstallation,
+    CodexNodeExecution,
+)
 from empy_studio.review_workspace import ReviewReport
+from empy_studio.token_usage import TokenUsage
 from empy_studio.verification_pipeline import VerificationReport
 from empy_studio.web_desktop import GuidedState, RequestHandler
 
@@ -219,3 +225,73 @@ def test_brain_index_survives_restart(tmp_path: Path) -> None:
     assert reopened.brain_index is not None
     assert brain_root is not None
     assert reopened.brain_index.project_root == brain_root
+
+
+def test_public_exposes_safe_bilingual_execution_report(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+    (source / "README.md").write_text("demo\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "empy-workspace")
+    state.import_path(str(source))
+    state.create_plan("Update the README")
+
+    assert state.graph is not None
+    graph_node = state.graph.nodes[0]
+    workspace_evidence = state.workspace_root / "runs" / "run-1" / "events.jsonl"
+    node_result = CodexNodeExecution(
+        node_id=graph_node.node_id,
+        task_id=f"{state.task.task_id}:{graph_node.step_id}",
+        status="completed",
+        started_at="2026-08-10T00:00:00+00:00",
+        finished_at="2026-08-10T00:00:01.500000+00:00",
+        return_code=0,
+        thread_id="thread-1",
+        summary="README update completed",
+        changed_files=("README.md",),
+        event_count=2,
+        events_path=str(workspace_evidence),
+        stderr_path=str(workspace_evidence.with_name("stderr.txt")),
+        final_message_path=str(workspace_evidence.with_name("final.txt")),
+        command_path=str(workspace_evidence.with_name("command.json")),
+        usage=TokenUsage(
+            input=10,
+            output=5,
+            cached=2,
+            total=15,
+            source="provider",
+            provider="codex",
+        ),
+    )
+    installation = CodexInstallation(
+        availability="available",
+        executable="/opt/homebrew/bin/codex",
+        version="codex-cli test",
+        authenticated=True,
+        message="ready",
+    )
+    state.run = CodexGraphExecution(
+        schema_version=1,
+        run_id="run-1",
+        graph_id=state.graph.graph_id,
+        task_id=state.task.task_id,
+        project_root=str(state.detection.descriptor.root),
+        provider="codex",
+        status="completed",
+        started_at="2026-08-10T00:00:00+00:00",
+        finished_at="2026-08-10T00:00:01.500000+00:00",
+        installation=installation,
+        node_results=(node_result,),
+        events=(),
+        usage=node_result.usage,
+    )
+
+    report = state.public()["run_report"]
+
+    assert report["usage"]["total_tokens"] == 15
+    assert report["nodes"][0]["role"] == graph_node.agent_role
+    assert report["nodes"][0]["duration_seconds"] == 1.5
+    assert report["nodes"][0]["usage"]["source"] == "provider"
+    assert report["nodes"][0]["evidence"]["events"] == "runs/run-1/events.jsonl"
+    assert str(state.workspace_root) not in str(report)
+    assert report["verification"]["status"] == "not_run"

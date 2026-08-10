@@ -10,7 +10,7 @@ const t = {
     plan: "تحلیل و ساخت برنامه", start: "شروع اجرا", accept: "تأیید تغییرات", revert: "بازگردانی تغییرات", export: "خروجی ZIP پروژه",
     newProject: "پروژه‌ی دیگر", noProject: "هنوز پروژه‌ای ثبت نشده است.", noTask: "هنوز تیکتی ثبت نشده است.", engine: "وضعیت Codex",
     ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", cancel: "توقف اجرا", cancelled: "اجرا لغو شد", failed: "اجرا متوقف شد", backToTicket: "بازگشت به تیکت", result: "نتیجه و بررسی", resume: "ادامه تیکت",
-    benchmark: "بنچمارک محلی", runBenchmark: "اجرای بنچمارک", full: "تخمین کامل", bounded: "تخمین محدود", saved: "صرفه‌جویی", brain: "Project Brain",
+    benchmark: "بنچمارک محلی", runBenchmark: "اجرای بنچمارک", full: "تخمین کامل", bounded: "تخمین محدود", saved: "صرفه‌جویی", brain: "Project Brain", report: "گزارش اجرای Agentها", agent: "Agent", duration: "زمان اجرا", summary: "خلاصه", usage: "مصرف Token", actual: "مصرف واقعی", estimate: "تخمین محلی", notReported: "گزارش نشده", verification: "Verification", review: "Review", pending: "در انتظار تصمیم", evidence: "Evidence", filesChanged: "فایل تغییرکرده", exportReady: "آماده خروجی", noReport: "گزارش اجرا هنوز موجود نیست",
   },
   en: {
     subtitle: "Coordinated project development with bounded agents", project: "Projects", import: "Project folder or ZIP path",
@@ -18,7 +18,7 @@ const t = {
     plan: "Analyze and build plan", start: "Start run", accept: "Accept changes", revert: "Restore changes", export: "Export project ZIP",
     newProject: "Another project", noProject: "No projects have been registered.", noTask: "No tickets have been registered.", engine: "Codex status",
     ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", cancel: "Stop run", cancelled: "Run cancelled", failed: "Run stopped", backToTicket: "Back to ticket", result: "Result and review", resume: "Resume ticket",
-    benchmark: "Local benchmark", runBenchmark: "Run benchmark", full: "Full estimate", bounded: "Bounded estimate", saved: "Saved", brain: "Project Brain",
+    benchmark: "Local benchmark", runBenchmark: "Run benchmark", full: "Full estimate", bounded: "Bounded estimate", saved: "Saved", brain: "Project Brain", report: "Agent run report", agent: "Agent", duration: "Duration", summary: "Summary", usage: "Token usage", actual: "Actual usage", estimate: "Local estimate", notReported: "Not reported", verification: "Verification", review: "Review", pending: "Pending decisions", evidence: "Evidence", filesChanged: "Changed files", exportReady: "Export ready", noReport: "Run report is not available yet",
   },
 };
 function text() { return t[language]; }
@@ -62,6 +62,37 @@ function renderBenchmark() {
   const rows = benchmark ? `<div><small>${text().full}</small><strong>${Number(benchmark.full_context_estimate_tokens || 0).toLocaleString()}</strong></div><div><small>${text().bounded}</small><strong>${Number(benchmark.bounded_context_estimate_tokens || budget.estimated_context_tokens || 0).toLocaleString()}</strong></div><div><small>${text().saved}</small><strong>${Number(benchmark.saved_tokens || 0).toLocaleString()} · ${Number(benchmark.savings_percentage || 0).toLocaleString()}%</strong></div>` : `<div><small>${text().brain}</small><strong>${Number(brain.file_count || 0).toLocaleString()}</strong></div><div><small>${text().bounded}</small><strong>${Number(budget.estimated_context_tokens || 0).toLocaleString()}</strong></div><div><small>${language === "fa" ? "مصرف واقعی" : "Actual usage"}</small><strong>${usage.available ? Number(usage.total_tokens || 0).toLocaleString() : "—"}</strong></div>`;
   return `<section class="benchmark"><div class="row"><div><h2>${text().benchmark}</h2><p class="muted">${language === "fa" ? "تخمین محلی و بدون Provider؛ فقط مسیرهای نسبی امن نمایش داده می‌شود." : "Local provider-free estimate; only safe relative paths are shown."}</p></div><small>${escapeHtml((benchmark?.source_estimate || budget.source || state.estimate_source || ""))}</small></div><div class="stats">${rows}</div></section>`;
 }
+function formatDuration(value) {
+  if (value === null || value === undefined) return "—";
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds)) return "—";
+  return `${seconds.toLocaleString(undefined, {maximumFractionDigits: 2})}s`;
+}
+function statusLabel(value) {
+  const labels = language === "fa" ? {completed:"کامل شد", failed:"ناموفق", cancelled:"لغو شد", timed_out:"پایان زمان", unavailable:"در دسترس نیست", skipped:"رد شد", running:"در حال اجرا", waiting:"در انتظار", not_run:"اجرا نشده"} : {completed:"Completed", failed:"Failed", cancelled:"Cancelled", timed_out:"Timed out", unavailable:"Unavailable", skipped:"Skipped", running:"Running", waiting:"Waiting", not_run:"Not run"};
+  return labels[value] || value || "—";
+}
+function renderUsage(usage) {
+  if (!usage) return `<span class="usage unavailable">${text().notReported}</span>`;
+  if (!usage.available) return `<span class="usage unavailable">${text().notReported} · ${escapeHtml(usage.source || "not_reported")}</span>`;
+  return `<span class="usage">${text().actual}: ${Number(usage.total_tokens || 0).toLocaleString()} · ${escapeHtml(usage.source || "provider")}</span>`;
+}
+function renderRunReport() {
+  const report = state.run_report;
+  if (!report) return `<section class="report"><h2>${text().report}</h2><p class="muted">${text().noReport}</p></section>`;
+  const usage = report.usage || {};
+  const estimates = report.estimates || {};
+  const nodes = (report.nodes || []).map(node => {
+    const evidence = node.evidence ? Object.values(node.evidence).filter(Boolean).join(" · ") : "";
+    return `<article class="report-node"><div class="row"><div><strong>${escapeHtml(node.title || node.id)}</strong><small>${escapeHtml(node.agent_id || "")} · ${escapeHtml(node.role || "")}</small></div><span class="status-pill ${escapeHtml(node.status || "waiting")}">${escapeHtml(statusLabel(node.status))}</span></div><div class="report-meta"><span>${text().duration}: ${formatDuration(node.duration_seconds)}</span><span>${text().filesChanged}: ${(node.changed_files || []).length}</span><span>${text().usage}: ${renderUsage(node.usage)}</span></div><p class="muted report-summary">${escapeHtml(node.summary || "")}</p>${node.error ? `<p class="report-error">${escapeHtml(node.error)}</p>` : ""}${evidence ? `<small class="evidence">${text().evidence}: ${escapeHtml(evidence)}</small>` : ""}</article>`;
+  }).join("");
+  const estimate = estimates.bounded_context_tokens === null || estimates.bounded_context_tokens === undefined ? "—" : Number(estimates.bounded_context_tokens).toLocaleString();
+  const savings = estimates.savings_percentage === null || estimates.savings_percentage === undefined ? "—" : `${Number(estimates.savings_percentage).toLocaleString()}%`;
+  const verification = report.verification || {};
+  const review = report.review || {};
+  const exported = report.export || {};
+  return `<section class="report"><div class="row"><div><h2>${text().report}</h2><p class="muted">${escapeHtml(report.provider || "")} · ${escapeHtml(statusLabel(report.status))}</p></div><strong>${formatDuration(report.duration_seconds)}</strong></div><div class="report-stats"><div><small>${text().actual}</small><strong>${usage.available ? Number(usage.total_tokens || 0).toLocaleString() : "—"}</strong><span>${usage.available ? escapeHtml(usage.source || "provider") : text().notReported}</span></div><div><small>${text().estimate}</small><strong>${estimate}</strong><span>${text().bounded}</span></div><div><small>${text().saved}</small><strong>${savings}</strong><span>${text().benchmark}</span></div><div><small>${text().verification}</small><strong>${escapeHtml(statusLabel(verification.status))}</strong><span>${verification.passed_checks || 0}/${verification.total_checks || 0}</span></div><div><small>${text().review}</small><strong>${review.pending || 0}</strong><span>${text().pending}</span></div><div><small>${text().exportReady}</small><strong>${exported.verified ? "✓" : "—"}</strong><span>${exported.file_count || 0} ${text().files}</span></div></div><div class="report-node-list">${nodes || `<p class="muted">${text().noReport}</p>`}</div></section>`;
+}
 function renderRun() {
   const nodes = state.plan?.nodes || [];
   const title = state.running ? text().run : state.run_status === "cancelled" ? text().cancelled : text().failed;
@@ -73,7 +104,7 @@ function renderRun() {
 }
 function renderResult() {
   const review = state.review || {files:[], pending_count:0}; const verification = state.verification || {};
-  return `<div class="card"><h1>${text().result}</h1><div class="quality ${verification.finalized_at ? "pass" : "fail"}">${verification.finalized_at ? "✓" : "!"} ${escapeHtml(verification.status || "unknown")}</div><div class="file-list">${(review.files || []).map(file => `<div class="file"><strong>${escapeHtml(file.relative_path)}</strong><small>${escapeHtml(file.decision)}</small><pre>${escapeHtml(file.diff_text || "")}</pre></div>`).join("") || `<p class="muted">${language === "fa" ? "تغییری ثبت نشده است." : "No changes recorded."}</p>`}</div><div class="actions"><button type="button" class="primary" data-action="decide" data-decision="accept">${text().accept}</button><button type="button" class="danger" data-action="decide" data-decision="revert">${text().revert}</button><button type="button" class="secondary" data-action="export-project" ${review.pending_count || !verification.finalized_at ? "disabled" : ""}>${text().export}</button></div></div>`;
+  return `<div class="card"><h1>${text().result}</h1>${renderRunReport()}<div class="quality ${verification.finalized_at ? "pass" : "fail"}">${verification.finalized_at ? "✓" : "!"} ${escapeHtml(verification.status || "unknown")}</div><div class="file-list">${(review.files || []).map(file => `<div class="file"><strong>${escapeHtml(file.relative_path)}</strong><small>${escapeHtml(file.decision)}</small><pre>${escapeHtml(file.diff_text || "")}</pre></div>`).join("") || `<p class="muted">${language === "fa" ? "تغییری ثبت نشده است." : "No changes recorded."}</p>`}</div><div class="actions"><button type="button" class="primary" data-action="decide" data-decision="accept">${text().accept}</button><button type="button" class="danger" data-action="decide" data-decision="revert">${text().revert}</button><button type="button" class="secondary" data-action="export-project" ${review.pending_count || !verification.finalized_at ? "disabled" : ""}>${text().export}</button></div></div>`;
 }
 function renderSaved() { return `<div class="card center"><h1>✓</h1><h2>${language === "fa" ? "خروجی آماده است" : "Export is ready"}</h2><p class="muted">${escapeHtml(state.export?.archive_path || "")}</p><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div>`; }
 function render() {
