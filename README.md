@@ -37,7 +37,8 @@ Empy Studio addresses these failures with a small set of enforceable contracts.
 - **Project Vault** — a working persistent baseline with source snapshot, manifest, decisions, tickets, and release history.
 - **Task orchestration** — dependency-aware tasks and execution waves.
 - **File ownership** — one write owner per file in each wave.
-- **Agent-neutral contracts** — usable with Codex or another coding-agent host.
+- **Agent-neutral contracts** — usable with Codex, Claude Code, or another
+  coding-agent host.
 - **Quality gates** — design, security, QA, synchronization, and release checks.
 - **Runtime verification** — command, artifact, and external-check status tracking.
 - **Validated learning** — reusable patterns are promoted only after evidence.
@@ -45,8 +46,13 @@ Empy Studio addresses these failures with a small set of enforceable contracts.
 - **Incremental Project Brain** — unchanged project records are reused and
   bounded Context Packs avoid repeating repository-wide discovery on each
   ticket.
-- **Token evidence** — local context estimates and provider-reported Codex
+- **Token evidence** — bounded local context estimates and provider-reported
   usage are shown separately; missing provider usage is never guessed.
+
+Claude Code is available through the provider registry when its CLI is
+installed and `ANTHROPIC_API_KEY` is configured outside the project. The
+guided Finder flow remains Codex-first until provider-neutral streaming and
+verification events are available for every provider.
 
 ## Designed to stay small
 

@@ -18,7 +18,7 @@ Empy Core
         ↑
 Driver Registry / Manager
   ├─ Codex factory (implemented)
-  ├─ Claude slot (unavailable)
+  ├─ Claude Code factory (implemented; external credential)
   └─ Gemini slot (unavailable)
         ↑
 Desktop Driver Settings
@@ -41,7 +41,9 @@ Credential secrets, API keys, access tokens, and login material are never persis
 The matrix reports only capabilities executable in the current build.
 
 - **Codex:** implemented; code editing, verification, streaming, cancellation.
-- **Claude:** provider slot registered; execution unavailable in Ticket 12.
+- **Claude:** implemented through the Claude Code CLI adapter; code editing and
+  cancellation are available when the CLI and `ANTHROPIC_API_KEY` are present.
+  The key is read from the environment and never persisted or printed.
 - **Gemini:** provider slot registered; execution unavailable in Ticket 12.
 
 Unavailable providers are visible instead of being presented as working integrations.
@@ -50,7 +52,10 @@ Unavailable providers are visible instead of being presented as working integrat
 
 The desktop settings page can choose an enabled provider as the default. `DriverManager` resolves the selected provider through `DriverRegistry`; callers do not instantiate Codex directly.
 
-The current graph runtime remains available for the implemented Codex driver. Selecting an unavailable provider disables execution and displays its remediation state. Claude and Gemini runtime implementation is intentionally outside Ticket 12.
+The current guided graph runtime remains Codex-first. `DriverManager` can now
+instantiate the Claude Code adapter through the same provider-neutral contract;
+its verification and streaming capabilities are intentionally reported as
+unsupported until a provider-neutral graph event adapter is added.
 
 ## Definition of Done evidence
 
@@ -64,7 +69,6 @@ The current graph runtime remains available for the implemented Codex driver. Se
 
 Ticket 12 does not implement:
 
-- Claude execution;
 - Gemini execution;
 - multi-provider parallel runs;
 - patch synchronization;

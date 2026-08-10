@@ -24,6 +24,8 @@ jobs:
       - run: ruff check .
       - run: mypy src
       - run: pytest -q
+      - name: Measure bounded context and local runtime thresholds
+        run: python scripts/run_product_benchmarks.py --max-seconds 5 --min-savings-percentage 1
       - name: Build wheel and source distribution
         run: python -m build --no-isolation --wheel --sdist --outdir build/packages
       - name: Install the built wheel in a fresh environment

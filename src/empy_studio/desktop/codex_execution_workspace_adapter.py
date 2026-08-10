@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 from empy_studio.drivers import (
     CodexAvailability,
@@ -14,6 +14,7 @@ from empy_studio.drivers import (
     CodexNodeStatus,
     CodexProgressEvent,
     CodexRunStatus,
+    CodexWaveExecution,
 )
 from empy_studio.token_usage import TokenUsage
 
@@ -120,12 +121,15 @@ class CodexExecutionWorkspaceAdapter:
         raw_installation = value.get("installation")
         raw_nodes = value.get("node_results", [])
         raw_events = value.get("events", [])
+        raw_schedule = value.get("schedule", [])
         if not isinstance(raw_installation, dict):
             raise TypeError("installation must be an object")
         if not isinstance(raw_nodes, list):
             raise TypeError("node_results must be a list")
         if not isinstance(raw_events, list):
             raise TypeError("events must be a list")
+        if not isinstance(raw_schedule, list):
+            raw_schedule = []
 
         installation = CodexInstallation(
             availability=cast(
@@ -195,6 +199,21 @@ class CodexExecutionWorkspaceAdapter:
                 )
             )
 
+        schedule: list[CodexWaveExecution] = []
+        for raw in raw_schedule:
+            if not isinstance(raw, dict):
+                continue
+            schedule.append(
+                CodexWaveExecution(
+                    wave=_as_int(raw["wave"], "schedule.wave"),
+                    node_ids=_string_tuple(raw.get("node_ids")),
+                    mode=cast(Literal["serial", "parallel"], str(raw["mode"])),
+                    capacity=_as_int(raw["capacity"], "schedule.capacity"),
+                    started_at=str(raw["started_at"]),
+                    finished_at=str(raw["finished_at"]),
+                )
+            )
+
         raw_error_code = value.get("error_code")
         run = CodexGraphExecution(
             schema_version=_as_int(value["schema_version"], "schema_version"),
@@ -216,6 +235,7 @@ class CodexExecutionWorkspaceAdapter:
             ),
             error_message=_optional_string(value.get("error_message")),
             usage=_usage(value.get("usage")),
+            schedule=tuple(schedule),
         )
         run.validate()
         return run

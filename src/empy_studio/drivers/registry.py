@@ -17,6 +17,7 @@ from empy_studio.core import (
 )
 
 from .base import BaseDriver
+from .claude import ClaudeCodeDriver
 from .codex import CodexDriver
 
 DriverFactory = Callable[[DriverConfiguration, Path], BaseDriver]
@@ -139,6 +140,21 @@ def _codex_factory(
         executable=configuration.executable or "codex",
         artifact_root=artifact_root,
         enabled=configuration.enabled,
+    )
+
+
+def _claude_factory(
+    configuration: DriverConfiguration,
+    artifact_root: Path,
+) -> BaseDriver:
+    del artifact_root
+    return ClaudeCodeDriver(
+        executable=configuration.executable or "claude",
+        enabled=configuration.enabled,
+        credential_environment_variable=(
+            configuration.credential_environment_variable
+            or "ANTHROPIC_API_KEY"
+        ),
     )
 
 
@@ -309,17 +325,25 @@ def default_driver_registry() -> DriverRegistry:
             provider_id="claude",
             display_name="Claude",
             description=(
-                "Reserved provider slot. Execution is unavailable until a "
-                "compatible driver is implemented."
+                "Claude Code CLI driver using an external credential, bounded "
+                "edit permissions, timeout, and cancellation."
             ),
-            capabilities=none,
-            implemented=False,
+            capabilities=DriverCapabilities(
+                planning=False,
+                code_editing=True,
+                verification=False,
+                streaming=False,
+                cancellation=True,
+            ),
+            implemented=True,
             default_configuration=DriverConfiguration(
                 provider_id="claude",
                 enabled=False,
                 executable="claude",
-                credential_mode="none",
+                credential_mode="environment",
+                credential_environment_variable="ANTHROPIC_API_KEY",
             ),
+            factory=_claude_factory,
         )
     )
     registry.register(

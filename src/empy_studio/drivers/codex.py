@@ -240,7 +240,7 @@ class CodexDriver(BaseDriver):
         self.sleep = sleep
         self._status: DriverStatus = "unavailable"
         self._process_lock = threading.Lock()
-        self._active_process: subprocess.Popen[str] | None = None
+        self._active_processes: dict[int, subprocess.Popen[str]] = {}
         self._cancel_requested = threading.Event()
         self._installation: CodexInstallation | None = None
 
@@ -260,6 +260,11 @@ class CodexDriver(BaseDriver):
             streaming=True,
             cancellation=True,
         )
+
+    @property
+    def supports_parallel_nodes(self) -> bool:
+        """Codex processes can run concurrently when file ownership is disjoint."""
+        return True
 
     def status(self) -> DriverStatus:
         return self._status
@@ -594,8 +599,9 @@ class CodexDriver(BaseDriver):
                 error_message=str(exc),
             )
 
+        process_key = id(process)
         with self._process_lock:
-            self._active_process = process
+            self._active_processes[process_key] = process
 
         events: list[dict[str, object]] = []
         stderr_lines: list[str] = []
@@ -665,7 +671,7 @@ class CodexDriver(BaseDriver):
         if stdout is None or stderr is None or stdin is None:
             self._terminate_process(process)
             with self._process_lock:
-                self._active_process = None
+                self._active_processes.pop(process_key, None)
             self._status = "failed"
             return self._terminal_result(
                 request=request,
@@ -716,7 +722,7 @@ class CodexDriver(BaseDriver):
         stdout_thread.join(timeout=DEFAULT_CANCEL_GRACE_SECONDS)
         stderr_thread.join(timeout=DEFAULT_CANCEL_GRACE_SECONDS)
         with self._process_lock:
-            self._active_process = None
+            self._active_processes.pop(process_key, None)
 
         stderr_text = "".join(stderr_lines).strip()
         final_message = (
@@ -860,9 +866,10 @@ class CodexDriver(BaseDriver):
     def cancel(self) -> None:
         self._cancel_requested.set()
         with self._process_lock:
-            process = self._active_process
-        if process is not None and process.poll() is None:
-            self._terminate_process(process)
+            processes = tuple(self._active_processes.values())
+        for process in processes:
+            if process.poll() is None:
+                self._terminate_process(process)
 
     def build_command(
         self,

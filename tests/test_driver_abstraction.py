@@ -90,7 +90,8 @@ def test_default_registry_exposes_capability_matrix() -> None:
     assert set(matrix) == {"claude", "codex", "gemini"}
     assert matrix["codex"].implemented is True
     assert matrix["codex"].capabilities.code_editing is True
-    assert matrix["claude"].implemented is False
+    assert matrix["claude"].implemented is True
+    assert matrix["claude"].capabilities.code_editing is True
     assert matrix["gemini"].implemented is False
 
 
@@ -105,11 +106,8 @@ def test_unimplemented_providers_report_unavailable_state(
         artifact_root=tmp_path,
     )
 
-    claude = manager.driver("claude").inspect()
     gemini = manager.driver("gemini").inspect()
 
-    assert claude.ready is False
-    assert claude.availability == "disabled"
     assert gemini.ready is False
     assert gemini.availability == "disabled"
 

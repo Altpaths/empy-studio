@@ -196,6 +196,44 @@ def test_runtime_executes_dependency_order(tmp_path: Path) -> None:
     assert result.usage.provider == "codex"
 
 
+def test_runtime_runs_independent_wave_in_parallel_when_driver_allows_it(
+    tmp_path: Path,
+) -> None:
+    detection, selection, budget, graph = prepared(tmp_path)
+    nodes = tuple(
+        replace(node, depends_on=(), wave=1)
+        for node in graph.nodes
+    )
+    independent_graph = replace(
+        graph,
+        nodes=nodes,
+        waves=(tuple(node.node_id for node in nodes),),
+    )
+    independent_graph.validate()
+    driver = FakeDriver()
+    driver.supports_parallel_nodes = True
+    runtime = CodexGraphRuntime(
+        driver=driver,
+        run_root=tmp_path / "runs",
+        max_parallel_nodes=3,
+    )
+
+    result = runtime.run(
+        graph=independent_graph,
+        selection=selection,
+        budget=budget,
+        project=detection.descriptor,
+    )
+
+    assert result.status == "completed"
+    assert len(result.schedule) == 1
+    assert result.schedule[0].mode == "parallel"
+    assert result.schedule[0].capacity == 3
+    assert tuple(item.node_id for item in result.node_results) == tuple(
+        node.node_id for node in nodes
+    )
+
+
 def test_runtime_honors_cancel_before_worker_enters_run(tmp_path: Path) -> None:
     detection, selection, budget, graph = prepared(tmp_path)
     driver = FakeDriver()

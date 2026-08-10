@@ -91,3 +91,13 @@ the earlier runtime, provider, synchronization, verification, and review
 tickets. The remaining work is to reconcile the guided GUI with that canonical
 core, make its state durable, support follow-up tickets, and prove the direct
 project delivery flow.
+
+## Continuity hardening tickets
+
+| ID | Scope | Current state |
+|---|---|---|
+| T19 | Consolidated per-agent report, usage provenance, evidence, verification, review, and export status | Implemented and tested |
+| T20 | Canonical bilingual Web Desktop path, folder/ZIP import, Codex readiness, accessibility labels, and legacy Tk boundary | Implemented and tested |
+| T21 | Bounded parallel waves, dependency-safe scheduling, capacity, retry/time evidence, and Codex ownership audit | Implemented and tested |
+| T22 | Claude Code CLI adapter behind the provider contract, external credential handling, bounded edits, timeout/cancel | Implemented and tested with a local fake CLI; live CLI/auth remains environment-dependent |
+| T23 | Multi-project token/time benchmark, CI regression thresholds, clean-install checks, and stable macOS signing/notarization gates | Implemented as release gates; Apple signing/notarization must run with repository release secrets |

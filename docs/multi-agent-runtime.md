@@ -16,6 +16,15 @@ Empy Studio owns:
 - execution state;
 - evidence and failure propagation.
 
+Independent tasks in the same dependency wave are executed in bounded batches
+up to `max_workers` (four by default). The runtime records each batch, start and
+finish timestamps, observed parallelism, agent selection, retry attempts, and
+per-task evidence. Scheduler capacity is applied before a batch is started, so
+an agent is never assigned more concurrent work than its declared capacity.
+Handoffs and memory updates are committed in deterministic task order after a
+batch completes; dependents never start before the whole dependency wave is
+resolved.
+
 An external host owns model inference and tool use. Codex, Claude Code, a local
 script, or another system connects through an adapter.
 

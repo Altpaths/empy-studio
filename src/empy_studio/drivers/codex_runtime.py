@@ -4,6 +4,7 @@ import subprocess
 import threading
 import uuid
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Literal, Protocol
@@ -37,6 +38,7 @@ CodexRunStatus = Literal[
     "timed_out",
     "unavailable",
 ]
+CodexWaveMode = Literal["serial", "parallel"]
 RunProgressCallback = Callable[[CodexProgressEvent], None]
 
 
@@ -44,6 +46,29 @@ RunProgressCallback = Callable[[CodexProgressEvent], None]
 class _GitSnapshot:
     head: str
     status: dict[str, str]
+
+
+@dataclass(frozen=True)
+class CodexWaveExecution:
+    wave: int
+    node_ids: tuple[str, ...]
+    mode: CodexWaveMode
+    capacity: int
+    started_at: str
+    finished_at: str
+
+    def validate(self) -> None:
+        if self.wave < 1 or not self.node_ids:
+            raise ValueError("Codex wave execution identity is invalid")
+        if self.mode not in {"serial", "parallel"}:
+            raise ValueError("unsupported Codex wave execution mode")
+        if self.capacity < 1:
+            raise ValueError("Codex wave capacity must be positive")
+        if not self.started_at or not self.finished_at:
+            raise ValueError("Codex wave execution timestamps cannot be empty")
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
 
 
 class CodexNodeDriver(Protocol):
@@ -81,6 +106,7 @@ class CodexGraphExecution:
     error_code: CodexErrorCode | None = None
     error_message: str | None = None
     usage: TokenUsage | None = None
+    schedule: tuple[CodexWaveExecution, ...] = ()
 
     def validate(self) -> None:
         if self.schema_version != 1:
@@ -101,6 +127,8 @@ class CodexGraphExecution:
             node.validate()
         for event in self.events:
             event.validate()
+        for wave in self.schedule:
+            wave.validate()
         if self.status == "completed" and any(
             node.status != "completed" for node in self.node_results
         ):
@@ -119,6 +147,7 @@ class CodexGraphExecution:
         value["node_results"] = [item.to_dict() for item in self.node_results]
         value["events"] = [item.to_dict() for item in self.events]
         value["usage"] = self.usage.to_dict() if self.usage is not None else None
+        value["schedule"] = [item.to_dict() for item in self.schedule]
         return value
 
 
@@ -216,14 +245,107 @@ class CodexGraphRuntime:
         driver: CodexNodeDriver | None = None,
         run_root: str | Path,
         timeout_seconds: int = 1800,
+        max_parallel_nodes: int = 2,
     ) -> None:
         if timeout_seconds < 1:
             raise ValueError("timeout_seconds must be positive")
+        if max_parallel_nodes < 1:
+            raise ValueError("max_parallel_nodes must be positive")
         self.driver = driver or CodexDriver(artifact_root=run_root)
         self.run_root = Path(run_root).expanduser().resolve()
         self.timeout_seconds = timeout_seconds
+        self.max_parallel_nodes = max_parallel_nodes
         self._cancel_requested = threading.Event()
         self._lifecycle_lock = threading.Lock()
+
+    def _execute_node(
+        self,
+        *,
+        graph: AgentRunGraph,
+        selection: ContextSelection,
+        project: ProjectDescriptor,
+        task: ProductTask | None,
+        node: AgentRunNode,
+        run_id: str,
+        report: RunProgressCallback,
+        audit_snapshot: bool,
+    ) -> CodexNodeExecution:
+        prompt = build_codex_node_prompt(
+            graph=graph,
+            selection=selection,
+            node=node,
+            task=task,
+        )
+        request = DriverExecutionRequest(
+            project=project,
+            task_id=f"{graph.task_id}:{node.step_id}",
+            prompt=prompt,
+            allowed_paths=node.owned_files,
+            timeout_seconds=self.timeout_seconds,
+        )
+        before_snapshot = self._git_snapshot(project.root) if audit_snapshot else None
+        node_result = self.driver.execute_streaming(
+            request,
+            node_id=node.node_id,
+            artifact_dir=self.run_root / run_id / "nodes" / node.node_id,
+            on_progress=report,
+        )
+        after_snapshot = self._git_snapshot(project.root) if audit_snapshot else None
+        audited_changes = self._snapshot_delta(before_snapshot, after_snapshot)
+        provider_changes = {
+            self._normalize_changed_path(path, project.root)
+            for path in node_result.changed_files
+        }
+        changed_files = tuple(sorted(provider_changes | audited_changes))
+        node_result = replace(node_result, changed_files=changed_files)
+
+        scope_errors: list[str] = []
+        unauthorized = tuple(
+            path
+            for path in changed_files
+            if not self._path_is_owned(path, node.owned_files)
+        )
+        if unauthorized:
+            scope_errors.append(
+                "Codex changed files outside this node's ownership: "
+                + ", ".join(unauthorized)
+            )
+        if (
+            before_snapshot is not None
+            and after_snapshot is not None
+            and before_snapshot.head != after_snapshot.head
+        ):
+            scope_errors.append(
+                "Codex changed Git history even though commits are forbidden."
+            )
+        if scope_errors:
+            error_message = " ".join(scope_errors)
+            node_result = replace(
+                node_result,
+                status="failed",
+                summary="Empy stopped the run after a scope audit failure.",
+                error_code="scope_violation",
+                error_message=error_message,
+            )
+            report(
+                CodexProgressEvent(
+                    timestamp=self._utc_now(),
+                    level="error",
+                    event_type="run.scope_violation",
+                    message=error_message,
+                    node_id=node.node_id,
+                )
+            )
+        node_result.validate()
+        return node_result
+
+    def _can_parallelize(self, nodes: tuple[AgentRunNode, ...]) -> bool:
+        if len(nodes) < 2 or self.max_parallel_nodes < 2:
+            return False
+        if not bool(getattr(self.driver, "supports_parallel_nodes", False)):
+            return False
+        owned: list[str] = [path for node in nodes for path in node.owned_files]
+        return len(owned) == len(set(owned))
 
     def run(
         self,
@@ -345,76 +467,81 @@ class CodexGraphRuntime:
         terminal_error_code: CodexErrorCode | None = None
         terminal_error_message: str | None = None
         stop = False
+        schedule: list[CodexWaveExecution] = []
 
-        for wave in graph.waves:
-            for node_id in wave:
-                if self._cancel_requested.is_set():
-                    terminal_status = "cancelled"
-                    terminal_error_code = "cancelled"
-                    terminal_error_message = "The user cancelled the Codex graph run."
-                    stop = True
-                    break
-                node = node_by_id[node_id]
-                prompt = build_codex_node_prompt(
-                    graph=graph,
-                    selection=selection,
-                    node=node,
-                    task=task,
-                )
-                request = DriverExecutionRequest(
-                    project=project,
-                    task_id=f"{graph.task_id}:{node.step_id}",
-                    prompt=prompt,
-                    allowed_paths=node.owned_files,
-                    timeout_seconds=self.timeout_seconds,
-                )
-                before_snapshot = self._git_snapshot(project.root)
-                node_result = self.driver.execute_streaming(
-                    request,
-                    node_id=node.node_id,
-                    artifact_dir=self.run_root / run_id / "nodes" / node.node_id,
-                    on_progress=report,
-                )
-                after_snapshot = self._git_snapshot(project.root)
+        for wave_number, raw_wave in enumerate(graph.waves, start=1):
+            wave = tuple(raw_wave)
+            if self._cancel_requested.is_set():
+                terminal_status = "cancelled"
+                terminal_error_code = "cancelled"
+                terminal_error_message = "The user cancelled the Codex graph run."
+                stop = True
+                break
+            wave_started_at = self._utc_now()
+            nodes = tuple(node_by_id[node_id] for node_id in wave)
+            can_parallelize = self._can_parallelize(nodes)
+            wave_results: list[CodexNodeExecution] = []
+            wave_snapshot = self._git_snapshot(project.root) if can_parallelize else None
+            if can_parallelize:
+                with ThreadPoolExecutor(
+                    max_workers=min(self.max_parallel_nodes, len(nodes)),
+                    thread_name_prefix="empy-codex-node",
+                ) as executor:
+                    futures = {
+                        node.node_id: executor.submit(
+                            self._execute_node,
+                            graph=graph,
+                            selection=selection,
+                            project=project,
+                            task=task,
+                            node=node,
+                            run_id=run_id,
+                            report=report,
+                            audit_snapshot=False,
+                        )
+                        for node in nodes
+                    }
+                    wave_results = [futures[node.node_id].result() for node in nodes]
+                after_wave_snapshot = self._git_snapshot(project.root)
                 audited_changes = self._snapshot_delta(
-                    before_snapshot,
-                    after_snapshot,
+                    wave_snapshot,
+                    after_wave_snapshot,
                 )
-                provider_changes = {
-                    self._normalize_changed_path(path, project.root)
-                    for path in node_result.changed_files
-                }
-                changed_files = tuple(
-                    sorted(provider_changes | audited_changes)
-                )
-                node_result = replace(
-                    node_result,
-                    changed_files=changed_files,
-                )
-
-                scope_errors: list[str] = []
-                unauthorized = tuple(
+                allowed_paths = {
                     path
-                    for path in changed_files
-                    if not self._path_is_owned(path, node.owned_files)
+                    for node in nodes
+                    for path in node.owned_files
+                }
+                unauthorized = tuple(sorted(audited_changes - allowed_paths))
+                history_changed = (
+                    wave_snapshot is not None
+                    and after_wave_snapshot is not None
+                    and wave_snapshot.head != after_wave_snapshot.head
                 )
-                if unauthorized:
-                    scope_errors.append(
-                        "Codex changed files outside this node's ownership: "
-                        + ", ".join(unauthorized)
+                for index, node_result in enumerate(wave_results):
+                    node = nodes[index]
+                    owned_changes = set(node_result.changed_files) | (
+                        audited_changes & set(node.owned_files)
                     )
-                if (
-                    before_snapshot is not None
-                    and after_snapshot is not None
-                    and before_snapshot.head != after_snapshot.head
-                ):
-                    scope_errors.append(
-                        "Codex changed Git history even though commits are forbidden."
-                    )
-                if scope_errors:
-                    error_message = " ".join(scope_errors)
-                    node_result = replace(
+                    wave_results[index] = replace(
                         node_result,
+                        changed_files=tuple(sorted(owned_changes)),
+                    )
+                if unauthorized or history_changed:
+                    scope_errors = []
+                    if unauthorized:
+                        scope_errors.append(
+                            "Codex changed files outside this wave's ownership: "
+                            + ", ".join(unauthorized)
+                        )
+                    if history_changed:
+                        scope_errors.append(
+                            "Codex changed Git history even though commits are forbidden."
+                        )
+                    error_message = " ".join(scope_errors)
+                    first = wave_results[0]
+                    wave_results[0] = replace(
+                        first,
                         status="failed",
                         summary="Empy stopped the run after a scope audit failure.",
                         error_code="scope_violation",
@@ -426,19 +553,64 @@ class CodexGraphRuntime:
                             level="error",
                             event_type="run.scope_violation",
                             message=error_message,
-                            node_id=node.node_id,
+                            node_id=nodes[0].node_id,
                         )
                     )
-                node_result.validate()
-                completed_nodes.append(node_result)
+                    wave_results[0].validate()
+            else:
+                for node in nodes:
+                    if self._cancel_requested.is_set():
+                        terminal_status = "cancelled"
+                        terminal_error_code = "cancelled"
+                        terminal_error_message = "The user cancelled the Codex graph run."
+                        stop = True
+                        break
+                    wave_results.append(
+                        self._execute_node(
+                            graph=graph,
+                            selection=selection,
+                            project=project,
+                            task=task,
+                            node=node,
+                            run_id=run_id,
+                            report=report,
+                            audit_snapshot=True,
+                        )
+                    )
+                    if wave_results[-1].status != "completed":
+                        terminal_status = self._run_status_for_node(wave_results[-1].status)
+                        terminal_error_code = wave_results[-1].error_code or "process_failed"
+                        terminal_error_message = (
+                            wave_results[-1].error_message or wave_results[-1].summary
+                        )
+                        stop = True
+                        break
 
-                if node_result.status != "completed":
-                    terminal_status = self._run_status_for_node(node_result.status)
-                    terminal_error_code = node_result.error_code or "process_failed"
-                    terminal_error_message = node_result.error_message or node_result.summary
-                    stop = True
-                    break
+            completed_nodes.extend(wave_results)
+            wave_finished_at = self._utc_now()
+            schedule.append(
+                CodexWaveExecution(
+                    wave=wave_number,
+                    node_ids=wave,
+                    mode="parallel" if can_parallelize else "serial",
+                    capacity=min(self.max_parallel_nodes, len(nodes))
+                    if can_parallelize
+                    else 1,
+                    started_at=wave_started_at,
+                    finished_at=wave_finished_at,
+                )
+            )
             if stop:
+                break
+            failed = next(
+                (item for item in wave_results if item.status != "completed"),
+                None,
+            )
+            if failed is not None:
+                terminal_status = self._run_status_for_node(failed.status)
+                terminal_error_code = failed.error_code or "process_failed"
+                terminal_error_message = failed.error_message or failed.summary
+                stop = True
                 break
 
         executed_ids = {item.node_id for item in completed_nodes}
@@ -477,6 +649,7 @@ class CodexGraphRuntime:
                 (node.usage for node in completed_nodes),
                 provider="codex",
             ),
+            schedule=tuple(schedule),
         )
         result.validate()
         return result

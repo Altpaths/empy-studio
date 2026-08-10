@@ -9,6 +9,7 @@ from empy_studio.drivers import (
     CodexGraphExecution,
     CodexInstallation,
     CodexNodeExecution,
+    CodexWaveExecution,
 )
 from empy_studio.review_workspace import ReviewReport
 from empy_studio.token_usage import TokenUsage
@@ -284,6 +285,16 @@ def test_public_exposes_safe_bilingual_execution_report(tmp_path: Path) -> None:
         node_results=(node_result,),
         events=(),
         usage=node_result.usage,
+        schedule=(
+            CodexWaveExecution(
+                wave=1,
+                node_ids=(graph_node.node_id,),
+                mode="serial",
+                capacity=1,
+                started_at="2026-08-10T00:00:00+00:00",
+                finished_at="2026-08-10T00:00:01.500000+00:00",
+            ),
+        ),
     )
 
     report = state.public()["run_report"]
@@ -295,3 +306,4 @@ def test_public_exposes_safe_bilingual_execution_report(tmp_path: Path) -> None:
     assert report["nodes"][0]["evidence"]["events"] == "runs/run-1/events.jsonl"
     assert str(state.workspace_root) not in str(report)
     assert report["verification"]["status"] == "not_run"
+    assert report["schedule"][0]["mode"] == "serial"

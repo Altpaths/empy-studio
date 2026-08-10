@@ -12,6 +12,7 @@ from empy_studio.drivers import (
     CodexInstallation,
     CodexNodeExecution,
     CodexProgressEvent,
+    CodexWaveExecution,
 )
 from empy_studio.token_usage import TokenUsage
 
@@ -75,6 +76,16 @@ def sample_run(tmp_path: Path) -> CodexGraphExecution:
             total=17,
             source="provider",
             provider="codex",
+        ),
+        schedule=(
+            CodexWaveExecution(
+                wave=1,
+                node_ids=("node-1",),
+                mode="serial",
+                capacity=1,
+                started_at="2026-08-04T00:00:00+00:00",
+                finished_at="2026-08-04T00:00:01+00:00",
+            ),
         ),
     )
     run.validate()

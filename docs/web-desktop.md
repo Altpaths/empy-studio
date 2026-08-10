@@ -40,8 +40,9 @@ its evidence.
 After a run, the result screen shows a compact report for every graph node:
 agent identity, role, status, duration, changed files, provider-reported usage
 when available, local estimate source, and safe workspace-relative evidence
-references. Missing provider usage is shown as `not_reported`; it is never
-converted into an exact value.
+references. It also exposes the dependency-wave schedule and whether each wave
+ran serially or in a bounded parallel batch. Missing provider usage is shown as
+`not_reported`; it is never converted into an exact value.
 
 ## Security boundary
 

@@ -5,6 +5,7 @@ never import this package.
 """
 
 from .base import BaseDriver
+from .claude import ClaudeCodeDriver
 from .codex import (
     CodexAvailability,
     CodexDriver,
@@ -20,6 +21,7 @@ from .codex_runtime import (
     CodexGraphExecution,
     CodexGraphRuntime,
     CodexRunStatus,
+    CodexWaveExecution,
     build_codex_node_prompt,
 )
 from .registry import (
@@ -33,6 +35,7 @@ from .registry import (
 
 __all__ = [
     "BaseDriver",
+    "ClaudeCodeDriver",
     "CodexAvailability",
     "CodexDriver",
     "CodexDriverError",
@@ -45,6 +48,7 @@ __all__ = [
     "CodexNodeStatus",
     "CodexProgressEvent",
     "CodexRunStatus",
+    "CodexWaveExecution",
     "DriverDefinition",
     "DriverFactory",
     "DriverManager",

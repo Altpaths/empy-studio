@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -69,6 +70,36 @@ def test_runtime_passes_handoffs_and_updates_memory(tmp_path: Path) -> None:
     memory = json.loads((tmp_path / "memory/worker.json").read_text(encoding="utf-8"))
     assert memory["revision"] == 2
     assert memory["data"]["last"] == "build"
+
+
+def test_independent_tasks_run_in_parallel_and_record_schedule(tmp_path: Path) -> None:
+    rendezvous = threading.Barrier(2)
+
+    def handler(payload):
+        rendezvous.wait(timeout=1)
+        return AgentOutput(status="passed", result={"task": payload.task.task_id})
+
+    agent = AgentSpec("worker", "Worker", ("work",), "local")
+    runtime = MultiAgentRuntime(
+        registry=AgentRegistry([agent]),
+        adapters={"local": LocalAdapter(handler)},
+        state_root=tmp_path / "runs",
+        memory_root=tmp_path / "memory",
+        max_workers=2,
+    )
+    result = runtime.run([
+        RuntimeTask("first", "First", ("work",)),
+        RuntimeTask("second", "Second", ("work",)),
+    ], run_id="parallel")
+
+    assert result["status"] == "passed"
+    assert result["schedule_summary"] == {
+        "batches": 1,
+        "parallel_batches": 1,
+        "max_observed_parallelism": 2,
+    }
+    assert result["schedule"][0]["task_ids"] == ["first", "second"]
+    assert all(result["tasks"][task_id]["started_at"] for task_id in ("first", "second"))
 
 
 def test_retry_succeeds_on_second_attempt(tmp_path: Path) -> None:

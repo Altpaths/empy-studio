@@ -1124,6 +1124,7 @@ class GuidedState:
             ),
             "error": self.run.error_message,
             "nodes": node_reports,
+            "schedule": [item.to_dict() for item in self.run.schedule],
             "usage": self._provider_usage(),
             "estimates": estimates,
             "verification": {

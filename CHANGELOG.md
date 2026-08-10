@@ -1,5 +1,22 @@
 ## Unreleased
 
+### Tickets 19–23 — Product continuity hardening
+
+- Added consolidated per-agent reports with durations, role/status, provider
+  usage provenance, local token estimates, safe evidence references, review,
+  verification, export, and dependency-wave schedule data.
+- Made the Web Desktop path the canonical bilingual Finder flow with folder/ZIP
+  import, readiness refresh, accessible labels, and honest Codex remediation.
+- Added bounded parallel execution for independent waves, scheduler capacity,
+  deterministic handoff/memory commits, retry timing, and Codex-wide ownership
+  audits for concurrent nodes.
+- Added a real Claude Code CLI driver behind the provider contract. It reads an
+  external `ANTHROPIC_API_KEY`, never persists the secret, and reports missing
+  CLI/credential states honestly.
+- Added three-project token/time benchmark thresholds to CI and retained clean
+  install plus Apple signing, notarization, stapling, and Gatekeeper gates for
+  stable macOS publication.
+
 ### Ticket 18 — Open-source distribution foundation
 
 - Added a supported Python CI matrix with package build, clean wheel install,
