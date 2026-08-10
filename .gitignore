@@ -19,5 +19,6 @@ project_vaults/
 private/
 releases/
 artifacts/
+outputs/
 .empy/
 *.zip
