@@ -14,7 +14,7 @@ from empy_studio.drivers import (
 )
 from empy_studio.review_workspace import ReviewReport
 from empy_studio.token_usage import TokenUsage
-from empy_studio.verification_pipeline import VerificationReport
+from empy_studio.verification_pipeline import VerificationCheck, VerificationReport, VerificationResult
 from empy_studio.web_desktop import GuidedState, RequestHandler
 
 
@@ -333,3 +333,86 @@ def test_public_exposes_safe_bilingual_execution_report(tmp_path: Path) -> None:
     assert str(state.workspace_root) not in str(report)
     assert report["verification"]["status"] == "not_run"
     assert report["schedule"][0]["mode"] == "serial"
+
+
+def test_failed_verification_is_visible_and_can_seed_a_follow_up_ticket(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("demo\n", encoding="utf-8")
+    (source / "index.html").write_text("<main>demo</main>\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+    state.create_plan("Update the README")
+
+    assert state.graph is not None
+    assert state.run is None
+    check = VerificationCheck(
+        check_id="site-audit",
+        label="Site audit",
+        category="tests",
+        command=("php", "site-audit.php"),
+    )
+    state.verification = VerificationReport(
+        schema_version=1,
+        verification_id="verification-failure",
+        project_root=str(state.detection.descriptor.root),
+        project_type="php",
+        status="fail",
+        started_at="now",
+        finished_at="now",
+        results=(
+            VerificationResult(
+                check=check,
+                status="fail",
+                returncode=1,
+                stdout="",
+                stderr=f"missing public_html/index.html in {state.detection.descriptor.root}\n",
+                started_at="now",
+                finished_at="now",
+            ),
+        ),
+        evidence_path=str(tmp_path / "evidence"),
+        diagnostics=("The project entry page is missing.",),
+    )
+
+    # A minimal completed run is enough to exercise the public execution report.
+    from empy_studio.drivers import CodexGraphExecution, CodexInstallation
+
+    state.run = CodexGraphExecution(
+        schema_version=1,
+        run_id="run-failure",
+        graph_id=state.graph.graph_id,
+        task_id=state.task.task_id,
+        project_root=str(state.detection.descriptor.root),
+        provider="codex",
+        status="failed",
+        started_at="now",
+        finished_at="now",
+        installation=CodexInstallation(
+            availability="available",
+            executable="codex",
+            version="test",
+            authenticated=True,
+            message="ready",
+        ),
+        node_results=(),
+        events=(),
+        usage=None,
+        schedule=(),
+        error_code="process_failed",
+        error_message="verification failed",
+    )
+    public = state.public()
+    report = public["run_report"]
+    assert report["verification"]["diagnostics"] == ["The project entry page is missing."]
+    assert report["verification"]["failures"][0]["label"] == "Site audit"
+    assert str(state.detection.descriptor.root) not in str(report)
+    assert "<project>" in report["verification"]["failures"][0]["detail"]
+
+    state.resume_ticket()
+    assert state.phase == "task"
+    assert state.continuation_context is not None
+    assert "Site audit" in state.continuation_context
+    state.create_plan("Update index.html to address the reported project entry page issue")
+    assert state.task is not None
+    assert "Previous Empy verification findings" in state.task.objective

@@ -8,6 +8,12 @@
   excluding dependencies, generated files, and Empy workspace data.
 - Persist missing verification executables as failed evidence instead of
   crashing the run, and include common desktop/Homebrew tool paths.
+- Keep unmapped verification as an actionable failed report instead of a dead
+  end, with persisted diagnostics and an export gate.
+- Show bounded, redacted verification failures in the bilingual UI and carry
+  them into a new corrective ticket on the same isolated project.
+- Give generic HTML and nested PHP files to the appropriate writing Agent so
+  corrective plans do not fail during ownership assignment.
 
 ## [0.1.5] - 2026-08-10
 

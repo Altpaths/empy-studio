@@ -61,6 +61,23 @@ def test_plain_php_without_composer_maps_safe_syntax_checks(tmp_path: Path) -> N
     assert all(item.command[:2] == ("php", "-l") for item in checks)
 
 
+def test_project_without_safe_checks_returns_actionable_failure_report(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("demo", encoding="utf-8")
+
+    report = VerificationRuntime().run(
+        detection=DefaultProjectService().detect(tmp_path),
+        evidence_root=tmp_path / "evidence",
+    )
+
+    assert report.status == "fail"
+    assert report.results == ()
+    assert report.finalize_allowed is False
+    assert report.diagnostics
+    evidence = tmp_path / "evidence" / report.verification_id / "verification-report.json"
+    saved = json.loads(evidence.read_text(encoding="utf-8"))
+    assert saved["diagnostics"] == list(report.diagnostics)
+
+
 @pytest.mark.skipif(shutil.which("php") is None, reason="PHP CLI is not installed")
 def test_plain_php_lint_runtime_can_finalize(tmp_path: Path) -> None:
     (tmp_path / "admin.php").write_text("<?php echo 'ok';\n", encoding="utf-8")

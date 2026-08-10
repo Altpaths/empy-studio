@@ -129,6 +129,7 @@ class VerificationReport:
     results: tuple[VerificationResult, ...]
     evidence_path: str
     finalized_at: str | None = None
+    diagnostics: tuple[str, ...] = ()
 
     @property
     def finalize_allowed(self) -> bool:
@@ -149,6 +150,7 @@ class VerificationReport:
             "evidence_path": self.evidence_path,
             "finalize_allowed": self.finalize_allowed,
             "finalized_at": self.finalized_at,
+            "diagnostics": list(self.diagnostics),
         }
 
 
@@ -353,25 +355,42 @@ class VerificationRuntime:
         if timeout_seconds < 1:
             raise ValueError("verification timeout must be at least one second")
         checks = map_project_verification(detection)
-        if not checks:
-            raise RuntimeError("No verification commands are mapped for this project")
         verification_id = uuid.uuid4().hex
         run_root = evidence_root / verification_id
         run_root.mkdir(parents=True, exist_ok=False)
         started_at = _now()
         results: list[VerificationResult] = []
-        for check in checks:
-            results.append(
-                self._run_check(
-                    check,
-                    detection.descriptor.root,
-                    run_root,
-                    on_event,
-                    cancel_event,
-                    timeout_seconds,
-                )
+        diagnostics: tuple[str, ...] = ()
+        if not checks:
+            diagnostics = (
+                (
+                    "No safe verification checks were detected for this project. "
+                    "Configure .empy/verification.json or add a supported test, build, or lint entry point before export."
+                ),
             )
-        status: VerificationStatus = "pass" if all(item.status == "pass" for item in results) else "fail"
+            if on_event is not None:
+                on_event(
+                    VerificationEvent(
+                        _now(),
+                        "configuration",
+                        "tests",
+                        "system",
+                        diagnostics[0],
+                    )
+                )
+        else:
+            for check in checks:
+                results.append(
+                    self._run_check(
+                        check,
+                        detection.descriptor.root,
+                        run_root,
+                        on_event,
+                        cancel_event,
+                        timeout_seconds,
+                    )
+                )
+        status: VerificationStatus = "pass" if checks and all(item.status == "pass" for item in results) else "fail"
         report = VerificationReport(
             schema_version=1,
             verification_id=verification_id,
@@ -382,6 +401,7 @@ class VerificationRuntime:
             finished_at=_now(),
             results=tuple(results),
             evidence_path=str(run_root),
+            diagnostics=diagnostics,
         )
         (run_root / "verification-report.json").write_text(
             json.dumps(report.to_dict(), ensure_ascii=False, indent=2) + "\n",

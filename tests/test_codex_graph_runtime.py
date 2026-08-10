@@ -134,6 +134,7 @@ def test_prompt_contains_bounded_context_and_safety_rules(tmp_path: Path) -> Non
     assert node.node_id in prompt
     assert "Do not commit, push, merge, tag, publish" in prompt
     assert "Bounded context pack" in prompt
+    assert "Verification handoff" in prompt
     assert str(node.token_limit) in prompt
 
 

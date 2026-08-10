@@ -21,5 +21,6 @@ def test_verification_report_persists_and_finalizes(tmp_path: Path) -> None:
     store.save(report)
     loaded = store.load(report.verification_id)
     assert loaded.results[0].stdout == "ok\n"
+    assert loaded.diagnostics == ()
     finalized = store.finalize(report.verification_id)
     assert finalized.finalized_at is not None

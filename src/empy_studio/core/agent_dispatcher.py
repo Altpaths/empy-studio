@@ -160,6 +160,8 @@ def default_agent_registry() -> AgentRegistry:
                     "resources/js/**",
                     "public/**",
                     "frontend/**",
+                    "templates/**",
+                    "views/**",
                     "src/components/**",
                     "src/pages/**",
                     "src/**/*.css",
@@ -168,6 +170,10 @@ def default_agent_registry() -> AgentRegistry:
                     "src/**/*.jsx",
                     "*.css",
                     "*.scss",
+                    "*.html",
+                    "**/*.html",
+                    "*.htm",
+                    "**/*.htm",
                 ),
             ),
             AgentDefinition(
@@ -189,6 +195,8 @@ def default_agent_registry() -> AgentRegistry:
                     "src/**/*.ts",
                     "src/*.py",
                     "src/*.php",
+                    "*.php",
+                    "**/*.php",
                 ),
             ),
             AgentDefinition(

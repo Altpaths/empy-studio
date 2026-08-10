@@ -298,6 +298,12 @@ def _redact_sensitive_output(value: str) -> str:
     )
 
 
+def redact_sensitive_output(value: str) -> str:
+    """Expose the same bounded redaction used by security audit evidence."""
+
+    return _redact_sensitive_output(value)
+
+
 def _default_runner(
     command: list[str],
     *,

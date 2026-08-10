@@ -66,6 +66,7 @@ from empy_studio.project_delivery import (
     safe_upload_relative_path,
 )
 from empy_studio.review_workspace import ReviewReport, ReviewWorkspaceAdapter
+from empy_studio.security_audit import redact_sensitive_output
 from empy_studio.token_usage import TokenUsage
 from empy_studio.user_errors import safe_user_error
 from empy_studio.vault import initialize_vault
@@ -125,6 +126,15 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(key): _json_safe(item) for key, item in value.items()}
     return value
+
+
+def _safe_verification_detail(value: str, roots: tuple[Path, ...]) -> str:
+    """Bound and redact verification output before exposing it to the browser."""
+
+    detail = redact_sensitive_output(value.strip())
+    for index, root in enumerate(roots):
+        detail = detail.replace(str(root), "<project>" if index == 0 else "<workspace>")
+    return detail[-1200:] if detail else "No diagnostic output was produced."
 
 
 def _duration_seconds(started_at: str | None, finished_at: str | None) -> float | None:
@@ -216,6 +226,7 @@ class GuidedState:
     phase: str = "project"
     message: str = ""
     error: str | None = None
+    continuation_context: str | None = None
     imported: ImportedProject | None = None
     detection: ProjectDetection | None = None
     task: ProductTask | None = None
@@ -350,6 +361,7 @@ class GuidedState:
             self.export = None
             self.phase = "task"
             self.error = None
+            self.continuation_context = None
             self.message = "پروژه بازیابی شد." if restore else "پروژه انتخاب شد."
         self.store.set_setting("active_project_id", project.project_id)
         if not restore:
@@ -650,6 +662,58 @@ class GuidedState:
                 self.phase = "result" if restored_review is not None else "run"
             self.message = "نتیجهٔ تیکت بازیابی شد."
 
+    def _build_continuation_context(self) -> str:
+        roots = (
+            self.detection.descriptor.root if self.detection is not None else self.workspace_root,
+            self.workspace_root,
+        )
+        if self.verification is not None:
+            lines = [
+                "Previous Empy verification findings from the last attempt must be addressed before release:",
+            ]
+            lines.extend(f"- {item}" for item in self.verification.diagnostics)
+            for result in self.verification.results:
+                if result.status != "fail":
+                    continue
+                output = result.stderr.strip() or result.stdout.strip()
+                detail = _safe_verification_detail(output, roots)
+                lines.append(
+                    f"- {result.check.label} (return code {result.returncode}): {detail}"
+                )
+            return "\n".join(lines)[:4000]
+        message = self.run.error_message if self.run is not None else self.error
+        if message:
+            return (
+                "Previous Empy execution failed and the next attempt must diagnose and resolve it before release:\n"
+                f"- {_safe_verification_detail(message, roots)}"
+            )[:4000]
+        return "Previous Empy execution did not produce a complete result. Re-check the requested work and the project verification path before release."
+
+    def resume_ticket(self) -> None:
+        if self.detection is None or self.active_project_id is None:
+            raise RuntimeError("Choose a project first.")
+        if self.running:
+            raise RuntimeError("Stop the active run before continuing the ticket.")
+        context = self._build_continuation_context()
+        with self.lock:
+            self.continuation_context = context
+            self.active_task_id = None
+            self.task = None
+            self.plan = None
+            self.context = None
+            self.budget = None
+            self.benchmark = None
+            self.graph = None
+            self.run = None
+            self.verification = None
+            self.review = None
+            self.export = None
+            self.node_states.clear()
+            self.phase = "task"
+            self.error = None
+            self.message = "یافته‌های شکست قبلی حفظ شد؛ تیکت اصلاحی را وارد کنید."
+        self.store.set_setting("active_task_id", None)
+
     def create_plan(self, raw_tasks: str, task_id: str | None = None) -> None:
         if self.detection is None or self.active_project_id is None:
             raise RuntimeError("Choose a project first.")
@@ -659,13 +723,17 @@ class GuidedState:
         requirements, user_constraints = _split_task_lines(raw)
         if not requirements:
             raise ValueError("Enter at least one actionable task.")
+        continuation_context = self.continuation_context
+        objective_requirements = list(requirements)
+        if continuation_context:
+            objective_requirements.append(continuation_context)
         task = build_product_task(
             task_id=task_id or uuid.uuid4().hex,
             project_root=str(self.detection.descriptor.root),
             kind="custom",
             title=requirements[0][:96],
-            objective="\n".join(requirements),
-            requirements_text="\n".join(requirements),
+            objective="\n".join(objective_requirements),
+            requirements_text="\n".join(objective_requirements),
             constraints_text="\n".join((DEFAULT_CONSTRAINTS, *user_constraints)),
             definition_of_done_text=DEFAULT_DEFINITION_OF_DONE,
         )
@@ -712,6 +780,7 @@ class GuidedState:
             self.node_states = {node.node_id: "waiting" for node in graph.nodes}
             self.phase = "plan"
             self.error = None
+            self.continuation_context = None
             self.message = "برنامه و مالکیت فایل‌ها آماده شد."
         self.store.set_setting("active_task_id", ready.task_id)
 
@@ -1086,6 +1155,7 @@ class GuidedState:
             self.cancel_event = None
             self.phase = "project"
             self.error = None
+            self.continuation_context = None
             self.message = ""
             self.logs.clear()
         self.store.set_setting("active_project_id", None)
@@ -1244,6 +1314,24 @@ class GuidedState:
         verification_results = self.verification.results if self.verification is not None else ()
         passed_checks = sum(item.status == "pass" for item in verification_results)
         failed_checks = sum(item.status != "pass" for item in verification_results)
+        verification_diagnostics = list(self.verification.diagnostics) if self.verification is not None else []
+        verification_failures = [
+            {
+                "check_id": item.check.check_id,
+                "label": item.check.label,
+                "category": item.check.category,
+                "returncode": item.returncode,
+                "detail": _safe_verification_detail(
+                    item.stderr or item.stdout,
+                    (
+                        self.detection.descriptor.root if self.detection is not None else self.workspace_root,
+                        self.workspace_root,
+                    ),
+                ),
+            }
+            for item in verification_results
+            if item.status == "fail"
+        ]
         review_files = self.review.files if self.review is not None else ()
         benchmark = self.benchmark
         estimates = {
@@ -1278,6 +1366,8 @@ class GuidedState:
                 "failed_checks": failed_checks,
                 "total_checks": len(verification_results),
                 "finalized": bool(self.verification and self.verification.finalized_at),
+                "diagnostics": verification_diagnostics,
+                "failures": verification_failures,
             },
             "review": {
                 "changed_files": len(review_files),
@@ -1487,6 +1577,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             state.start_run()
         elif path == "/api/cancel":
             state.cancel_run()
+        elif path == "/api/resume-ticket":
+            state.resume_ticket()
         elif path == "/api/decision":
             state.decide_all(str(body.get("decision", "")))
         elif path == "/api/export":
