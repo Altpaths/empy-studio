@@ -20,8 +20,10 @@ EXCLUDED_NAMES = frozenset(
     {
         ".DS_Store",
         ".env",
+        ".empy",
         ".git",
         ".idea",
+        ".mypy_cache",
         ".pytest_cache",
         ".ruff_cache",
         ".venv",
@@ -31,11 +33,23 @@ EXCLUDED_NAMES = frozenset(
         "coverage",
         "dist",
         "node_modules",
+        "outputs",
+        "private",
+        "releases",
         "vendor",
         "venv",
+        "work",
     }
 )
-EXCLUDED_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".jks", ".keystore")
+EXCLUDED_SUFFIXES = (
+    ".pem",
+    ".key",
+    ".p12",
+    ".pfx",
+    ".jks",
+    ".keystore",
+    ".zip",
+)
 
 
 @dataclass(frozen=True)

@@ -45,6 +45,11 @@ def test_import_and_export_keep_runtime_config_and_logs_out_of_delivery(
         "runtime data\n",
         encoding="utf-8",
     )
+    (source / ".empy").mkdir()
+    (source / ".empy" / "run.json").write_text("state\n", encoding="utf-8")
+    (source / ".mypy_cache").mkdir()
+    (source / ".mypy_cache" / "cache.json").write_text("cache\n", encoding="utf-8")
+    (source / "previous.zip").write_bytes(b"old delivery")
     (source / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
 
     imported = import_project_folder(source, tmp_path / "workspace")
@@ -55,6 +60,9 @@ def test_import_and_export_keep_runtime_config_and_logs_out_of_delivery(
     assert (imported.project_root / "config" / "config.example.php").is_file()
     assert not (imported.project_root / "config" / "config.php").exists()
     assert not (imported.project_root / "storage" / "logs" / "app.log").exists()
+    assert not (imported.project_root / ".empy").exists()
+    assert not (imported.project_root / ".mypy_cache").exists()
+    assert not (imported.project_root / "previous.zip").exists()
     assert exported.verified is True
     with zipfile.ZipFile(exported.archive_path) as archive:
         names = archive.namelist()
