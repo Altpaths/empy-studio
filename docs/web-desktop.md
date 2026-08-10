@@ -1,7 +1,8 @@
 # Guided Desktop UI
 
-`empy-web` is the bilingual local UI used by the macOS acceptance package.
-It is intentionally a local HTTP application rather than a hosted service:
+`empy-web` is the bilingual local UI used by the supported Empy Studio
+packages. It is intentionally a local HTTP application rather than a hosted
+service and runs on macOS, Linux, and Windows:
 
 ```bash
 empy-web
@@ -21,11 +22,13 @@ opens it in the default browser. API requests without the token are rejected.
    evidence.
 5. Accept or revert the changes and export a direct single-root project ZIP.
 
-The guided Web Desktop is the canonical product path used by the Finder
-macOS bundle. It supports both native folder and ZIP pickers, bilingual
-status/error messages, Codex readiness refresh, and an authenticated local
-engine-opening action. The older Tk shell remains available as a developer
-compatibility surface; it is not the Finder release entry point.
+The guided Web Desktop is the canonical product path used by every platform
+package. Folder and ZIP selection use browser file inputs and upload into the
+isolated local workspace; macOS native dialogs remain an optional fallback.
+This avoids a macOS-only dependency on AppleScript. The UI also provides
+bilingual status/error messages, Codex readiness refresh, accessibility labels,
+and an authenticated local engine-opening action. The older Tk shell remains
+available as a developer compatibility surface.
 
 The header uses the EMPY brand asset. The plan screen exposes a provider-free
 local benchmark for full versus bounded context, while completed runs expose
@@ -47,6 +50,10 @@ ran serially or in a bounded parallel batch. Missing provider usage is shown as
 ## Security boundary
 
 - The original selected folder is not edited.
+- Browser uploads are bounded per file and in total, reject traversal and
+  sensitive members, and are deleted after import.
+- System roots, user roots, and macOS AppTranslocation paths are rejected as
+  project sources; users must choose the actual project folder or ZIP.
 - ZIP extraction rejects traversal and symlink members and applies size limits.
 - `.env`, private keys, dependency directories, Git history, and temporary
   files are not copied to a delivery archive.

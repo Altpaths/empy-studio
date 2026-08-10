@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import platform
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal, cast
 
 OperatingSystem = Literal["macos", "linux", "windows"]
@@ -101,3 +103,26 @@ def resolve_target(
 
 def detect_current_platform() -> PlatformSpec:
     return resolve_target(platform.system(), platform.machine())
+
+
+def default_workspace_root(
+    platform_spec: PlatformSpec | None = None,
+) -> Path:
+    """Return the per-user persistent workspace location for the host OS."""
+    resolved = platform_spec or detect_current_platform()
+    home = Path.home()
+    if resolved.operating_system == "windows":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        return (
+            Path(local_app_data) / "Empy Studio"
+            if local_app_data
+            else home / "AppData" / "Local" / "Empy Studio"
+        )
+    if resolved.operating_system == "macos":
+        return home / "Library" / "Application Support" / "Empy Studio"
+    xdg_data_home = os.environ.get("XDG_DATA_HOME")
+    return (
+        Path(xdg_data_home) / "Empy Studio"
+        if xdg_data_home
+        else home / ".local" / "share" / "Empy Studio"
+    )

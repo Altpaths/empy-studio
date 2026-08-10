@@ -24,6 +24,7 @@ from empy_studio.token_usage import TokenUsage
 from ..codex_preflight import (
     CodexHostDiagnostic,
     detect_codex_host_diagnostic,
+    diagnose_codex_os_error,
 )
 from .base import BaseDriver
 
@@ -67,6 +68,7 @@ CodexEventLevel = Literal["info", "warning", "error"]
 
 DEFAULT_PREFLIGHT_TIMEOUT: Final[float] = 8.0
 DEFAULT_CANCEL_GRACE_SECONDS: Final[float] = 2.0
+MAX_PREFLIGHT_OUTPUT_CHARS: Final[int] = 16_384
 
 
 @dataclass(frozen=True)
@@ -322,8 +324,8 @@ class CodexDriver(BaseDriver):
         if self._installation is not None and not refresh:
             return self._installation
 
-        executable = self._resolve_executable()
-        if executable is None:
+        executables = self._candidate_executables()
+        if not executables:
             installation = CodexInstallation(
                 availability="missing",
                 executable=None,
@@ -337,150 +339,167 @@ class CodexDriver(BaseDriver):
             self._status = "unavailable"
             return installation
 
-        host_diagnostic: CodexHostDiagnostic | None = None
-        try:
-            version_result = self.command_runner(
-                [executable, "--version"],
-                text=True,
-                capture_output=True,
-                timeout=DEFAULT_PREFLIGHT_TIMEOUT,
-                check=False,
-            )
-            version = (version_result.stdout or version_result.stderr).strip()
-            host_diagnostic = detect_codex_host_diagnostic(
-                version_result.stdout or "",
-                version_result.stderr or "",
-            )
-            if version_result.returncode != 0 or not version:
-                installation = CodexInstallation(
-                    availability="unavailable",
-                    executable=executable,
-                    version=version or None,
-                    authenticated=False,
-                    message=(
-                        host_diagnostic.message
-                        if host_diagnostic is not None
-                        else "Codex CLI is installed but its version check failed."
-                    ),
-                    remediation=(
-                        host_diagnostic.remediation
-                        if host_diagnostic is not None
-                        else "Reinstall or update Codex CLI."
-                    ),
-                    error_code=(
-                        "sandbox_error"
-                        if host_diagnostic is not None
-                        else None
-                    ),
-                )
-                installation.validate()
+        last_installation: CodexInstallation | None = None
+        last_error: OSError | subprocess.TimeoutExpired | None = None
+        for executable in executables:
+            try:
+                installation = self._inspect_candidate(executable)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                last_error = exc
+                continue
+            last_installation = installation
+            if installation.ready:
                 self._installation = installation
-                self._status = "unavailable"
+                self._status = "available"
                 return installation
 
-            exec_result = self.command_runner(
-                [executable, "exec", "--help"],
-                text=True,
-                capture_output=True,
-                timeout=DEFAULT_PREFLIGHT_TIMEOUT,
-                check=False,
-            )
-            host_diagnostic = host_diagnostic or detect_codex_host_diagnostic(
-                exec_result.stdout or "",
-                exec_result.stderr or "",
-            )
-            if exec_result.returncode != 0:
-                installation = CodexInstallation(
-                    availability="unavailable",
-                    executable=executable,
-                    version=version,
-                    authenticated=False,
-                    message=(
-                        host_diagnostic.message
-                        if host_diagnostic is not None
-                        else (
-                            "This Codex CLI installation does not provide "
-                            "non-interactive execution."
-                        )
-                    ),
-                    remediation=(
-                        host_diagnostic.remediation
-                        if host_diagnostic is not None
-                        else "Update Codex CLI to a version that supports `codex exec`."
-                    ),
-                    error_code=(
-                        "sandbox_error"
-                        if host_diagnostic is not None
-                        else None
-                    ),
-                )
-                installation.validate()
-                self._installation = installation
-                self._status = "unavailable"
-                return installation
-
-            auth_result = self.command_runner(
-                [executable, "login", "status"],
-                text=True,
-                capture_output=True,
-                timeout=DEFAULT_PREFLIGHT_TIMEOUT,
-                check=False,
-            )
-            host_diagnostic = host_diagnostic or detect_codex_host_diagnostic(
-                auth_result.stdout or "",
-                auth_result.stderr or "",
-            )
-            if auth_result.returncode != 0:
-                installation = CodexInstallation(
-                    availability="unauthenticated",
-                    executable=executable,
-                    version=version,
-                    authenticated=False,
-                    message="Codex CLI is installed but is not signed in.",
-                    remediation="Run `codex login` once, then retry from Empy Studio.",
-                )
-                installation.validate()
-                self._installation = installation
-                self._status = "unavailable"
-                return installation
-            if host_diagnostic is not None:
-                installation = CodexInstallation(
-                    availability="unavailable",
-                    executable=executable,
-                    version=version,
-                    authenticated=True,
-                    message=host_diagnostic.message,
-                    remediation=host_diagnostic.remediation,
-                    error_code="sandbox_error",
-                )
-                installation.validate()
-                self._installation = installation
-                self._status = "unavailable"
-                return installation
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            installation = CodexInstallation(
-                availability="unavailable",
-                executable=executable,
-                version=None,
-                authenticated=False,
-                message=f"Empy could not verify Codex CLI: {exc}",
-                remediation="Check the Codex installation and try again.",
-            )
-            installation.validate()
-            self._installation = installation
+        if last_installation is not None:
+            self._installation = last_installation
             self._status = "unavailable"
-            return installation
+            return last_installation
 
+        error = last_error or OSError("Codex preflight failed")
+        diagnostic = (
+            diagnose_codex_os_error(error)
+            if isinstance(error, OSError)
+            else CodexHostDiagnostic(
+                code="sandbox",
+                message="Codex preflight timed out in this environment.",
+                remediation="Check the host permissions and refresh the environment.",
+            )
+        )
         installation = CodexInstallation(
+            availability="unavailable",
+            executable=None,
+            version=None,
+            authenticated=False,
+            message=diagnostic.message,
+            remediation=diagnostic.remediation,
+            error_code="sandbox_error",
+        )
+        installation.validate()
+        self._installation = installation
+        self._status = "unavailable"
+        return installation
+
+    def _inspect_candidate(self, executable: str) -> CodexInstallation:
+        host_diagnostic: CodexHostDiagnostic | None = None
+        version_result = self._run_preflight([executable, "--version"])
+        version_stdout = self._bounded_output(version_result.stdout)
+        version_stderr = self._bounded_output(version_result.stderr)
+        version = (version_stdout or version_stderr).strip()
+        host_diagnostic = detect_codex_host_diagnostic(version_stdout, version_stderr)
+        if version_result.returncode != 0 or not version:
+            return self._unavailable_installation(
+                executable,
+                version=version or None,
+                message=(
+                    host_diagnostic.message
+                    if host_diagnostic is not None
+                    else "Codex CLI is installed but its version check failed."
+                ),
+                remediation=(
+                    host_diagnostic.remediation
+                    if host_diagnostic is not None
+                    else "Reinstall or update Codex CLI."
+                ),
+                error_code="sandbox_error" if host_diagnostic is not None else None,
+            )
+
+        exec_result = self._run_preflight([executable, "exec", "--help"])
+        exec_stdout = self._bounded_output(exec_result.stdout)
+        exec_stderr = self._bounded_output(exec_result.stderr)
+        host_diagnostic = host_diagnostic or detect_codex_host_diagnostic(
+            exec_stdout,
+            exec_stderr,
+        )
+        if exec_result.returncode != 0:
+            return self._unavailable_installation(
+                executable,
+                version=version,
+                message=(
+                    host_diagnostic.message
+                    if host_diagnostic is not None
+                    else "This Codex CLI installation does not provide non-interactive execution."
+                ),
+                remediation=(
+                    host_diagnostic.remediation
+                    if host_diagnostic is not None
+                    else "Update Codex CLI to a version that supports `codex exec`."
+                ),
+                error_code="sandbox_error" if host_diagnostic is not None else None,
+            )
+
+        auth_result = self._run_preflight([executable, "login", "status"])
+        auth_stdout = self._bounded_output(auth_result.stdout)
+        auth_stderr = self._bounded_output(auth_result.stderr)
+        host_diagnostic = host_diagnostic or detect_codex_host_diagnostic(
+            auth_stdout,
+            auth_stderr,
+        )
+        if auth_result.returncode != 0:
+            return self._unavailable_installation(
+                executable,
+                version=version,
+                message="Codex CLI is installed but is not signed in.",
+                remediation="Run `codex login` once, then retry from Empy Studio.",
+                availability="unauthenticated",
+            )
+        if host_diagnostic is not None:
+            return self._unavailable_installation(
+                executable,
+                version=version,
+                authenticated=True,
+                message=host_diagnostic.message,
+                remediation=host_diagnostic.remediation,
+                error_code="sandbox_error",
+            )
+        return CodexInstallation(
             availability="available",
             executable=executable,
             version=version,
             authenticated=True,
             message="Codex CLI is installed, authenticated, and ready.",
         )
+
+    def _run_preflight(self, command: list[str]) -> subprocess.CompletedProcess[str]:
+        return self.command_runner(
+            command,
+            text=True,
+            capture_output=True,
+            timeout=DEFAULT_PREFLIGHT_TIMEOUT,
+            check=False,
+        )
+
+    @staticmethod
+    def _bounded_output(value: str | None) -> str:
+        if not value:
+            return ""
+        if len(value) <= MAX_PREFLIGHT_OUTPUT_CHARS:
+            return value
+        return value[:MAX_PREFLIGHT_OUTPUT_CHARS] + "…"
+
+    @staticmethod
+    def _unavailable_installation(
+        executable: str,
+        *,
+        version: str | None,
+        message: str,
+        remediation: str,
+        authenticated: bool = False,
+        availability: CodexAvailability = "unavailable",
+        error_code: CodexErrorCode | None = None,
+    ) -> CodexInstallation:
+        installation = CodexInstallation(
+            availability=availability,
+            executable=executable,
+            version=version,
+            authenticated=authenticated,
+            message=message,
+            remediation=remediation,
+            error_code=error_code,
+        )
         installation.validate()
-        self._installation = installation
-        self._status = "available"
         return installation
 
     def execute(self, request: DriverExecutionRequest) -> DriverExecutionResult:
@@ -935,17 +954,39 @@ class CodexDriver(BaseDriver):
         detail = stderr.strip() or f"Codex exited with status {return_code}."
         return "process_failed", detail
 
-    def _resolve_executable(self) -> str | None:
+    def _candidate_executables(self) -> tuple[str, ...]:
+        candidates: list[str] = []
+
+        def add(value: str | Path | None) -> None:
+            if value is None:
+                return
+            normalized = str(value)
+            if normalized and normalized not in candidates:
+                candidates.append(normalized)
+
         requested = Path(self.requested_executable).expanduser()
-        if requested.is_absolute() and requested.is_file():
-            return str(requested.resolve())
-        resolved = shutil.which(self.requested_executable)
-        if resolved is not None:
-            return resolved
+        try:
+            if requested.is_absolute() and requested.is_file():
+                add(requested)
+            else:
+                add(shutil.which(self.requested_executable))
+        except OSError:
+            pass
         for candidate in self.fallback_executables:
-            if candidate.is_file() and os.access(candidate, os.X_OK):
-                return str(candidate.resolve())
-        return None
+            try:
+                if candidate.is_file() and os.access(candidate, os.X_OK):
+                    add(candidate)
+            except OSError:
+                continue
+
+        def translocated(value: str) -> bool:
+            return "apptranslocation" in value.casefold()
+
+        return tuple(sorted(candidates, key=translocated))
+
+    def _resolve_executable(self) -> str | None:
+        candidates = self._candidate_executables()
+        return candidates[0] if candidates else None
 
     def _terminal_result(
         self,

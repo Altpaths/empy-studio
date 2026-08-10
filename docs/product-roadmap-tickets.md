@@ -17,9 +17,10 @@ in the delivery evidence.
 - The Ticket 16 macOS package is the source of the guided web UI and project
   import/export work. Its code is merged selectively; it must not introduce a
   second copy of the core or a second persistence system.
-- v1 is local-first and macOS-first. Codex is the first production provider;
-  other providers use the same adapter contract and are enabled only after
-  passing the same acceptance gates.
+- v1 is local-first and cross-platform. The shared Web Desktop runs on macOS,
+  Linux, and Windows; native bundles are optional delivery surfaces. Codex is
+  the first production provider; other providers use the same adapter contract
+  and are enabled only after passing the same acceptance gates.
 - The application workspace remembers projects, tickets, runs, decisions,
   baselines, and releases across restarts.
 - A generated project delivery is a single-root ZIP that can be extracted into
@@ -52,6 +53,9 @@ in the delivery evidence.
 | T16 | Security and privacy hardening | Path validation, secret scanning, symlink policy, provider permission boundaries, installer verification, and audit logs are tested. | T08, T14, T15 | P0 |
 | T17 | Real-project acceptance | A non-developer completes two sequential tickets on one project, a new project flow, reopen, review, revert, and export without terminal commands. | T04–T16 | P0 |
 | T18 | Open-source distribution | CI, supported Python matrix, macOS packaging, signing/notarization strategy, checksums, release notes, license, contribution docs, and downloadable assets are verified. | T17 | P0 |
+| T24 | Cross-platform guided product path | The shared UI uses platform-neutral browser folder/ZIP import, per-OS workspace locations, and no mandatory macOS-only picker or opener. | T18 | P0 |
+| T25 | Host preflight and safe error boundary | AppTranslocation, oversized-path, permission, missing-path, and provider preflight failures have fallback/remediation and never expose raw host paths in the UI. | T08, T16, T24 | P0 |
+| T26 | Cross-platform release confidence | Platform path tests, upload/import security tests, clean wheel smoke tests, and CI gates cover macOS/Linux/Windows-compatible behavior. | T18, T24, T25 | P0 |
 
 ## Acceptance scenario
 
@@ -101,3 +105,6 @@ project delivery flow.
 | T21 | Bounded parallel waves, dependency-safe scheduling, capacity, retry/time evidence, and Codex ownership audit | Implemented and tested |
 | T22 | Claude Code CLI adapter behind the provider contract, external credential handling, bounded edits, timeout/cancel | Implemented and tested with a local fake CLI; live CLI/auth remains environment-dependent |
 | T23 | Multi-project token/time benchmark, CI regression thresholds, clean-install checks, and stable macOS signing/notarization gates | Implemented as release gates; Apple signing/notarization must run with repository release secrets |
+| T24 | Platform-neutral workspace paths, browser folder/ZIP uploads, bounded upload limits, and removal of mandatory macOS-only UI calls | Implemented and tested |
+| T25 | Codex executable fallback/preflight diagnostics and safe bilingual OS-error normalization | Implemented and tested |
+| T26 | Cross-platform contract tests, documentation, and CI matrix smoke coverage | Implemented and tested; hosted CI matrix runs on push |

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 from dataclasses import dataclass
 from typing import Literal
 
@@ -8,6 +9,8 @@ CodexHostDiagnosticCode = Literal[
     "app_server",
     "state_database",
     "sandbox",
+    "translocation",
+    "permission",
 ]
 
 
@@ -56,6 +59,24 @@ _DIAGNOSTICS: tuple[CodexHostDiagnostic, ...] = (
             "refresh the environment."
         ),
     ),
+    CodexHostDiagnostic(
+        code="translocation",
+        message=(
+            "Codex was launched from a temporary macOS app-translocation path."
+        ),
+        remediation=(
+            "Move Empy Studio and Codex to a normal Applications or user-writable "
+            "location, or install the Codex CLI on PATH, then refresh the environment."
+        ),
+    ),
+    CodexHostDiagnostic(
+        code="permission",
+        message="The host denied Codex access to its executable or state directory.",
+        remediation=(
+            "Grant the host application access to its own state directory and the "
+            "approved project copy, then refresh the environment."
+        ),
+    ),
 )
 
 _MARKERS: dict[CodexHostDiagnosticCode, tuple[str, ...]] = {
@@ -80,6 +101,17 @@ _MARKERS: dict[CodexHostDiagnosticCode, tuple[str, ...]] = {
         "could not initialize sandbox",
         "sandbox setup failed",
     ),
+    "translocation": (
+        "apptranslocation",
+        "app translocation",
+        "result too large",
+        "errno 34",
+    ),
+    "permission": (
+        "permission denied",
+        "operation not permitted",
+        "access denied",
+    ),
 }
 
 
@@ -100,3 +132,12 @@ def detect_codex_host_diagnostic(
         if any(marker in normalized for marker in _MARKERS[diagnostic.code]):
             return diagnostic
     return None
+
+
+def diagnose_codex_os_error(error: OSError) -> CodexHostDiagnostic:
+    """Map host process failures without exposing raw paths to the UI."""
+    if error.errno == errno.ERANGE or "apptranslocation" in str(error).lower():
+        return next(item for item in _DIAGNOSTICS if item.code == "translocation")
+    if error.errno in {errno.EACCES, errno.EPERM}:
+        return next(item for item in _DIAGNOSTICS if item.code == "permission")
+    return next(item for item in _DIAGNOSTICS if item.code == "sandbox")

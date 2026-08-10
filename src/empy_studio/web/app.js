@@ -48,6 +48,29 @@ async function api(path, body = null) {
   if (!response.ok) throw new Error(data.error || "Request failed");
   return data;
 }
+async function uploadRaw(path, file, headers = {}) {
+  const response = await fetch(path, { method: "POST", headers: { "X-Empy-Token": token, ...headers }, body: file });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Upload failed");
+  return data;
+}
+async function uploadFolder(files) {
+  if (!files.length) return api("/api/state");
+  const started = await api("/api/upload-folder/start", {});
+  const uploadId = started.upload_id;
+  try {
+    for (const file of files) {
+      await uploadRaw("/api/upload-folder/file", file, {
+        "X-Empy-Upload-Id": uploadId,
+        "X-Empy-Relative-Path": encodeURIComponent(file.webkitRelativePath || file.name),
+      });
+    }
+    return api("/api/upload-folder/finish", { upload_id: uploadId });
+  } catch (error) {
+    await api("/api/upload-folder/cancel", { upload_id: uploadId }).catch(() => {});
+    throw error;
+  }
+}
 function banner() {
   document.querySelector("#subtitle").textContent = text().subtitle;
   document.querySelector("#language").textContent = language === "fa" ? "English" : "فارسی";
@@ -147,8 +170,16 @@ async function handleAction(action, target) {
       await runAction(() => api("/api/import", {path}));
       break;
     }
-    case "choose-folder": await runAction(() => api("/api/select-folder", {})); break;
-    case "choose-zip": await runAction(() => api("/api/select-zip", {})); break;
+    case "choose-folder": {
+      const input = document.querySelector("#folder-upload");
+      if (input) { input.value = ""; input.click(); }
+      break;
+    }
+    case "choose-zip": {
+      const input = document.querySelector("#zip-upload");
+      if (input) { input.value = ""; input.click(); }
+      break;
+    }
     case "refresh-engine": await runAction(() => api("/api/refresh-engine", {})); break;
     case "open-engine": await runAction(() => api("/api/open-engine", {})); break;
     case "select-project": await runAction(() => api("/api/project/select", {project_id: target.dataset.projectId})); break;
@@ -178,5 +209,14 @@ document.querySelector("#screen").addEventListener("click", event => {
 document.querySelector("#language").addEventListener("click", () => {
   language = language === "fa" ? "en" : "fa";
   void runAction(() => api("/api/language", {language}));
+});
+document.querySelector("#folder-upload").addEventListener("change", event => {
+  const files = Array.from(event.target.files || []);
+  void runAction(() => uploadFolder(files));
+});
+document.querySelector("#zip-upload").addEventListener("change", event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  void runAction(() => uploadRaw("/api/upload-zip", file, { "X-Empy-Filename": encodeURIComponent(file.name) }));
 });
 refresh();

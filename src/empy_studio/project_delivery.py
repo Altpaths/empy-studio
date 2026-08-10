@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import uuid
@@ -15,6 +16,8 @@ from .core.path_policy import is_sensitive_relative_path
 
 MAX_ARCHIVE_FILE_BYTES = 64 * 1024 * 1024
 MAX_ARCHIVE_TOTAL_BYTES = 512 * 1024 * 1024
+MAX_UPLOAD_FILE_BYTES = MAX_ARCHIVE_FILE_BYTES
+MAX_UPLOAD_TOTAL_BYTES = MAX_ARCHIVE_TOTAL_BYTES
 
 EXCLUDED_NAMES = frozenset(
     {
@@ -118,24 +121,127 @@ def _safe_member_name(name: str) -> PurePosixPath | None:
     return relative
 
 
+def safe_upload_relative_path(name: str) -> PurePosixPath | None:
+    """Validate a browser-uploaded project-relative path."""
+    normalized = name.replace("\\", "/")
+    if normalized.startswith("/") or (len(normalized) >= 2 and normalized[1] == ":"):
+        return None
+    return _safe_member_name(name)
+
+
 def _is_zip_symlink(info: zipfile.ZipInfo) -> bool:
     mode = (info.external_attr >> 16) & 0xFFFF
     return (mode & 0o170000) == 0o120000
+
+
+_BROAD_IMPORT_ROOTS = frozenset(
+    {
+        "/",
+        "/Applications",
+        "/Library",
+        "/System",
+        "/System/Volumes/Data",
+        "/Users",
+        "/Volumes",
+        "/private",
+        "/usr",
+        "/var",
+        "/home",
+    }
+)
+
+
+def _validate_import_source(root: Path) -> None:
+    normalized = root.as_posix().rstrip("/") or "/"
+    anchor = Path(root.anchor) if root.anchor else None
+    if normalized in _BROAD_IMPORT_ROOTS or (anchor is not None and root == anchor):
+        raise PermissionError(
+            "Choose a project folder, not a system or user root directory."
+        )
+    if "/apptranslocation/" in f"/{normalized.casefold()}/":
+        raise PermissionError(
+            "Choose the original project location instead of a translocated app path."
+        )
+    try:
+        root.stat()
+        if not os.access(root, os.R_OK | os.X_OK):
+            raise PermissionError(root)
+    except OSError as exc:
+        if isinstance(exc, PermissionError):
+            raise
+        raise OSError(exc.errno, "The selected project path cannot be inspected.") from exc
+
+
+def _walk_files(root: Path) -> tuple[tuple[tuple[Path, str], ...], tuple[str, ...]]:
+    """Walk a project without aborting the whole import on one unreadable path."""
+    members: list[tuple[Path, str]] = []
+    skipped: list[str] = []
+
+    def onerror(error: OSError) -> None:
+        filename = getattr(error, "filename", None)
+        skipped.append(str(filename or "<unreadable directory>"))
+
+    for current, directories, filenames in os.walk(
+        root,
+        topdown=True,
+        followlinks=False,
+        onerror=onerror,
+    ):
+        current_path = Path(current)
+        current_relative = PurePosixPath(
+            current_path.relative_to(root).as_posix()
+        ) if current_path != root else PurePosixPath()
+        kept_directories: list[str] = []
+        for directory in sorted(directories):
+            relative = current_relative / directory
+            candidate = current_path / directory
+            if _excluded(relative) or candidate.is_symlink():
+                skipped.append(relative.as_posix())
+                if (
+                    is_sensitive_relative_path(relative)
+                    and candidate.is_dir()
+                    and not candidate.is_symlink()
+                ):
+                    for nested_current, _nested_directories, nested_files in os.walk(
+                        candidate,
+                        topdown=True,
+                        followlinks=False,
+                        onerror=onerror,
+                    ):
+                        nested_path = Path(nested_current)
+                        for nested_file in sorted(nested_files):
+                            skipped.append(
+                                PurePosixPath(
+                                    nested_path.joinpath(nested_file)
+                                    .relative_to(root)
+                                    .as_posix()
+                                ).as_posix()
+                            )
+                continue
+            kept_directories.append(directory)
+        directories[:] = kept_directories
+        for filename in sorted(filenames):
+            relative = current_relative / filename
+            candidate = current_path / filename
+            if _excluded(relative) or candidate.is_symlink():
+                skipped.append(relative.as_posix())
+                continue
+            try:
+                if candidate.is_file():
+                    members.append((candidate, relative.as_posix()))
+                else:
+                    skipped.append(relative.as_posix())
+            except OSError:
+                skipped.append(relative.as_posix())
+    return tuple(members), tuple(skipped)
 
 
 def _safe_files(root: Path) -> tuple[tuple[Path, str], ...]:
     root = root.expanduser().resolve()
     if not root.is_dir():
         raise NotADirectoryError(root)
-    members: list[tuple[Path, str]] = []
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.is_symlink():
-            continue
-        relative = PurePosixPath(path.relative_to(root).as_posix())
-        if _excluded(relative):
-            continue
-        members.append((path, relative.as_posix()))
-    return tuple(members)
+    members, _skipped = _walk_files(root)
+    return members
 
 
 def _run_git(root: Path, *args: str) -> None:
@@ -173,28 +279,28 @@ def import_project_folder(source: str | Path, workspace_root: str | Path) -> Imp
     source_path = Path(source).expanduser().resolve()
     if not source_path.is_dir():
         raise NotADirectoryError(source_path)
+    _validate_import_source(source_path)
     destination = _new_workspace(Path(workspace_root), source_path.name)
-    skipped: list[str] = []
-    for path in sorted(source_path.rglob("*")):
-        relative = PurePosixPath(path.relative_to(source_path).as_posix())
-        if _excluded(relative) or path.is_symlink():
-            skipped.append(relative.as_posix())
-            continue
-        if not path.is_file():
-            continue
-        target = destination / Path(relative.as_posix())
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, target)
+    members, skipped = _walk_files(source_path)
+    copied: list[str] = list(skipped)
+    for path, relative_name in members:
+        target = destination / Path(relative_name)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+        except OSError:
+            copied.append(relative_name)
     if not _safe_files(destination):
         raise ValueError("project import contains no safe files")
     _initialize_git(destination)
-    return ImportedProject(source_path, destination, destination, tuple(skipped))
+    return ImportedProject(source_path, destination, destination, tuple(copied))
 
 
 def import_project_archive(source: str | Path, workspace_root: str | Path) -> ImportedProject:
     source_path = Path(source).expanduser().resolve()
     if not source_path.is_file() or source_path.suffix.lower() != ".zip":
         raise ValueError("project archive must be a ZIP file")
+    _validate_import_source(source_path.parent)
     destination = _new_workspace(Path(workspace_root), source_path.stem)
     skipped: list[str] = []
     total_bytes = 0

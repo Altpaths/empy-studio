@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -102,6 +103,31 @@ def test_reset_keeps_project_history(tmp_path: Path) -> None:
     assert state.active_project_id is None
     assert project_id is not None
     assert state.public()["projects"][0]["id"] == project_id
+
+
+def test_browser_folder_upload_isolated_and_security_filtered(tmp_path: Path) -> None:
+    state = GuidedState(tmp_path / "empy-workspace")
+    upload_id = state.start_folder_upload()
+
+    state.receive_folder_upload(
+        upload_id,
+        "README.md",
+        io.BytesIO(b"demo\n"),
+        len(b"demo\n"),
+    )
+    state.receive_folder_upload(
+        upload_id,
+        ".env",
+        io.BytesIO(b"TOKEN=secret\n"),
+        len(b"TOKEN=secret\n"),
+    )
+    state.finish_folder_upload(upload_id)
+
+    assert state.active_project_id is not None
+    assert state.detection is not None
+    assert (state.detection.descriptor.root / "README.md").is_file()
+    assert not (state.detection.descriptor.root / ".env").exists()
+    assert upload_id not in state.upload_sessions
 
 
 def test_export_registers_release_history(tmp_path: Path) -> None:

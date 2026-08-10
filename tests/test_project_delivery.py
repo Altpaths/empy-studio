@@ -3,10 +3,13 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from empy_studio.project_delivery import (
     export_project_zip,
     import_project_archive,
     import_project_folder,
+    safe_upload_relative_path,
 )
 
 
@@ -88,3 +91,16 @@ def test_archive_import_rejects_traversal_and_export_is_single_root(tmp_path: Pa
     assert names == [f"{imported.project_root.name}/README.md"]
     assert "../outside.txt" in imported.skipped_members
     assert not (tmp_path / "outside.txt").exists()
+
+
+def test_import_rejects_broad_system_roots(tmp_path: Path) -> None:
+    with pytest.raises(PermissionError, match="system or user root"):
+        import_project_folder(Path("/"), tmp_path / "workspace")
+
+
+def test_browser_upload_paths_keep_project_scope() -> None:
+    assert safe_upload_relative_path("src/app.py") is not None
+    assert safe_upload_relative_path("../outside.py") is None
+    assert safe_upload_relative_path(".env") is None
+    assert safe_upload_relative_path("C:\\Users\\demo\\app.py") is None
+    assert safe_upload_relative_path("/etc/passwd") is None

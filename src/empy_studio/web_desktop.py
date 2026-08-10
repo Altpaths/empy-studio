@@ -3,17 +3,21 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import os
 import secrets
+import shutil
 import subprocess
+import sys
 import threading
 import time
 import uuid
+import webbrowser
 from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, cast
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from empy_studio.benchmark import BenchmarkResult, run_local_benchmark
 from empy_studio.core import (
@@ -50,15 +54,20 @@ from empy_studio.drivers import (
     CodexGraphRuntime,
     CodexProgressEvent,
 )
+from empy_studio.platform_support import default_workspace_root
 from empy_studio.project_delivery import (
+    MAX_UPLOAD_FILE_BYTES,
+    MAX_UPLOAD_TOTAL_BYTES,
     ExportedProject,
     ImportedProject,
     export_project_zip,
     import_project_archive,
     import_project_folder,
+    safe_upload_relative_path,
 )
 from empy_studio.review_workspace import ReviewReport, ReviewWorkspaceAdapter
 from empy_studio.token_usage import TokenUsage
+from empy_studio.user_errors import safe_user_error
 from empy_studio.vault import initialize_vault
 from empy_studio.verification_pipeline import (
     VerificationCancelled,
@@ -178,6 +187,15 @@ def _split_task_lines(raw: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
 
 
 @dataclass
+class UploadSession:
+    upload_id: str
+    root: Path
+    total_bytes: int = 0
+    file_count: int = 0
+    skipped_count: int = 0
+
+
+@dataclass
 class GuidedState:
     workspace_root: Path
     store: SQLiteWorkspaceStore = field(init=False)
@@ -211,6 +229,7 @@ class GuidedState:
     verification_store: VerificationWorkspaceAdapter = field(init=False, repr=False)
     runtime: CodexGraphRuntime | None = field(init=False, default=None, repr=False)
     cancel_event: threading.Event | None = field(init=False, default=None, repr=False)
+    upload_sessions: dict[str, UploadSession] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.workspace_root = self.workspace_root.expanduser().resolve()
@@ -327,15 +346,7 @@ class GuidedState:
             self.store.set_setting("active_task_id", None)
         self._refresh_brain_index()
 
-    def import_path(self, path: str) -> None:
-        selected = Path(path).expanduser().resolve()
-        imports_root = self.workspace_root / "imports"
-        if selected.is_file() and selected.suffix.lower() == ".zip":
-            imported = import_project_archive(selected, imports_root)
-        elif selected.is_dir():
-            imported = import_project_folder(selected, imports_root)
-        else:
-            raise ValueError("Choose an existing project folder or a ZIP archive.")
+    def _register_import(self, imported: ImportedProject) -> None:
         detection = self.project_service.detect(imported.project_root)
         saved = self.store.save_project(detection.descriptor)
         vault_root = self.workspace_root / "vaults" / saved.project_id
@@ -350,7 +361,131 @@ class GuidedState:
         with self.lock:
             self.imported = imported
             self.detection = detection
-            self.message = "پروژه در یک کپی ایزوله ذخیره شد."
+            skipped = len(imported.skipped_members)
+            self.message = (
+                (
+                    "Project saved in an isolated copy. "
+                    f"{skipped} file(s) were skipped by security or access policy."
+                    if self.language == "en"
+                    else "پروژه در یک کپی ایزوله ذخیره شد. "
+                    f"{skipped} فایل به‌دلیل سیاست امنیتی یا دسترسی رد شد."
+                )
+                if skipped
+                else (
+                    "Project saved in an isolated copy."
+                    if self.language == "en"
+                    else "پروژه در یک کپی ایزوله ذخیره شد."
+                )
+            )
+
+    def import_path(self, path: str) -> None:
+        selected = Path(path).expanduser().resolve()
+        imports_root = self.workspace_root / "imports"
+        if selected.is_file() and selected.suffix.lower() == ".zip":
+            imported = import_project_archive(selected, imports_root)
+        elif selected.is_dir():
+            imported = import_project_folder(selected, imports_root)
+        else:
+            raise ValueError("Choose an existing project folder or a ZIP archive.")
+        self._register_import(imported)
+
+    def start_folder_upload(self) -> str:
+        upload_id = uuid.uuid4().hex
+        root = self.workspace_root / "uploads" / upload_id
+        root.mkdir(parents=True, exist_ok=False)
+        with self.lock:
+            self.upload_sessions[upload_id] = UploadSession(upload_id, root)
+        return upload_id
+
+    def _upload_session(self, upload_id: str) -> UploadSession:
+        with self.lock:
+            session = self.upload_sessions.get(upload_id)
+        if session is None:
+            raise ValueError("Upload session is missing or expired.")
+        return session
+
+    def receive_folder_upload(
+        self,
+        upload_id: str,
+        relative_name: str,
+        stream: Any,
+        content_length: int,
+    ) -> dict[str, Any]:
+        session = self._upload_session(upload_id)
+        relative = safe_upload_relative_path(relative_name)
+        if relative is None:
+            with self.lock:
+                session.skipped_count += 1
+            return {"accepted": False, "skipped": True}
+        if content_length < 0 or content_length > MAX_UPLOAD_FILE_BYTES:
+            raise ValueError("uploaded file exceeds the per-file size limit")
+        if session.total_bytes + content_length > MAX_UPLOAD_TOTAL_BYTES:
+            raise ValueError("uploaded project exceeds the total size limit")
+        target = session.root / Path(relative.as_posix())
+        target.parent.mkdir(parents=True, exist_ok=True)
+        remaining = content_length
+        try:
+            with target.open("wb") as destination:
+                while remaining:
+                    chunk = stream.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        raise ValueError("uploaded file ended before its declared size")
+                    destination.write(chunk)
+                    remaining -= len(chunk)
+        except BaseException:
+            target.unlink(missing_ok=True)
+            raise
+        with self.lock:
+            session.total_bytes += content_length
+            session.file_count += 1
+        return {"accepted": True, "path": relative.as_posix()}
+
+    def finish_folder_upload(self, upload_id: str) -> None:
+        session = self._upload_session(upload_id)
+        try:
+            imported = import_project_folder(session.root, self.workspace_root / "imports")
+            if session.skipped_count:
+                imported = replace(
+                    imported,
+                    skipped_members=(*imported.skipped_members, "<browser-upload-skipped>"),
+                )
+            self._register_import(imported)
+        finally:
+            with self.lock:
+                self.upload_sessions.pop(upload_id, None)
+            shutil.rmtree(session.root, ignore_errors=True)
+
+    def cancel_folder_upload(self, upload_id: str) -> None:
+        with self.lock:
+            session = self.upload_sessions.pop(upload_id, None)
+        if session is not None:
+            shutil.rmtree(session.root, ignore_errors=True)
+
+    def import_uploaded_zip(
+        self,
+        filename: str,
+        stream: Any,
+        content_length: int,
+    ) -> None:
+        if content_length < 0 or content_length > MAX_UPLOAD_TOTAL_BYTES:
+            raise ValueError("uploaded project exceeds the total size limit")
+        upload_root = self.workspace_root / "uploads"
+        upload_root.mkdir(parents=True, exist_ok=True)
+        temporary = upload_root / f"{uuid.uuid4().hex}.zip"
+        try:
+            remaining = content_length
+            with temporary.open("wb") as destination:
+                while remaining:
+                    chunk = stream.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        raise ValueError("uploaded ZIP ended before its declared size")
+                    destination.write(chunk)
+                    remaining -= len(chunk)
+            imported = import_project_archive(temporary, self.workspace_root / "imports")
+            safe_name = Path(filename.replace("\\", "/")).name or "project.zip"
+            self._register_import(replace(imported, source=Path(safe_name)))
+        finally:
+            temporary.unlink(missing_ok=True)
 
     @staticmethod
     def _task_from_contract(saved: Any) -> ProductTask:
@@ -1150,6 +1285,8 @@ class GuidedState:
 
 
 def _native_picker(kind: str) -> str | None:
+    if sys.platform != "darwin":
+        return None
     if kind == "folder":
         script = 'POSIX path of (choose folder with prompt "Choose project folder")'
     else:
@@ -1165,6 +1302,31 @@ def _native_picker(kind: str) -> str | None:
     except (OSError, subprocess.TimeoutExpired):
         return None
     return result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else None
+
+
+def _open_external(target: str | Path, *, reveal: bool = False) -> bool:
+    """Open a URL or reveal a file using the host platform's default handler."""
+    if reveal:
+        path = Path(target).expanduser()
+        if sys.platform == "darwin" and shutil.which("open"):
+            return subprocess.run(
+                [shutil.which("open") or "open", "-R", str(path)],
+                check=False,
+            ).returncode == 0
+        if os.name == "nt":
+            try:
+                os.startfile(str(path.parent))  # type: ignore[attr-defined]
+                return True
+            except OSError:
+                return False
+        opener = shutil.which("xdg-open")
+        if opener:
+            return subprocess.run([opener, str(path.parent)], check=False).returncode == 0
+        return False
+    try:
+        return bool(webbrowser.open(str(target)))
+    except OSError:
+        return False
 
 
 class AppServer(ThreadingHTTPServer):
@@ -1200,8 +1362,19 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _content_length(self) -> int:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise ValueError("request body length is invalid") from exc
+        if length < 0:
+            raise ValueError("request body length is invalid")
+        return length
+
     def _read_json(self) -> dict[str, Any]:
-        length = int(self.headers.get("Content-Length", "0"))
+        length = self._content_length()
+        if length > 1024 * 1024:
+            raise ValueError("request body is too large")
         raw = self.rfile.read(length) if length else b"{}"
         value = json.loads(raw.decode("utf-8"))
         if not isinstance(value, dict):
@@ -1244,17 +1417,49 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "unauthorized"}, 403)
             return
         try:
-            body = self._read_json()
-            result = self._handle_post(urlparse(self.path).path, body)
+            path = urlparse(self.path).path
+            if path == "/api/upload-folder/file":
+                result = self._handle_folder_upload_file()
+            elif path == "/api/upload-zip":
+                result = self._handle_zip_upload()
+            else:
+                body = self._read_json()
+                result = self._handle_post(path, body)
             self._send_json(result)
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
-            self.app.state.error = str(exc)
-            self._send_json({"error": str(exc), "state": self.app.state.public()}, 400)
+            message = safe_user_error(exc, language=self.app.state.language)
+            self.app.state.error = message
+            self._send_json({"error": message, "state": self.app.state.public()}, 400)
+
+    def _handle_folder_upload_file(self) -> dict[str, Any]:
+        upload_id = self.headers.get("X-Empy-Upload-Id", "")
+        relative_path = unquote(self.headers.get("X-Empy-Relative-Path", ""))
+        result = self.app.state.receive_folder_upload(
+            upload_id,
+            relative_path,
+            self.rfile,
+            self._content_length(),
+        )
+        return result
+
+    def _handle_zip_upload(self) -> dict[str, Any]:
+        self.app.state.import_uploaded_zip(
+            unquote(self.headers.get("X-Empy-Filename", "project.zip")),
+            self.rfile,
+            self._content_length(),
+        )
+        return self.app.state.public()
 
     def _handle_post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         state = self.app.state
         if path == "/api/import":
             state.import_path(str(body.get("path", "")))
+        elif path == "/api/upload-folder/start":
+            return {"upload_id": state.start_folder_upload(), "state": state.public()}
+        elif path == "/api/upload-folder/finish":
+            state.finish_folder_upload(str(body.get("upload_id", "")))
+        elif path == "/api/upload-folder/cancel":
+            state.cancel_folder_upload(str(body.get("upload_id", "")))
         elif path == "/api/select-folder" or path == "/api/select-zip":
             selected = _native_picker("folder" if path.endswith("folder") else "zip")
             if selected is None:
@@ -1288,10 +1493,10 @@ class RequestHandler(BaseHTTPRequestHandler):
         elif path == "/api/refresh-engine":
             state.driver.inspect(refresh=True)
         elif path == "/api/open-engine":
-            subprocess.run(["/usr/bin/open", "codex://threads/new"], check=False)
+            _open_external("codex://threads/new")
         elif path == "/api/reveal-export":
             if state.export is not None:
-                subprocess.run(["/usr/bin/open", "-R", str(state.export.archive_path)], check=False)
+                _open_external(state.export.archive_path, reveal=True)
         else:
             raise ValueError("not found")
         return state.public()
@@ -1314,14 +1519,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--token", default=None)
     parser.add_argument("--no-open", action="store_true")
     args = parser.parse_args(argv)
-    workspace = args.workspace or (Path.home() / "Library" / "Application Support" / "Empy Studio")
+    workspace = args.workspace or default_workspace_root()
     server = create_server(workspace=workspace, token=args.token, port=args.port)
     address = cast(tuple[str, int], server.server_address)
     host, actual_port = address
     url = f"http://{host}:{actual_port}/?token={server.token}"
     print(url, flush=True)
     if not args.no_open:
-        subprocess.Popen(["/usr/bin/open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        _open_external(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

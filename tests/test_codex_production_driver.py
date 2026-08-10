@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import io
 import subprocess
 from pathlib import Path
@@ -175,6 +176,60 @@ def test_detects_authenticated_codex(
     assert installation.ready is True
     assert installation.executable == "/usr/local/bin/codex"
     assert installation.version == "codex-cli 1.2.3"
+
+
+def test_preflight_falls_back_from_translocated_codex_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    translocated = "/System/Volumes/Data/private/var/AppTranslocation/codex"
+    stable = tmp_path / "codex"
+    stable.write_text("#!/bin/sh\n", encoding="utf-8")
+    stable.chmod(0o755)
+    monkeypatch.setattr(
+        "empy_studio.drivers.codex.shutil.which",
+        lambda value: translocated,
+    )
+
+    def runner(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        del kwargs
+        if command[0] == translocated:
+            raise OSError(errno.ERANGE, "Result too large", translocated)
+        return ready_runner(command)
+
+    driver = CodexDriver(
+        artifact_root=tmp_path / "artifacts",
+        command_runner=runner,
+        fallback_executables=(stable,),
+    )
+
+    installation = driver.inspect_installation()
+
+    assert installation.ready is True
+    assert installation.executable == str(stable)
+
+
+def test_preflight_os_error_is_safe_when_no_fallback_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    translocated = "/System/Volumes/Data/private/var/AppTranslocation/codex"
+    monkeypatch.setattr(
+        "empy_studio.drivers.codex.shutil.which",
+        lambda value: translocated,
+    )
+
+    def runner(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        del kwargs
+        raise OSError(errno.ERANGE, "Result too large", translocated)
+
+    installation = CodexDriver(
+        command_runner=runner,
+        fallback_executables=(),
+    ).inspect_installation()
+
+    assert installation.ready is False
+    assert "AppTranslocation" not in installation.message
+    assert "temporary macOS" in installation.message
 
 
 def test_build_command_uses_read_only_without_owned_paths(tmp_path: Path) -> None:

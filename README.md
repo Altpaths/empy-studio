@@ -68,10 +68,10 @@ Everything else should remain optional.
 
 ## Quick start
 
-Requirements: Python 3.10+
+Requirements: Python 3.10+ on macOS, Linux, or Windows.
 
 ```bash
-python3 -m venv .venv
+python -m venv .venv
 source .venv/bin/activate
 pip install ".[dev]"
 pytest
@@ -83,8 +83,10 @@ Launch the bilingual guided desktop UI locally:
 empy-web
 ```
 
-The UI is local-only, keeps its SQLite workspace under the Empy Studio
-application data directory, and works on an isolated project copy. See
+The UI is local-only, keeps its SQLite workspace under the platform's per-user
+application-data directory, and works on an isolated project copy. Use the
+folder or ZIP buttons in the browser on all supported platforms; the path box
+remains available for local automation. See
 [`docs/web-desktop.md`](docs/web-desktop.md) for the product flow and API
 boundary.
 

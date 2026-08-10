@@ -1,3 +1,21 @@
+## [0.1.2] - 2026-08-10
+
+### Tickets 24–26 — Cross-platform reliability hardening
+
+- Made the guided Web Desktop the shared macOS, Linux, and Windows product
+  path with per-OS persistent workspace locations.
+- Added browser folder and ZIP uploads with bounded file/total sizes, traversal
+  and sensitive-file filtering, isolated staging, and cleanup after import.
+- Rejected system/user roots and macOS AppTranslocation sources before import;
+  unreadable project members are reported as skipped instead of exposing raw OS
+  tracebacks.
+- Added Codex executable fallback selection so a translocated or broken CLI
+  path does not block a valid PATH/Homebrew/user installation.
+- Added bounded preflight output and host diagnostics for translocation,
+  permission, and sandbox failures; UI errors are bilingual and path-safe.
+- Added platform smoke CI for Ubuntu, macOS, and Windows plus contract tests
+  for workspace paths, uploads, safe errors, and provider fallback.
+
 ## [0.1.1] - 2026-08-10
 
 ### Tickets 19–23 — Product continuity hardening
