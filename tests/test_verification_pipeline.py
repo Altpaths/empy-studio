@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import threading
 import time
@@ -39,6 +40,70 @@ def test_plain_php_composer_mapping_is_dependency_aware(tmp_path: Path) -> None:
     assert detection.descriptor.project_type == "php"
     assert [item.check_id for item in checks] == ["build"]
     assert checks[0].command == ("composer", "validate", "--no-check-publish")
+
+
+def test_plain_php_without_composer_maps_safe_syntax_checks(tmp_path: Path) -> None:
+    (tmp_path / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
+    (tmp_path / "admin").mkdir()
+    (tmp_path / "admin" / "dashboard.php").write_text("<?php echo 'dashboard';\n", encoding="utf-8")
+    (tmp_path / "vendor").mkdir()
+    (tmp_path / "vendor" / "dependency.php").write_text("<?php this is not linted;\n", encoding="utf-8")
+
+    detection = DefaultProjectService().detect(tmp_path)
+    checks = map_project_verification(detection)
+
+    assert detection.descriptor.project_type == "php"
+    assert [item.category for item in checks] == ["lint", "lint"]
+    assert [item.label for item in checks] == [
+        "PHP syntax · admin/dashboard.php",
+        "PHP syntax · index.php",
+    ]
+    assert all(item.command[:2] == ("php", "-l") for item in checks)
+
+
+@pytest.mark.skipif(shutil.which("php") is None, reason="PHP CLI is not installed")
+def test_plain_php_lint_runtime_can_finalize(tmp_path: Path) -> None:
+    (tmp_path / "admin.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
+
+    report = VerificationRuntime().run(
+        detection=DefaultProjectService().detect(tmp_path),
+        evidence_root=tmp_path / "evidence",
+    )
+
+    assert report.status == "pass"
+    assert [item.status for item in report.results] == ["pass"]
+    assert finalize_verification(report).finalized_at is not None
+
+
+def test_missing_verification_executable_is_recorded_as_failure(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("demo", encoding="utf-8")
+    manifest = tmp_path / ".empy" / "verification.json"
+    manifest.parent.mkdir()
+    manifest.write_text(
+        json.dumps(
+            {
+                "checks": [
+                    {
+                        "id": "missing-tool",
+                        "label": "missing tool",
+                        "category": "tests",
+                        "command": ["empy-command-that-does-not-exist"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = VerificationRuntime().run(
+        detection=DefaultProjectService().detect(tmp_path),
+        evidence_root=tmp_path / "evidence",
+    )
+
+    assert report.status == "fail"
+    assert report.results[0].returncode == 127
+    assert "Unable to start verification command" in report.results[0].stderr
+    assert not report.finalize_allowed
 
 
 def test_manifest_commands_stream_and_failure_blocks_finalize(tmp_path: Path) -> None:

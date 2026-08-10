@@ -67,6 +67,22 @@ def test_detects_plain_php_composer_project(
     assert result.has_tests
 
 
+def test_detects_plain_php_without_index_or_composer(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "public_html").mkdir()
+    (tmp_path / "public_html" / "site-audit.php").write_text(
+        "<?php echo 'audit';\n",
+        encoding="utf-8",
+    )
+
+    result = DefaultProjectService().detect(tmp_path)
+
+    assert result.descriptor.project_type == "php"
+    assert "php" in result.markers
+    assert "public_html/" in result.markers
+
+
 def test_detects_python(
     tmp_path: Path,
 ) -> None:

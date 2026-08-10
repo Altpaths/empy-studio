@@ -80,10 +80,7 @@ class DefaultProjectService:
                 markers.append("resources/")
             return "laravel", tuple(markers)
 
-        if (
-            (root / "composer.json").is_file()
-            or (root / "index.php").is_file()
-        ) and self._has_php_sources(root):
+        if self._has_php_sources(root):
             markers = ["php"]
             for marker in (
                 "composer.json",

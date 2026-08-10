@@ -1,3 +1,14 @@
+## [Unreleased]
+
+### Verification continuation for plain PHP projects
+
+- Detect PHP projects even when their source lives below the root and there is
+  no root `index.php` or `composer.json`.
+- Map safe `php -l` checks for plain PHP projects without Composer or PHPUnit,
+  excluding dependencies, generated files, and Empy workspace data.
+- Persist missing verification executables as failed evidence instead of
+  crashing the run, and include common desktop/Homebrew tool paths.
+
 ## [0.1.5] - 2026-08-10
 
 ### Desktop provider-path reliability patch

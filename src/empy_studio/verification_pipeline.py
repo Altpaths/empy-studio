@@ -23,6 +23,30 @@ VerificationResultStatus = Literal["pass", "fail"]
 
 DEFAULT_VERIFICATION_TIMEOUT_SECONDS = 1800.0
 DEFAULT_PROCESS_GRACE_SECONDS = 2.0
+_AUTO_LINT_IGNORED_DIRECTORIES = frozenset(
+    {
+        ".git",
+        ".empy",
+        ".venv",
+        "node_modules",
+        "vendor",
+        "build",
+        "dist",
+        "storage",
+        "cache",
+        "__pycache__",
+    }
+)
+_COMMON_TOOL_PATHS = tuple(
+    Path(item).expanduser()
+    for item in (
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/opt/local/bin",
+        "~/.local/bin",
+        "~/.npm-global/bin",
+    )
+)
 
 
 class VerificationCancelled(RuntimeError):
@@ -146,6 +170,47 @@ def _composer_scripts(root: Path) -> dict[str, object]:
     return scripts if isinstance(scripts, dict) else {}
 
 
+def _php_source_files(root: Path) -> tuple[Path, ...]:
+    """Return PHP source files that can be syntax-checked without executing them.
+
+    A plain PHP project often has no Composer metadata or PHPUnit binary.  It
+    still has a meaningful, safe verification gate: ``php -l`` parses each
+    source file without running application code.  Dependency, generated, and
+    Empy-owned directories are deliberately excluded.
+    """
+
+    source_files: list[Path] = []
+    for current, directories, files in os.walk(root, followlinks=False):
+        current_path = Path(current)
+        directories[:] = [
+            directory
+            for directory in directories
+            if directory not in _AUTO_LINT_IGNORED_DIRECTORIES
+            and not (current_path / directory).is_symlink()
+        ]
+        for filename in files:
+            if not filename.lower().endswith(".php"):
+                continue
+            candidate = current_path / filename
+            if candidate.is_symlink():
+                continue
+            source_files.append(candidate)
+    return tuple(sorted(source_files, key=lambda path: path.relative_to(root).as_posix()))
+
+
+def _verification_environment() -> dict[str, str]:
+    """Return a subprocess environment that also works from a desktop launch."""
+
+    environment = os.environ.copy()
+    current_path = [item for item in environment.get("PATH", "").split(os.pathsep) if item]
+    for candidate in _COMMON_TOOL_PATHS:
+        if candidate.is_dir() and str(candidate) not in current_path:
+            current_path.append(str(candidate))
+    if current_path:
+        environment["PATH"] = os.pathsep.join(current_path)
+    return environment
+
+
 def _verification_category(value: object) -> VerificationCategory:
     if value == "tests":
         return "tests"
@@ -203,6 +268,17 @@ def map_project_verification(detection: ProjectDetection) -> tuple[VerificationC
                     (str(root / "vendor" / "bin" / "phpunit"),),
                 )
             )
+        else:
+            for index, source_file in enumerate(_php_source_files(root), start=1):
+                relative_path = source_file.relative_to(root).as_posix()
+                checks.append(
+                    VerificationCheck(
+                        check_id=f"php-lint-{index}",
+                        label=f"PHP syntax · {relative_path}",
+                        category="lint",
+                        command=("php", "-l", str(source_file)),
+                    )
+                )
     elif project_type == "node":
         scripts = _node_scripts(root)
         node_checks: tuple[tuple[VerificationCategory, str], ...] = (
@@ -325,15 +401,31 @@ class VerificationRuntime:
         if cancel_event is not None and cancel_event.is_set():
             raise VerificationCancelled("Verification was cancelled before it started.")
         started_at = _now()
-        process = subprocess.Popen(
-            check.command,
-            cwd=cwd,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=os.environ.copy(),
-            start_new_session=(os.name == "posix"),
-        )
+        try:
+            process = subprocess.Popen(
+                check.command,
+                cwd=cwd,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=_verification_environment(),
+                start_new_session=(os.name == "posix"),
+            )
+        except OSError as exc:
+            stderr = f"Unable to start verification command: {exc}\n"
+            if on_event is not None:
+                on_event(VerificationEvent(_now(), check.check_id, check.category, "system", stderr))
+            (run_root / f"{check.check_id}.stdout.txt").write_text("", encoding="utf-8")
+            (run_root / f"{check.check_id}.stderr.txt").write_text(stderr, encoding="utf-8")
+            return VerificationResult(
+                check=check,
+                status="fail",
+                returncode=127,
+                stdout="",
+                stderr=stderr,
+                started_at=started_at,
+                finished_at=_now(),
+            )
         stdout_lines: list[str] = []
         stderr_lines: list[str] = []
 

@@ -12,7 +12,7 @@ Ticket 14 connects project-aware verification to the Desktop product.
 
 ## Project mapping
 
-Python projects use pytest, compileall, and Ruff. Laravel, Node, Rust, and Go receive commands appropriate to their detected project structure. Projects can override mapping with `.empy/verification.json` using explicit argument arrays; commands are never interpreted through a shell.
+Python projects use pytest, compileall, and Ruff. Laravel, Node, Rust, Go, and plain PHP receive commands appropriate to their detected project structure. Plain PHP projects without Composer or PHPUnit use safe `php -l` checks for source files, including projects whose PHP files live below the root such as `public_html/`. Projects can override mapping with `.empy/verification.json` using explicit argument arrays; commands are never interpreted through a shell.
 
 ## Finalize gate
 
