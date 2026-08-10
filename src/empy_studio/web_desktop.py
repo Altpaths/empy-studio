@@ -94,7 +94,17 @@ DEFAULT_DEFINITION_OF_DONE = (
 
 
 def _content_type_for_asset(target: Path) -> str:
-    return mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+    stable_types = {
+        ".css": "text/css",
+        ".html": "text/html",
+        ".js": "text/javascript",
+        ".json": "application/json",
+        ".png": "image/png",
+        ".svg": "image/svg+xml",
+    }
+    return stable_types.get(target.suffix.lower()) or mimetypes.guess_type(
+        target.name
+    )[0] or "application/octet-stream"
 
 
 def _now() -> str:

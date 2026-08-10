@@ -1,3 +1,11 @@
+## [0.1.3] - 2026-08-10
+
+### Cross-platform patch release
+
+- Made web asset MIME types deterministic across operating systems so the
+  browser UI is served identically on macOS, Linux, and Windows.
+- Fixed the platform CI dependency setup and verified the full smoke matrix.
+
 ## [0.1.2] - 2026-08-10
 
 ### Tickets 24–26 — Cross-platform reliability hardening
