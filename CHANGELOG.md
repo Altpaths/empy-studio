@@ -1,3 +1,14 @@
+## [0.1.5] - 2026-08-10
+
+### Desktop provider-path reliability patch
+
+- Restored the Codex/Node runtime PATH for Finder-launched and other GUI
+  environments with a sparse shell PATH, while keeping preflight and real
+  execution on the same child-process contract.
+- Added regression coverage for sparse GUI PATH detection and the installed
+  npm Codex shim; real execution remains safely blocked when Codex is not
+  available or authenticated.
+
 ## [0.1.4] - 2026-08-10
 
 ### Release automation patch

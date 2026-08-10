@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import errno
 import io
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -176,6 +177,49 @@ def test_detects_authenticated_codex(
     assert installation.ready is True
     assert installation.executable == "/usr/local/bin/codex"
     assert installation.version == "codex-cli 1.2.3"
+
+
+def test_preflight_restores_cli_runtime_path_for_gui_launch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stable = tmp_path / "codex"
+    stable.write_text("#!/bin/sh\n", encoding="utf-8")
+    stable.chmod(0o755)
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    observed_paths: list[str] = []
+
+    def runner(
+        command: list[str],
+        **kwargs: Any,
+    ) -> subprocess.CompletedProcess[str]:
+        observed_paths.append(str(kwargs["env"]["PATH"]))
+        return ready_runner(command, **kwargs)
+
+    driver = CodexDriver(
+        artifact_root=tmp_path / "artifacts",
+        fallback_executables=(stable,),
+        command_runner=runner,
+    )
+
+    installation = driver.inspect_installation()
+
+    assert installation.ready is True
+    assert observed_paths
+    assert str(tmp_path) in observed_paths[0].split(os.pathsep)
+
+
+def test_real_codex_preflight_works_with_a_sparse_gui_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The installed npm Codex shim must work without a shell PATH."""
+    if not Path("/opt/homebrew/bin/codex").is_file():
+        pytest.skip("Homebrew Codex is not installed on this host")
+
+    monkeypatch.setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+    installation = CodexDriver().inspect_installation(refresh=True)
+
+    assert installation.ready is True, installation.to_dict()
 
 
 def test_preflight_falls_back_from_translocated_codex_path(

@@ -469,7 +469,90 @@ class CodexDriver(BaseDriver):
             capture_output=True,
             timeout=DEFAULT_PREFLIGHT_TIMEOUT,
             check=False,
+            env=self._runtime_environment(command[0] if command else None),
         )
+
+    def _runtime_environment(
+        self,
+        executable: str | Path | None = None,
+    ) -> dict[str, str]:
+        """Build a usable child environment for GUI-launched CLI shims.
+
+        Finder-launched macOS applications do not inherit the shell's PATH. A
+        Codex executable installed through npm is commonly a small script with
+        ``#!/usr/bin/env node``; finding the script is therefore not enough.
+        Put the executable's directory and the common Node installation
+        directories ahead of the inherited PATH for both preflight and real
+        runs. The same rule is harmless on other platforms and keeps the
+        provider process contract identical in the desktop and terminal apps.
+        """
+        environment = os.environ.copy()
+        environment.setdefault("NO_COLOR", "1")
+
+        additions: list[str] = []
+
+        def add_directory(value: str | Path | None) -> None:
+            if value is None:
+                return
+            candidate = Path(value).expanduser()
+            try:
+                if candidate.is_dir():
+                    normalized = str(candidate)
+                    if normalized not in additions:
+                        additions.append(normalized)
+            except OSError:
+                return
+
+        if executable:
+            executable_path = Path(executable).expanduser()
+            if executable_path.is_absolute():
+                add_directory(executable_path.parent)
+
+        home: Path | None
+        try:
+            home = Path.home()
+        except OSError:
+            home = None
+
+        common_directories: tuple[str | Path, ...] = (
+            "/opt/homebrew/bin",
+            "/opt/homebrew/opt/node/bin",
+            "/usr/local/bin",
+            "/usr/local/opt/node/bin",
+            "/usr/bin",
+            "/bin",
+        )
+        for directory in common_directories:
+            add_directory(directory)
+        if home is not None:
+            for directory in (
+                home / ".local" / "bin",
+                home / ".npm-global" / "bin",
+                home / ".volta" / "bin",
+                home / ".asdf" / "shims",
+            ):
+                add_directory(directory)
+        for environment_name in (
+            "NVM_SYMLINK",
+            "NVM_HOME",
+            "ProgramFiles",
+            "ProgramFiles(x86)",
+            "LOCALAPPDATA",
+            "APPDATA",
+        ):
+            value = environment.get(environment_name)
+            if value:
+                add_directory(value)
+                add_directory(Path(value) / "nodejs")
+                add_directory(Path(value) / "Programs" / "nodejs")
+                add_directory(Path(value) / "npm")
+
+        inherited = [item for item in environment.get("PATH", "").split(os.pathsep) if item]
+        for item in inherited:
+            if item not in additions:
+                additions.append(item)
+        environment["PATH"] = os.pathsep.join(additions)
+        return environment
 
     @staticmethod
     def _bounded_output(value: str | None) -> str:
@@ -575,8 +658,7 @@ class CodexDriver(BaseDriver):
             node_id=node_id,
         )
 
-        process_environment = os.environ.copy()
-        process_environment.setdefault("NO_COLOR", "1")
+        process_environment = self._runtime_environment(command[0])
 
         if self._cancel_requested.is_set():
             self._status = "cancelled"
