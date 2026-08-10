@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  quality:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -20,7 +20,41 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip
-      - run: pip install -e ".[dev]"
+      - run: pip install ".[dev]"
       - run: ruff check .
       - run: mypy src
-      - run: pytest
+      - run: pytest -q
+      - name: Build wheel and source distribution
+        run: python -m build --no-isolation --wheel --sdist --outdir build/packages
+      - name: Install the built wheel in a fresh environment
+        run: |
+          python -m venv build/clean-venv
+          build/clean-venv/bin/python -m pip install --disable-pip-version-check build/packages/*.whl
+          build/clean-venv/bin/empy --help
+          build/clean-venv/bin/empy-web --help
+          build/clean-venv/bin/python -c "import importlib.metadata; assert importlib.metadata.version('empy-studio')"
+
+  release-assets:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install ".[dev]"
+      - name: Build release assets without publishing
+        run: python scripts/build_release_assets.py --output build/release-assets
+      - name: Verify package and installer digests
+        run: python scripts/verify_release_assets.py build/release-assets/release-assets.json
+      - name: Exercise the relocated Linux installer
+        run: |
+          python scripts/smoke_unix_installer.py \
+            --installer build/release-assets/install-linux-x86_64.sh \
+            --package build/release-assets/*.whl \
+            --target linux-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: empy-release-assets
+          path: build/release-assets

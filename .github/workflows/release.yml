@@ -1,0 +1,263 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish this selected tag after Apple notarization"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  quality:
+    name: Quality (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install --upgrade pip
+      - run: pip install ".[dev]"
+      - run: ruff check .
+      - run: mypy src
+      - run: pytest -q
+
+  package:
+    name: Package and verify release assets
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install ".[dev]"
+      - name: Build assets for the exact tag
+        run: python scripts/build_release_assets.py --output build/release-assets --release-tag "$GITHUB_REF_NAME"
+      - name: Verify every asset and checksum
+        run: python scripts/verify_release_assets.py build/release-assets/release-assets.json
+      - name: Exercise the relocated Linux installer
+        run: |
+          python scripts/smoke_unix_installer.py \
+            --installer build/release-assets/install-linux-x86_64.sh \
+            --package build/release-assets/*.whl \
+            --target linux-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: build/release-assets
+
+  macos-app:
+    name: macOS app (${{ matrix.architecture }})
+    needs: quality
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: macos-14
+            architecture: arm64
+          - os: macos-13
+            architecture: x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install ".[release]"
+      - name: Build Finder-launchable app bundle
+        run: |
+          mkdir -p build/app
+          python scripts/build_macos_app.py \
+            --output "build/app/Empy Studio.app" \
+            --architecture "${{ matrix.architecture }}"
+          test -x "build/app/Empy Studio.app/Contents/MacOS/Empy Studio"
+          "build/app/Empy Studio.app/Contents/MacOS/Empy Studio" --help
+          codesign --verify --deep --strict "build/app/Empy Studio.app"
+          ditto -c -k --norsrc --noextattr --noqtn --keepParent \
+            "build/app/Empy Studio.app" \
+            "build/app/empy-studio-macos-${{ matrix.architecture }}.zip"
+          shasum -a 256 "build/app/empy-studio-macos-${{ matrix.architecture }}.zip" \
+            > "build/app/empy-studio-macos-${{ matrix.architecture }}.zip.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-app-${{ matrix.architecture }}
+          path: build/app/*.zip*
+
+  macos-release:
+    name: Sign and notarize macOS app (${{ matrix.architecture }})
+    if: github.event_name == 'workflow_dispatch' && inputs.publish == true
+    needs: macos-app
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: macos-14
+            architecture: arm64
+          - os: macos-13
+            architecture: x86_64
+    runs-on: ${{ matrix.os }}
+    environment:
+      name: release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-app-${{ matrix.architecture }}
+          path: build/app
+      - name: Install Developer ID certificate in an ephemeral keychain
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${APPLE_CERTIFICATE_P12_BASE64:?Missing APPLE_CERTIFICATE_P12_BASE64}"
+          : "${APPLE_CERTIFICATE_PASSWORD:?Missing APPLE_CERTIFICATE_PASSWORD}"
+          : "${KEYCHAIN_PASSWORD:?Missing KEYCHAIN_PASSWORD}"
+          KEYCHAIN_PATH="$RUNNER_TEMP/empy-release.keychain-db"
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          export KEYCHAIN_PATH CERTIFICATE_PATH
+          python -c 'import base64, pathlib, sys; pathlib.Path(sys.argv[1]).write_bytes(base64.b64decode(sys.stdin.read()))' "$CERTIFICATE_PATH" <<< "$APPLE_CERTIFICATE_P12_BASE64"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+      - name: Sign, notarize, staple, and Gatekeeper-check the app
+        env:
+          DEVELOPER_ID_APPLICATION: ${{ secrets.DEVELOPER_ID_APPLICATION }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          set -euo pipefail
+          : "${DEVELOPER_ID_APPLICATION:?Missing DEVELOPER_ID_APPLICATION}"
+          : "${APPLE_ID:?Missing APPLE_ID}"
+          : "${APPLE_TEAM_ID:?Missing APPLE_TEAM_ID}"
+          : "${APPLE_APP_PASSWORD:?Missing APPLE_APP_PASSWORD}"
+          KEYCHAIN_PATH="$RUNNER_TEMP/empy-release.keychain-db"
+          trap 'security delete-keychain "$KEYCHAIN_PATH" >/dev/null 2>&1 || true' EXIT
+          INPUT_ZIP="build/app/empy-studio-macos-${{ matrix.architecture }}.zip"
+          EXTRACTED="$RUNNER_TEMP/empy-app-${{ matrix.architecture }}"
+          APP_PATH="$EXTRACTED/Empy Studio.app"
+          SIGNED_DIR="build/signed"
+          SIGNED_ZIP="$SIGNED_DIR/empy-studio-macos-${{ matrix.architecture }}.zip"
+          EVIDENCE="$SIGNED_DIR/macos-signing-evidence-${{ matrix.architecture }}.json"
+          mkdir -p "$EXTRACTED" "$SIGNED_DIR"
+          ditto -x -k "$INPUT_ZIP" "$EXTRACTED"
+          xattr -cr "$APP_PATH"
+          codesign --force --deep --options runtime --timestamp \
+            --sign "$DEVELOPER_ID_APPLICATION" "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          ditto -c -k --norsrc --noextattr --noqtn --keepParent \
+            "$APP_PATH" "$SIGNED_ZIP"
+          xcrun notarytool submit "$SIGNED_ZIP" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+          xcrun stapler staple "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+          spctl --assess --type execute --verbose=4 "$APP_PATH"
+          "$APP_PATH/Contents/MacOS/Empy Studio" --help
+          rm -f "$SIGNED_ZIP"
+          ditto -c -k --norsrc --noextattr --noqtn --keepParent \
+            "$APP_PATH" "$SIGNED_ZIP"
+          shasum -a 256 "$SIGNED_ZIP" > "$SIGNED_ZIP.sha256"
+          python - "$EVIDENCE" <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          Path(sys.argv[1]).write_text(
+              json.dumps(
+                  {
+                      "schema_version": 1,
+                      "status": "notarized",
+                      "architecture": os.environ["ARCHITECTURE"],
+                      "signing_identity": os.environ["DEVELOPER_ID_APPLICATION"],
+                      "notarization": "accepted",
+                      "stapled": True,
+                      "gatekeeper": "accepted",
+                  },
+                  indent=2,
+              )
+              + "\n",
+              encoding="utf-8",
+          )
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-signed-${{ matrix.architecture }}
+          path: build/signed/*
+
+  publish:
+    name: Publish verified GitHub release
+    if: github.event_name == 'workflow_dispatch' && inputs.publish == true
+    needs: [package, macos-release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install ".[dev]"
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: release-assets
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-signed-arm64
+          path: release-assets
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-signed-x86_64
+          path: release-assets
+      - name: Merge macOS assets into the release manifest
+        run: |
+          python scripts/merge_release_assets.py \
+            release-assets \
+            release-assets/*.zip \
+            release-assets/*.sha256 \
+            release-assets/macos-signing-evidence-*.json
+          python scripts/verify_release_assets.py \
+            --require-notarized \
+            release-assets/release-assets.json
+      - name: Publish only after all jobs pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_TYPE" = tag
+          test -n "$GITHUB_REF_NAME"
+          test -n "$(find release-assets -type f -print -quit)"
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --verify-tag \
+            --title "Empy Studio $GITHUB_REF_NAME" \
+            --notes-file release-assets/RELEASE_NOTES.md

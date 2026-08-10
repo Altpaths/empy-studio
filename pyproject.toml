@@ -2,6 +2,20 @@
 requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build]
+exclude = [
+  "/.empy/",
+  "/.venv/",
+  "/build/",
+  "/dist/",
+  "/outputs/",
+  "/work/",
+  "/private/",
+  "/releases/",
+  "/artifacts/",
+  "/**/*.zip",
+]
+
 [project]
 name = "empy-studio"
 version = "0.1.0"
@@ -25,7 +39,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
+dev = ["build>=1.2", "hatchling>=1.25", "pytest>=8", "ruff>=0.6", "mypy>=1.10"]
+release = ["build>=1.2", "hatchling>=1.25", "pyinstaller>=6.11"]
 
 [project.scripts]
 empy = "empy_studio.cli:main"
@@ -38,7 +53,7 @@ Documentation = "https://github.com/Altpaths/empy-studio/tree/main/docs"
 Issues = "https://github.com/Altpaths/empy-studio/issues"
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 
 [tool.ruff]

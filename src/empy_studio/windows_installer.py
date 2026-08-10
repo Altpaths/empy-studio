@@ -9,6 +9,12 @@ from typing import Any
 
 from .platform_support import parse_target
 
+_ENTRYPOINT_MODULES = {
+    "empy": "empy_studio.cli",
+    "empy-web": "empy_studio.web_desktop",
+    "empy-desktop": "empy_studio.desktop.shell",
+}
+
 
 @dataclass(frozen=True)
 class WindowsInstallerSpec:
@@ -66,6 +72,11 @@ class WindowsInstallerSpec:
             raise ValueError(
                 "Entrypoint must be a command name"
             )
+        if self.entrypoint not in _ENTRYPOINT_MODULES:
+            raise ValueError(
+                "Entrypoint must be one of: "
+                + ", ".join(sorted(_ENTRYPOINT_MODULES))
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -91,6 +102,7 @@ def render_windows_installer(
 ) -> str:
     spec.validate()
     minimum_major, minimum_minor = spec.minimum_python.split(".")
+    entrypoint_module = _ENTRYPOINT_MODULES[spec.entrypoint]
 
     return f'''#requires -Version 5.1
 $ErrorActionPreference = "Stop"
@@ -106,6 +118,7 @@ $MinimumPython = {_ps_quote(spec.minimum_python)}
 $MinimumPythonMajor = {minimum_major}
 $MinimumPythonMinor = {minimum_minor}
 $Entrypoint = {_ps_quote(spec.entrypoint)}
+$EntrypointModule = {_ps_quote(entrypoint_module)}
 $InstallRoot = {_ps_quote(spec.install_root)}
 $BinDir = {_ps_quote(spec.bin_dir)}
 
@@ -281,6 +294,14 @@ function Install-Package {{
             --upgrade `
             $packagePath
 
+        & $venvPython `
+            -c `
+            "import importlib,sys; importlib.import_module(sys.argv[1])" `
+            $EntrypointModule
+        if ($LASTEXITCODE -ne 0) {{
+            Fail "Installed package did not provide entrypoint module: $EntrypointModule"
+        }}
+
         $entrypointExe = Join-Path `
             $stagedRoot `
             "venv\\Scripts\\$Entrypoint.exe"
@@ -309,7 +330,7 @@ function Install-Package {{
             }}
 
         $wrapperTemporary = "$WrapperPath.tmp"
-        $wrapper = "@echo off`r`n`"$VersionRoot\\venv\\Scripts\\$Entrypoint.exe`" %*`r`n"
+        $wrapper = "@echo off`r`n`"$VersionRoot\\venv\\Scripts\\python.exe`" -m $EntrypointModule %*`r`n"
         Set-Content `
             -LiteralPath $wrapperTemporary `
             -Value $wrapper `

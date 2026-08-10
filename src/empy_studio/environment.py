@@ -225,7 +225,7 @@ def bootstrap(
     commands.extend(
         [
             [str(env_python), "-m", "pip", "install", "--upgrade", "pip"],
-            [str(env_python), "-m", "pip", "install", "-e", spec],
+            [str(env_python), "-m", "pip", "install", spec],
         ]
     )
 

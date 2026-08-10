@@ -26,4 +26,13 @@ or:
 python -m empy_studio.desktop
 ```
 
-A macOS development `.app` bundle is also included in `dist/`.
+The Finder-launchable macOS app is built explicitly with:
+
+```bash
+python scripts/build_macos_app.py \
+  --output "build/Empy Studio.app" \
+  --architecture auto
+```
+
+The repository does not claim that an app bundle exists until this command has
+run successfully. Signing and notarization are separate release gates.

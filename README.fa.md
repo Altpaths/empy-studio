@@ -45,7 +45,7 @@ Empy Studio نباید توسعه را پیچیده‌تر کند. هر قابل
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install ".[dev]"
 pytest
 empy --help
 ```
@@ -54,7 +54,17 @@ empy --help
 
 **نسخه 0.1.0 — Developer Preview**
 
-هسته اجرایی آماده است، اما قراردادهای عمومی ممکن است تا نسخه 1.0 تغییر کنند.
+هسته اجرایی آماده است و مسیر توزیع Ticket 18 در حال اعتبارسنجی است. برای ساخت
+و بررسی بسته‌های واقعی از این فرمان‌ها استفاده کن:
+
+```bash
+python scripts/build_release_assets.py --output build/release-assets
+python scripts/verify_release_assets.py build/release-assets/release-assets.json
+```
+
+ساخت App مخصوص macOS با Finder از طریق `scripts/build_macos_app.py` انجام می‌شود.
+امضا و Notarization اپل همچنان Gateهای واقعی انتشار نهایی هستند و شبیه‌سازی
+نمی‌شوند.
 
 ## سازنده
 

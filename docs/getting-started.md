@@ -7,7 +7,7 @@ git clone <repository-url>
 cd empy-studio
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install ".[dev]"
 pytest
 ```
 

@@ -1,5 +1,16 @@
 ## Unreleased
 
+### Ticket 18 — Open-source distribution foundation
+
+- Added a supported Python CI matrix with package build, clean wheel install,
+  CLI/UI smoke checks, and release-asset verification.
+- Added deterministic package and installer asset generation with SHA-256
+  manifests that fail closed on mismatched or incomplete output.
+- Added a real macOS Finder app build path through PyInstaller; unsigned and
+  unnotarized artifacts remain explicitly classified as release candidates.
+- Added release documentation that separates verified local behavior from
+  credentials-dependent Apple signing, notarization, and clean-machine gates.
+
 ### Ticket 17 — Real-project acceptance and terminal run safety
 
 - Added a deterministic PHP acceptance harness covering isolated import, two sequential tickets, reopen, Review accept/revert, verified ZIP export, and second-project isolation.

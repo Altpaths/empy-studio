@@ -21,7 +21,7 @@ A feature that only adds flexibility or abstraction is unlikely to enter the cor
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install ".[dev]"
 pytest
 ruff check .
 mypy src

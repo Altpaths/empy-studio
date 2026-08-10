@@ -11,7 +11,7 @@ Empy Studio یک چارچوب محلی و قابل ممیزی برای سازم�
 ```bash
 python3 -m venv .venv
 ./.venv/bin/python -m pip install --upgrade pip
-./.venv/bin/python -m pip install -e ".[dev]"
+./.venv/bin/python -m pip install ".[dev]"
 ```
 
 بررسی نصب:

@@ -81,6 +81,12 @@ def test_installer_records_state_and_wrapper() -> None:
     assert "schema_version = 1" in script
 
 
+def test_wrapper_uses_relocatable_python_module() -> None:
+    script = render_windows_installer(spec())
+    assert "$EntrypointModule = 'empy_studio.cli'" in script
+    assert "venv\\Scripts\\python.exe`\" -m $EntrypointModule" in script
+
+
 def test_writes_deterministic_installer(
     tmp_path: Path,
 ) -> None:

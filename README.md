@@ -67,7 +67,7 @@ Requirements: Python 3.10+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install ".[dev]"
 pytest
 ```
 
@@ -187,6 +187,18 @@ empy release build \
 ```
 
 The builder creates a versioned ZIP, JSON manifest, SHA-256 checksum, and release notes. It does not create a Git tag or publish remotely without a separate explicit action.
+
+Build and verify real distribution assets locally:
+
+```bash
+python scripts/build_release_assets.py --output build/release-assets
+python scripts/verify_release_assets.py build/release-assets/release-assets.json
+```
+
+On macOS, the Finder-launchable app is built separately with the release
+dependencies. The command fails closed when PyInstaller or the app bundle is
+missing; signing and notarization remain explicit release gates. See
+[`docs/release-artifacts.md`](docs/release-artifacts.md).
 
 
 ## Multi-Agent Runtime

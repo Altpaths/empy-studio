@@ -93,6 +93,13 @@ def test_script_records_install_state() -> None:
     assert '"package_sha256"' in script
 
 
+def test_wrapper_uses_relocatable_python_module() -> None:
+    script = render_unix_installer(spec())
+    assert "ENTRYPOINT_MODULE=empy_studio.cli" in script
+    assert 'venv/bin/python" -m "$ENTRYPOINT_MODULE"' in script
+    assert 'venv/bin/$ENTRYPOINT"' not in script
+
+
 def test_writes_executable_installer(
     tmp_path: Path,
 ) -> None:

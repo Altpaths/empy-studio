@@ -12,7 +12,7 @@ For development:
 ```bash
 python3 -m venv .venv
 ./.venv/bin/python -m pip install --upgrade pip
-./.venv/bin/python -m pip install -e ".[dev]"
+./.venv/bin/python -m pip install ".[dev]"
 ```
 
 Validate the installation:

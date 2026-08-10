@@ -18,6 +18,12 @@ UnixTarget = Literal[
     "linux-x86_64",
 ]
 
+_ENTRYPOINT_MODULES = {
+    "empy": "empy_studio.cli",
+    "empy-web": "empy_studio.web_desktop",
+    "empy-desktop": "empy_studio.desktop.shell",
+}
+
 
 @dataclass(frozen=True)
 class UnixInstallerSpec:
@@ -74,6 +80,11 @@ class UnixInstallerSpec:
             raise ValueError(
                 "Entrypoint must be a command name"
             )
+        if self.entrypoint not in _ENTRYPOINT_MODULES:
+            raise ValueError(
+                "Entrypoint must be one of: "
+                + ", ".join(sorted(_ENTRYPOINT_MODULES))
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -99,6 +110,7 @@ def render_unix_installer(
 ) -> str:
     spec.validate()
     minimum_major, minimum_minor = spec.minimum_python.split(".")
+    entrypoint_module = _ENTRYPOINT_MODULES[spec.entrypoint]
 
     return f'''#!/bin/sh
 set -eu
@@ -113,6 +125,7 @@ MINIMUM_PYTHON={_shell(spec.minimum_python)}
 MINIMUM_PYTHON_MAJOR={_shell(minimum_major)}
 MINIMUM_PYTHON_MINOR={_shell(minimum_minor)}
 ENTRYPOINT={_shell(spec.entrypoint)}
+ENTRYPOINT_MODULE={_shell(entrypoint_module)}
 INSTALL_ROOT={_shell(spec.install_root)}
 BIN_DIR={_shell(spec.bin_dir)}
 
@@ -292,8 +305,11 @@ install_package() {{
         --upgrade \
         "$package_path"
 
-    [ -x "$staged_root/venv/bin/$ENTRYPOINT" ] \
-        || fail "Installed package did not provide entrypoint: $ENTRYPOINT"
+    "$staged_root/venv/bin/python" - "$ENTRYPOINT_MODULE" <<'PY'
+import importlib
+import sys
+importlib.import_module(sys.argv[1])
+PY
 
     [ ! -e "$VERSION_ROOT" ] \
         || fail "Version is already installed: $VERSION"
@@ -307,7 +323,7 @@ install_package() {{
     temporary_wrapper="$BIN_DIR/.${{ENTRYPOINT}}-$VERSION"
     cat > "$temporary_wrapper" <<WRAPPER
 #!/bin/sh
-exec "$CURRENT_LINK/venv/bin/$ENTRYPOINT" "\\$@"
+exec "$CURRENT_LINK/venv/bin/python" -m "$ENTRYPOINT_MODULE" "\\$@"
 WRAPPER
     chmod 0755 "$temporary_wrapper"
     mv -f "$temporary_wrapper" "$WRAPPER_PATH"

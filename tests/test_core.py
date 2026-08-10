@@ -191,4 +191,4 @@ def test_bootstrap_dry_run_selects_commands(tmp_path: Path) -> None:
     result = bootstrap(tmp_path, dry_run=True, python_executable=sys.executable)
     assert result["status"] == "planned"
     assert result["commands"][0][1:3] == ["-m", "venv"]
-    assert result["commands"][-1][-2:] == ["-e", "."]
+    assert result["commands"][-1][-1] == "."
