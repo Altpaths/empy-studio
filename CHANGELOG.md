@@ -1,4 +1,4 @@
-## Unreleased
+## [0.1.1] - 2026-08-10
 
 ### Tickets 19–23 — Product continuity hardening
 
