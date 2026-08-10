@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.1.6] - 2026-08-10
+
 ### Verification continuation for plain PHP projects
 
 - Detect PHP projects even when their source lives below the root and there is
