@@ -22,4 +22,8 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert "window.importPath" not in app_js
     assert "renderRunReport" in app_js
     assert "run_report" in app_js
+    assert 'data-action="choose-zip"' in app_js
+    assert 'data-action="refresh-engine"' in app_js
+    assert 'aria-label=' in app_js
+    assert "localizeMessage" in app_js
     assert ".report" in (WEB_ROOT / "app.css").read_text(encoding="utf-8")

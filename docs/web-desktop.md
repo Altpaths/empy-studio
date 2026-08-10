@@ -21,6 +21,12 @@ opens it in the default browser. API requests without the token are rejected.
    evidence.
 5. Accept or revert the changes and export a direct single-root project ZIP.
 
+The guided Web Desktop is the canonical product path used by the Finder
+macOS bundle. It supports both native folder and ZIP pickers, bilingual
+status/error messages, Codex readiness refresh, and an authenticated local
+engine-opening action. The older Tk shell remains available as a developer
+compatibility surface; it is not the Finder release entry point.
+
 The header uses the EMPY brand asset. The plan screen exposes a provider-free
 local benchmark for full versus bounded context, while completed runs expose
 provider usage only when the driver receives structured usage events. Project
@@ -30,6 +36,12 @@ follow-up ticket does not repeat the full discovery pass.
 The SQLite workspace records project and ticket history. Resetting the current
 screen clears the active selection but does not delete an imported project or
 its evidence.
+
+After a run, the result screen shows a compact report for every graph node:
+agent identity, role, status, duration, changed files, provider-reported usage
+when available, local estimate source, and safe workspace-relative evidence
+references. Missing provider usage is shown as `not_reported`; it is never
+converted into an exact value.
 
 ## Security boundary
 
