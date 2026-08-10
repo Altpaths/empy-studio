@@ -1,3 +1,11 @@
+## [0.1.4] - 2026-08-10
+
+### Release automation patch
+
+- Updated the Intel macOS GitHub Actions runner label to the currently
+  supported hosted runner so multi-architecture release validation cannot
+  remain queued on a retired label.
+
 ## [0.1.3] - 2026-08-10
 
 ### Cross-platform patch release
