@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+## [0.1.9] - 2026-08-11
+
+### Verification restore safety
+
+- Invalidate persisted Verification results created by an older or different
+  verification contract instead of treating them as current passing evidence.
+- Keep the release gate blocked until Verification is rerun and finalized.
+- Show blocked export status and explain when there are no file changes to
+  accept or restore.
+
 ## [0.1.8] - 2026-08-11
 
 ### Installer Python discovery
