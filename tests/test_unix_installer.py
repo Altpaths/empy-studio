@@ -74,6 +74,14 @@ def test_script_installs_without_clone() -> None:
     assert "versions/$VERSION" in script
 
 
+def test_script_discovers_versioned_python_interpreters() -> None:
+    script = render_unix_installer(spec())
+    assert "python3.12" in script
+    assert "python3.11" in script
+    assert "python3.10" in script
+    assert "no supported Python interpreter was found" in script
+
+
 def test_script_does_not_modify_shell_profiles() -> None:
     script = render_unix_installer(spec())
     forbidden = (

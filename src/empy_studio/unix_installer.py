@@ -179,7 +179,16 @@ detect_platform() {{
 }}
 
 find_python() {{
-    for candidate in python3 python; do
+    last_python_version=""
+    for candidate in \
+        python3.14 \
+        python3.13 \
+        python3.12 \
+        python3.11 \
+        python3.10 \
+        python3 \
+        python
+    do
         if command_exists "$candidate"; then
             if "$candidate" - "$MINIMUM_PYTHON_MAJOR" "$MINIMUM_PYTHON_MINOR" <<'PY'
 import sys
@@ -191,9 +200,13 @@ PY
                 export PYTHON
                 return
             fi
+            last_python_version="$candidate ($($candidate --version 2>&1 || true))"
         fi
     done
-    fail "Python $MINIMUM_PYTHON or newer is required"
+    if [ -n "$last_python_version" ]; then
+        fail "Python $MINIMUM_PYTHON or newer is required; found $last_python_version"
+    fi
+    fail "Python $MINIMUM_PYTHON or newer is required; no supported Python interpreter was found"
 }}
 
 download_package() {{
