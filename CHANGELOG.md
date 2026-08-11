@@ -1,5 +1,22 @@
 ## [Unreleased]
 
+## [0.1.7] - 2026-08-11
+
+### Verification and release-gate correctness
+
+- Detect nested application roots such as `public_html/` without changing the
+  imported project layout, and run Composer checks from the real application
+  root.
+- Prevent missing Composer dependencies and failed project test scripts from
+  being treated as a passing release gate.
+- Separate provider/verification completion from ZIP readiness, report explicit
+  export blockers, and reject export until verification and Review evidence are
+  complete.
+- Show when a project has no file changes but is ready for an explicit ZIP
+  export instead of implying that a ZIP was already produced.
+- Repair Python console-script paths after installer relocation so `empy-web`
+  remains runnable from the installed version directory.
+
 ## [0.1.6] - 2026-08-10
 
 ### Verification continuation for plain PHP projects
