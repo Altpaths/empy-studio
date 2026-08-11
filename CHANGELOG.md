@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+## [0.1.8] - 2026-08-11
+
+### Installer Python discovery
+
+- Discover versioned interpreters such as python3.12 when the system
+  python3 command points to an older unsupported Python version.
+- Report the detected incompatible interpreter in the installer error instead
+  of returning an ambiguous minimum-version failure.
+
 ## [0.1.7] - 2026-08-11
 
 ### Verification and release-gate correctness
