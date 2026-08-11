@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-## [0.1.11] - 2026-08-11
+## [0.1.12] - 2026-08-11
 
 ### User-facing failure guidance
 
@@ -8,8 +8,19 @@
   bilingual explanation of what happened and what the user should do next.
 - Move raw gate and Verification output into an optional technical-details
   section instead of making it the primary error experience.
+- Use friendly bilingual status labels in the result summary and keep raw
+  blocker text out of the primary export status card.
 - Expose structured guidance in the run report and cover stale-evidence and
   failed-check regressions with automated tests.
+
+## [0.1.11] - 2026-08-11
+
+### Structured failure guidance
+
+- Expose bilingual explanations for stale Verification evidence and failed
+  project checks.
+- Keep the technical evidence available while giving users a clear next
+  action.
 
 ## [0.1.10] - 2026-08-11
 
