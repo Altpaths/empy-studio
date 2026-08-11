@@ -137,6 +137,10 @@ def test_browser_folder_upload_isolated_and_security_filtered(tmp_path: Path) ->
         "categories": {"access_or_copy": 1},
     }
 
+    reopened = GuidedState(tmp_path / "empy-workspace")
+    assert reopened.public()["message_level"] == "warning"
+    assert reopened.public()["import_report"] == public["import_report"]
+
 
 def test_export_registers_release_history(tmp_path: Path) -> None:
     source = tmp_path / "source"

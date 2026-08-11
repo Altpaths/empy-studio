@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+## [0.1.14] - 2026-08-11
+
+### Persistent import review
+
+- Persist the import review in the local workspace so excluded-file warnings
+  survive restart and installation upgrades.
+- Restore the warning level and categorized counts when an imported project is
+  reopened instead of presenting an old, incomplete status.
+
 ## [0.1.13] - 2026-08-11
 
 ### Transparent project import

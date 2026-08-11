@@ -328,6 +328,41 @@ class GuidedState:
     def _brain_index_path(self, project_id: str) -> Path:
         return self.workspace_root / "project-brain" / f"{project_id}.json"
 
+    @staticmethod
+    def _import_report_setting_key(project_id: str) -> str:
+        return f"import-report:{project_id}"
+
+    def _load_import_report(self, project_id: str) -> dict[str, Any] | None:
+        value = self.store.get_setting(self._import_report_setting_key(project_id))
+        if not isinstance(value, dict):
+            return None
+        status = value.get("status")
+        copied_files = value.get("copied_files")
+        skipped_files = value.get("skipped_files")
+        categories = value.get("categories")
+        if (
+            status not in {"ready", "ready_with_exclusions", "partial"}
+            or not isinstance(copied_files, int)
+            or copied_files < 0
+            or not isinstance(skipped_files, int)
+            or skipped_files < 0
+            or not isinstance(categories, dict)
+        ):
+            return None
+        normalized_categories: dict[str, int] = {}
+        for key, count in categories.items():
+            if not isinstance(key, str) or not isinstance(count, int) or count < 0:
+                return None
+            normalized_categories[key] = count
+        if sum(normalized_categories.values()) != skipped_files:
+            return None
+        return {
+            "status": status,
+            "copied_files": copied_files,
+            "skipped_files": skipped_files,
+            "categories": normalized_categories,
+        }
+
     def _refresh_brain_index(self) -> ProjectBrainIndex:
         if self.active_project_id is None or self.detection is None:
             raise RuntimeError("Choose a project first.")
@@ -343,6 +378,7 @@ class GuidedState:
     def select_project(self, project_id: str, *, restore: bool = False) -> None:
         project = self.store.get_project(project_id)
         detection = self.project_service.detect(project.root)
+        import_report = self._load_import_report(project.project_id)
         with self.lock:
             self.active_project_id = project.project_id
             self.active_task_id = None
@@ -352,7 +388,7 @@ class GuidedState:
                 workspace_root=Path(project.root).parent,
                 skipped_members=(),
             )
-            self.import_report = None
+            self.import_report = import_report
             self.detection = detection
             self.task = None
             self.plan = None
@@ -366,7 +402,13 @@ class GuidedState:
             self.review = None
             self.export = None
             self.phase = "task"
-            self.message_level = "info"
+            self.message_level = (
+                "warning"
+                if import_report is not None and import_report["skipped_files"]
+                else "success"
+                if import_report is not None
+                else "info"
+            )
             self.error = None
             self.continuation_context = None
             self.message = "پروژه بازیابی شد." if restore else "پروژه انتخاب شد."
@@ -392,7 +434,7 @@ class GuidedState:
             self.detection = detection
             skipped = len(imported.skipped_members)
             categories = summarize_import_skips(imported.skipped_members)
-            self.import_report = {
+            import_report = {
                 "status": "ready"
                 if not skipped
                 else (
@@ -404,6 +446,7 @@ class GuidedState:
                 "skipped_files": skipped,
                 "categories": categories,
             }
+            self.import_report = import_report
             self.message_level = "success" if not skipped else "warning"
             self.message = (
                 (
@@ -422,6 +465,10 @@ class GuidedState:
                     else "پروژه در یک کپی ایزوله ذخیره شد."
                 )
             )
+        self.store.set_setting(
+            self._import_report_setting_key(saved.project_id),
+            import_report,
+        )
 
     def import_path(self, path: str) -> None:
         selected = Path(path).expanduser().resolve()
