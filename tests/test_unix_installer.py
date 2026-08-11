@@ -69,6 +69,8 @@ def test_script_installs_without_clone() -> None:
     assert "git clone" not in script
     assert "-m venv" in script
     assert "-m pip install" in script
+    assert '"$VERSION_ROOT/venv/bin/python" -m pip install' in script
+    assert "--force-reinstall" in script
     assert "versions/$VERSION" in script
 
 

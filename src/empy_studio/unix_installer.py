@@ -316,6 +316,16 @@ PY
 
     mv "$staged_root" "$VERSION_ROOT"
 
+    # pip-generated console scripts keep the absolute interpreter path of the
+    # staging venv. Reinstall from the already verified local wheel after the
+    # move so every script points at the final, relocatable venv.
+    "$VERSION_ROOT/venv/bin/python" -m pip install \
+        --disable-pip-version-check \
+        --no-input \
+        --no-deps \
+        --force-reinstall \
+        "$package_path"
+
     temporary_link="$INSTALL_ROOT/.current-$VERSION"
     ln -s "$VERSION_ROOT" "$temporary_link"
     mv -f "$temporary_link" "$CURRENT_LINK"

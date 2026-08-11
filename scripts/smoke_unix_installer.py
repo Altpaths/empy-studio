@@ -102,6 +102,29 @@ def smoke_installer(
                 f"stdout:\n{wrapper_result.stdout}\n"
                 f"stderr:\n{wrapper_result.stderr}"
             )
+        relocated_web = (
+            home
+            / ".local"
+            / "share"
+            / "empy-studio"
+            / "current"
+            / "venv"
+            / "bin"
+            / "empy-web"
+        )
+        web_result = subprocess.run(
+            [str(relocated_web), "--help"],
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if web_result.returncode != 0:
+            raise RuntimeError(
+                "Relocated empy-web entrypoint failed:\n"
+                f"stdout:\n{web_result.stdout}\n"
+                f"stderr:\n{web_result.stderr}"
+            )
         return {
             "target": target,
             "version": str(state.get("version", "")),
