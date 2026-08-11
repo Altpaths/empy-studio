@@ -12,9 +12,12 @@ import pytest
 from empy_studio.core.project_service import DefaultProjectService
 from empy_studio.verification_pipeline import (
     VerificationCancelled,
+    VerificationReport,
     VerificationRuntime,
     finalize_verification,
     map_project_verification,
+    verification_contract_signature,
+    verification_staleness_reason,
 )
 
 
@@ -64,6 +67,32 @@ def test_nested_composer_project_maps_real_test_script(tmp_path: Path) -> None:
         "run-script",
         "test",
     )
+
+
+def test_persisted_verification_evidence_requires_current_contract(tmp_path: Path) -> None:
+    (tmp_path / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
+    detection = DefaultProjectService().detect(tmp_path)
+    report = VerificationReport(
+        schema_version=1,
+        verification_id="old-report",
+        project_root=str(detection.descriptor.root),
+        project_type=detection.descriptor.project_type,
+        status="pass",
+        started_at="now",
+        finished_at="now",
+        results=(),
+        evidence_path=str(tmp_path / "evidence"),
+        finalized_at="now",
+    )
+
+    assert verification_staleness_reason(report, detection) is not None
+    current = VerificationReport(
+        **{
+            **report.__dict__,
+            "contract_signature": verification_contract_signature(detection),
+        }
+    )
+    assert verification_staleness_reason(current, detection) is None
 
 
 def test_plain_php_without_composer_maps_safe_syntax_checks(tmp_path: Path) -> None:

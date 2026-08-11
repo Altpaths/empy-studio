@@ -22,6 +22,8 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert "window.importPath" not in app_js
     assert "renderRunReport" in app_js
     assert "run_report" in app_js
+    assert "verificationReady" in app_js
+    assert 'state.run_status === "completed"' in app_js
     assert 'data-action="choose-zip"' in app_js
     assert 'data-action="refresh-engine"' in app_js
     index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")

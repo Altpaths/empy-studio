@@ -77,6 +77,8 @@ from empy_studio.verification_pipeline import (
     VerificationRuntime,
     VerificationTimedOut,
     finalize_verification,
+    verification_contract_signature,
+    verification_staleness_reason,
 )
 from empy_studio.workspace import SQLiteWorkspaceStore
 
@@ -651,6 +653,39 @@ class GuidedState:
                 restored_review = self.review_store.load(str(review_id))
         except (OSError, KeyError, TypeError, ValueError):
             return
+        if restored_verification is not None and self.detection is not None:
+            try:
+                stale_reason = verification_staleness_reason(
+                    restored_verification,
+                    self.detection,
+                )
+                current_signature = verification_contract_signature(self.detection)
+            except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                stale_reason = (
+                    "Stored verification evidence could not be reconciled with "
+                    f"the current project checks: {exc}"
+                )
+                current_signature = None
+            if stale_reason is not None:
+                restored_verification = replace(
+                    restored_verification,
+                    status="fail",
+                    finalized_at=None,
+                    diagnostics=tuple(
+                        dict.fromkeys(
+                            (*restored_verification.diagnostics, stale_reason)
+                        )
+                    ),
+                    contract_signature=current_signature,
+                )
+                self.verification_store.save(restored_verification)
+                if restored_run.status == "completed":
+                    restored_run = replace(
+                        restored_run,
+                        status="failed",
+                        error_code="process_failed",
+                        error_message=stale_reason,
+                    )
         with self.lock:
             self.run = restored_run
             self.verification = restored_verification
@@ -1000,8 +1035,16 @@ class GuidedState:
                 self.runtime = None
                 self.cancel_event = None
                 self.phase = "result"
-                self.message = "نتیجه برای Review آماده است."
-                self.error = None
+                self.message = (
+                    "نتیجه برای Review آماده است."
+                    if verification.finalize_allowed
+                    else "Verification ناموفق بود؛ یافته‌ها را اصلاح و تیکت را ادامه دهید."
+                )
+                self.error = (
+                    None
+                    if verification.finalize_allowed
+                    else "Verification failed; review the findings and continue the ticket."
+                )
         except VerificationCancelled as exc:
             cancelled = (
                 replace(
@@ -1109,6 +1152,8 @@ class GuidedState:
         """Return the evidence-backed conditions for creating a project ZIP."""
 
         blockers: list[str] = []
+        if self.run is not None and self.run.status != "completed":
+            blockers.append("The agent run did not complete successfully.")
         if self.verification is None:
             blockers.append("Verification has not run.")
         elif (
@@ -1126,6 +1171,8 @@ class GuidedState:
             blockers.append(
                 f"{self.review.pending_count} changed file(s) still need a review decision."
             )
+        elif self.review.status != "complete":
+            blockers.append("Review has not completed.")
 
         if self.export is not None and self.export.verified:
             status = "exported"

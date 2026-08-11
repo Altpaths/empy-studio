@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import signal
@@ -131,6 +132,7 @@ class VerificationReport:
     finalized_at: str | None = None
     diagnostics: tuple[str, ...] = ()
     verification_root: str | None = None
+    contract_signature: str | None = None
 
     @property
     def finalize_allowed(self) -> bool:
@@ -156,6 +158,7 @@ class VerificationReport:
             "finalized_at": self.finalized_at,
             "diagnostics": list(self.diagnostics),
             "verification_root": self.verification_root,
+            "contract_signature": self.contract_signature,
         }
 
 
@@ -363,6 +366,43 @@ def _verification_diagnostics(detection: ProjectDetection) -> tuple[str, ...]:
     return tuple(diagnostics)
 
 
+def verification_contract_signature(
+    detection: ProjectDetection,
+    checks: tuple[VerificationCheck, ...] | None = None,
+) -> str:
+    """Return the contract identity used to produce verification evidence."""
+
+    selected_checks = checks if checks is not None else map_project_verification(detection)
+    payload = {
+        "engine": "verification-contract-v2",
+        "project_type": detection.descriptor.project_type,
+        "verification_root": str(detection.effective_verification_root),
+        "checks": [item.to_dict() for item in selected_checks],
+    }
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def verification_staleness_reason(
+    report: VerificationReport,
+    detection: ProjectDetection,
+) -> str | None:
+    """Explain why persisted evidence must not be trusted for this run."""
+
+    expected = verification_contract_signature(detection)
+    if report.contract_signature != expected:
+        return (
+            "Stored verification evidence was produced by an older or "
+            "different verification contract. Re-run Verification before export."
+        )
+    return None
+
+
 class VerificationRuntime:
     """Execute mapped verification checks and stream stdout/stderr evidence."""
 
@@ -378,6 +418,7 @@ class VerificationRuntime:
         if timeout_seconds < 1:
             raise ValueError("verification timeout must be at least one second")
         checks = map_project_verification(detection)
+        contract_signature = verification_contract_signature(detection, checks)
         verification_id = uuid.uuid4().hex
         run_root = evidence_root / verification_id
         run_root.mkdir(parents=True, exist_ok=False)
@@ -432,6 +473,7 @@ class VerificationRuntime:
             evidence_path=str(run_root),
             diagnostics=diagnostics,
             verification_root=str(detection.effective_verification_root),
+            contract_signature=contract_signature,
         )
         (run_root / "verification-report.json").write_text(
             json.dumps(report.to_dict(), ensure_ascii=False, indent=2) + "\n",

@@ -78,6 +78,11 @@ class VerificationWorkspaceAdapter:
                 if value.get("verification_root") is not None
                 else None
             ),
+            contract_signature=(
+                str(value["contract_signature"])
+                if value.get("contract_signature") is not None
+                else None
+            ),
         )
 
     def list_reports(self, project_root: str | None = None) -> tuple[VerificationReport, ...]:

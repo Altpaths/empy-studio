@@ -281,6 +281,98 @@ def test_release_gate_blocks_failed_verification_before_export(tmp_path: Path) -
         state.export_project(str(tmp_path / "blocked.zip"))
 
 
+def test_restart_invalidates_old_passing_verification_evidence(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
+    workspace = tmp_path / "workspace"
+    state = GuidedState(workspace)
+    state.import_path(str(source))
+    state.create_plan("Audit the project")
+
+    assert state.active_project_id is not None
+    assert state.active_task_id is not None
+    assert state.graph is not None
+    assert state.task is not None
+    assert state.detection is not None
+    run = CodexGraphExecution(
+        schema_version=1,
+        run_id="old-run",
+        graph_id=state.graph.graph_id,
+        task_id=state.task.task_id,
+        project_root=str(state.detection.descriptor.root),
+        provider="codex",
+        status="completed",
+        started_at="now",
+        finished_at="now",
+        installation=CodexInstallation(
+            availability="available",
+            executable="codex",
+            version="test",
+            authenticated=True,
+            message="ready",
+        ),
+        node_results=(),
+        events=(),
+        usage=None,
+        schedule=(),
+    )
+    state.execution_store.save_run(run)
+    old_verification = VerificationReport(
+        schema_version=1,
+        verification_id="old-verification",
+        project_root=str(state.detection.descriptor.root),
+        project_type="php",
+        status="pass",
+        started_at="now",
+        finished_at="now",
+        results=(),
+        evidence_path=str(workspace / "verification" / "evidence"),
+        finalized_at="now",
+    )
+    state.verification_store.save(old_verification)
+    review = ReviewReport(
+        schema_version=1,
+        review_id="old-review",
+        project_root=str(state.detection.descriptor.root),
+        base_revision="HEAD",
+        created_at="now",
+        updated_at="now",
+        status="complete",
+        files=(),
+    )
+    state.review_store.save(review)
+    workspace_run = state.store.create_run(
+        task_id=state.active_task_id,
+        project_id=state.active_project_id,
+        state="completed",
+        summary="old run",
+        driver_name="codex",
+    )
+    manifest = state._write_run_manifest(
+        workspace_run.run_id,
+        codex_run_id=run.run_id,
+        verification_id=old_verification.verification_id,
+        review_id=review.review_id,
+    )
+    state.store.update_run(
+        workspace_run.run_id,
+        state="completed",
+        summary="old run",
+        driver_name="codex",
+        evidence_path=str(manifest),
+    )
+
+    reopened = GuidedState(workspace)
+
+    assert reopened.verification is not None
+    assert reopened.verification.status == "fail"
+    assert any("older or different" in item for item in reopened.verification.diagnostics)
+    assert reopened.run is not None
+    assert reopened.run.status == "failed"
+    assert reopened.public()["release_gate"]["status"] == "blocked"
+
+
 def test_public_state_exposes_budget_brain_and_benchmark_without_paths(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
