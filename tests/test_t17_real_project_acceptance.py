@@ -17,6 +17,7 @@ from empy_studio.verification_pipeline import (
     VerificationCheck,
     VerificationReport,
     VerificationResult,
+    verification_contract_signature,
 )
 from empy_studio.web_desktop import GuidedState
 
@@ -51,7 +52,7 @@ class PassingVerificationRuntime:
         on_event: Any = None,
         cancel_event: Any = None,
     ) -> VerificationReport:
-        del detection, on_event, cancel_event
+        del on_event, cancel_event
         evidence_root.mkdir(parents=True, exist_ok=True)
         check = VerificationCheck(
             check_id="acceptance",
@@ -78,6 +79,7 @@ class PassingVerificationRuntime:
             finished_at="2026-08-10T00:00:01+00:00",
             results=(result,),
             evidence_path=str(evidence_root),
+            contract_signature=verification_contract_signature(detection),
         )
 
 
