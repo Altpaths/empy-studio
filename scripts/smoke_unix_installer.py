@@ -89,6 +89,15 @@ def smoke_installer(
         state = json.loads(state_path.read_text(encoding="utf-8"))
         if state.get("package_sha256") != package_sha256:
             raise RuntimeError("Installer state has the wrong package digest")
+        current_link = state_path.parent / "current"
+        version_root = Path(str(state.get("version_root", "")))
+        if not current_link.is_symlink():
+            raise RuntimeError("Installer did not create the current version symlink")
+        if current_link.resolve() != version_root.resolve():
+            raise RuntimeError(
+                "Installer current symlink does not point to the installed version: "
+                f"{current_link.resolve()} != {version_root.resolve()}"
+            )
         wrapper_result = subprocess.run(
             [str(wrapper), "--help"],
             env=environment,

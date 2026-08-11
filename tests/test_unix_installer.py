@@ -110,6 +110,14 @@ def test_wrapper_uses_relocatable_python_module() -> None:
     assert 'venv/bin/$ENTRYPOINT"' not in script
 
 
+def test_current_link_replacement_does_not_follow_old_version_symlink() -> None:
+    script = render_unix_installer(spec())
+    assert "os.path.lexists(target)" in script
+    assert "target.is_symlink()" in script
+    assert "os.replace(source, target)" in script
+    assert 'mv -f "$temporary_link" "$CURRENT_LINK"' not in script
+
+
 def test_writes_executable_installer(
     tmp_path: Path,
 ) -> None:

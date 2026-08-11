@@ -341,7 +341,22 @@ PY
 
     temporary_link="$INSTALL_ROOT/.current-$VERSION"
     ln -s "$VERSION_ROOT" "$temporary_link"
-    mv -f "$temporary_link" "$CURRENT_LINK"
+    # On macOS, mv follows an existing symlink whose target is a directory.
+    # That would place the new link inside the old version instead of updating
+    # CURRENT_LINK. Replace the directory entry itself, atomically, and refuse
+    # to overwrite an unexpected real file or directory.
+    "$PYTHON" - "$temporary_link" "$CURRENT_LINK" <<'PY'
+import os
+import pathlib
+import sys
+
+source, target = (pathlib.Path(value) for value in sys.argv[1:])
+if os.path.lexists(target) and not target.is_symlink():
+    raise SystemExit(
+        f"Refusing to replace non-symlink current path: {{target}}"
+    )
+os.replace(source, target)
+PY
 
     temporary_wrapper="$BIN_DIR/.${{ENTRYPOINT}}-$VERSION"
     cat > "$temporary_wrapper" <<WRAPPER

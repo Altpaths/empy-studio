@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+## [0.1.10] - 2026-08-11
+
+### Installer upgrade safety
+
+- Replace the active installation symlink atomically on Unix instead of
+  following an old directory symlink during upgrades.
+- Refuse to overwrite an unexpected real file or directory at the active
+  installation path.
+- Make installer smoke verification fail when the active symlink points to a
+  different version than the recorded installation state.
+
 ## [0.1.9] - 2026-08-11
 
 ### Verification restore safety
