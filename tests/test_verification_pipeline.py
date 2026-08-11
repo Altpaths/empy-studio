@@ -42,6 +42,30 @@ def test_plain_php_composer_mapping_is_dependency_aware(tmp_path: Path) -> None:
     assert checks[0].command == ("composer", "validate", "--no-check-publish")
 
 
+def test_nested_composer_project_maps_real_test_script(tmp_path: Path) -> None:
+    public_html = tmp_path / "public_html"
+    public_html.mkdir()
+    (public_html / "composer.json").write_text(
+        '{"name":"demo/nested-site","scripts":{"test":"php tests/site-audit.php"}}\n',
+        encoding="utf-8",
+    )
+    (public_html / "vendor").mkdir()
+    (public_html / "vendor" / "autoload.php").write_text("<?php\n", encoding="utf-8")
+    (public_html / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
+    detection = DefaultProjectService().detect(tmp_path)
+
+    checks = map_project_verification(detection)
+
+    assert detection.effective_verification_root == public_html.resolve()
+    assert [item.check_id for item in checks] == ["build", "tests"]
+    assert checks[1].command == (
+        "composer",
+        "--no-interaction",
+        "run-script",
+        "test",
+    )
+
+
 def test_plain_php_without_composer_maps_safe_syntax_checks(tmp_path: Path) -> None:
     (tmp_path / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
     (tmp_path / "admin").mkdir()

@@ -130,11 +130,15 @@ class VerificationReport:
     evidence_path: str
     finalized_at: str | None = None
     diagnostics: tuple[str, ...] = ()
+    verification_root: str | None = None
 
     @property
     def finalize_allowed(self) -> bool:
-        return self.status == "pass" and bool(self.results) and all(
-            item.status == "pass" for item in self.results
+        return (
+            self.status == "pass"
+            and bool(self.results)
+            and not self.diagnostics
+            and all(item.status == "pass" for item in self.results)
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -151,6 +155,7 @@ class VerificationReport:
             "finalize_allowed": self.finalize_allowed,
             "finalized_at": self.finalized_at,
             "diagnostics": list(self.diagnostics),
+            "verification_root": self.verification_root,
         }
 
 
@@ -224,7 +229,7 @@ def _verification_category(value: object) -> VerificationCategory:
 
 
 def map_project_verification(detection: ProjectDetection) -> tuple[VerificationCheck, ...]:
-    root = detection.descriptor.root
+    root = detection.effective_verification_root
     project_type = detection.descriptor.project_type
     checks: list[VerificationCheck] = []
     if project_type == "python":
@@ -340,6 +345,24 @@ def map_project_verification(detection: ProjectDetection) -> tuple[VerificationC
     return tuple(checks)
 
 
+def _verification_diagnostics(detection: ProjectDetection) -> tuple[str, ...]:
+    """Report required checks that could not be mapped safely."""
+
+    root = detection.effective_verification_root
+    diagnostics: list[str] = []
+    if detection.descriptor.project_type == "php" and (root / "composer.json").is_file():
+        scripts = _composer_scripts(root)
+        if ("test" in scripts or "verify-release" in scripts) and not (
+            root / "vendor" / "autoload.php"
+        ).is_file():
+            diagnostics.append(
+                "Composer test/release scripts were not executed because "
+                "vendor/autoload.php is missing. Install the project dependencies "
+                "or provide an explicit safe verification manifest."
+            )
+    return tuple(diagnostics)
+
+
 class VerificationRuntime:
     """Execute mapped verification checks and stream stdout/stderr evidence."""
 
@@ -360,12 +383,14 @@ class VerificationRuntime:
         run_root.mkdir(parents=True, exist_ok=False)
         started_at = _now()
         results: list[VerificationResult] = []
-        diagnostics: tuple[str, ...] = ()
+        diagnostics = _verification_diagnostics(detection)
         if not checks:
             diagnostics = (
+                *diagnostics,
                 (
                     "No safe verification checks were detected for this project. "
-                    "Configure .empy/verification.json or add a supported test, build, or lint entry point before export."
+                    "Configure .empy/verification.json or add a supported test, "
+                    "build, or lint entry point before export."
                 ),
             )
             if on_event is not None:
@@ -383,14 +408,18 @@ class VerificationRuntime:
                 results.append(
                     self._run_check(
                         check,
-                        detection.descriptor.root,
+                        detection.effective_verification_root,
                         run_root,
                         on_event,
                         cancel_event,
                         timeout_seconds,
                     )
                 )
-        status: VerificationStatus = "pass" if checks and all(item.status == "pass" for item in results) else "fail"
+        status: VerificationStatus = (
+            "pass"
+            if checks and not diagnostics and all(item.status == "pass" for item in results)
+            else "fail"
+        )
         report = VerificationReport(
             schema_version=1,
             verification_id=verification_id,
@@ -402,6 +431,7 @@ class VerificationRuntime:
             results=tuple(results),
             evidence_path=str(run_root),
             diagnostics=diagnostics,
+            verification_root=str(detection.effective_verification_root),
         )
         (run_root / "verification-report.json").write_text(
             json.dumps(report.to_dict(), ensure_ascii=False, indent=2) + "\n",

@@ -1105,13 +1105,48 @@ class GuidedState:
             self.store.update_task(self.active_task_id, status="accepted" if decision == "accept" else "reverted")
         self.message = "تصمیم روی تغییرات ثبت شد."
 
+    def _release_gate(self) -> dict[str, Any]:
+        """Return the evidence-backed conditions for creating a project ZIP."""
+
+        blockers: list[str] = []
+        if self.verification is None:
+            blockers.append("Verification has not run.")
+        elif (
+            self.verification.status != "pass"
+            or self.verification.finalized_at is None
+            or not self.verification.finalize_allowed
+        ):
+            blockers.extend(self.verification.diagnostics)
+            if not blockers:
+                blockers.append("Verification has not passed and been finalized.")
+
+        if self.review is None:
+            blockers.append("Review has not been created.")
+        elif self.review.pending_count:
+            blockers.append(
+                f"{self.review.pending_count} changed file(s) still need a review decision."
+            )
+
+        if self.export is not None and self.export.verified:
+            status = "exported"
+        elif blockers:
+            status = "blocked"
+        else:
+            status = "ready_for_export"
+        return {
+            "status": status,
+            "ready": not blockers,
+            "blockers": blockers,
+            "exported": bool(self.export and self.export.verified),
+        }
+
     def export_project(self, destination: str | None = None) -> None:
+        gate = self._release_gate()
+        if not gate["ready"]:
+            detail = "; ".join(str(item) for item in gate["blockers"])
+            raise RuntimeError(f"Export is blocked: {detail}")
         if self.detection is None or self.review is None:
             raise RuntimeError("There is no reviewed project to export.")
-        if self.review.pending_count:
-            raise RuntimeError("Accept or revert every changed file first.")
-        if self.verification is None or self.verification.finalized_at is None:
-            raise RuntimeError("Verification must pass before export.")
         target = Path(destination).expanduser() if destination else (
             self.workspace_root / "releases" / f"{self.detection.descriptor.display_name}-{uuid.uuid4().hex[:8]}.zip"
         )
@@ -1230,6 +1265,7 @@ class GuidedState:
                     "verification": verification,
                     "review": review,
                     "export": self.export.to_dict() if self.export is not None else None,
+                    "release_gate": self._release_gate(),
                     "engine": {
                         "provider": inspection.display_name,
                         "availability": inspection.availability,
@@ -1377,6 +1413,7 @@ class GuidedState:
                 "ready": self.review is not None and self.review.pending_count == 0,
             },
             "export": {
+                **self._release_gate(),
                 "available": self.export is not None,
                 "verified": bool(self.export and self.export.verified),
                 "file_count": self.export.file_count if self.export is not None else None,

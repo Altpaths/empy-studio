@@ -27,6 +27,20 @@ class ProjectDetection:
     has_git: bool
     has_tests: bool
     package_manager: str | None
+    verification_root: Path | None = None
+
+    @property
+    def effective_verification_root(self) -> Path:
+        """Return the directory that owns the executable project contract.
+
+        Imported archives often contain a deployment wrapper around the real
+        application, for example ``holda.ir/public_html``.  The descriptor
+        must continue to point at the wrapper so exports preserve the archive
+        layout, while verification must run from the directory containing the
+        manifest and its scripts.
+        """
+
+        return self.verification_root or self.descriptor.root
 
 
 class DefaultProjectService:
@@ -47,6 +61,10 @@ class DefaultProjectService:
             raise NotADirectoryError(root)
 
         project_type, markers = self._detect_type(root)
+        verification_root = self._find_verification_root(root)
+        if verification_root != root:
+            relative = verification_root.relative_to(root).as_posix()
+            markers = (*markers, f"verification-root:{relative}/")
         descriptor = ProjectDescriptor(
             root=root,
             project_type=project_type,
@@ -58,8 +76,36 @@ class DefaultProjectService:
             descriptor=descriptor,
             markers=markers,
             has_git=(root / ".git").exists(),
-            has_tests=self._has_tests(root),
-            package_manager=self._detect_package_manager(root),
+            has_tests=self._has_tests(verification_root),
+            package_manager=self._detect_package_manager(verification_root),
+            verification_root=verification_root,
+        )
+
+    def _find_verification_root(self, root: Path) -> Path:
+        """Find a conventional nested application root without flattening it."""
+
+        if self._has_project_manifest(root):
+            return root
+
+        for name in ("public_html", "public", "www", "web"):
+            candidate = root / name
+            if candidate.is_dir() and self._has_project_manifest(candidate):
+                return candidate
+
+        return root
+
+    @staticmethod
+    def _has_project_manifest(root: Path) -> bool:
+        return any(
+            (root / name).is_file()
+            for name in (
+                "composer.json",
+                "pyproject.toml",
+                "package.json",
+                "Cargo.toml",
+                "go.mod",
+                "artisan",
+            )
         )
 
     def _detect_type(

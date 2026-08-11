@@ -156,7 +156,22 @@ def test_export_registers_release_history(tmp_path: Path) -> None:
         status="pass",
         started_at="now",
         finished_at="now",
-        results=(),
+        results=(
+            VerificationResult(
+                check=VerificationCheck(
+                    check_id="package",
+                    label="Package check",
+                    category="build",
+                    command=("empy", "package-check"),
+                ),
+                status="pass",
+                returncode=0,
+                stdout="ok\n",
+                stderr="",
+                started_at="now",
+                finished_at="now",
+            ),
+        ),
         evidence_path=str(tmp_path / "evidence"),
         finalized_at="now",
     )
@@ -169,6 +184,101 @@ def test_export_registers_release_history(tmp_path: Path) -> None:
     assert len(releases) == 1
     assert releases[0].sha256 == state.export.sha256
     assert state.public()["active_project"]["releases"][0]["verified"] is True
+
+
+def test_release_gate_explains_explicit_export_after_zero_file_review(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("demo\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "empy-workspace")
+    state.import_path(str(source))
+    state.create_plan("Audit the project\nDo not change files")
+    root = state.detection.descriptor.root
+    check = VerificationCheck(
+        check_id="package",
+        label="Package check",
+        category="build",
+        command=("empy", "package-check"),
+    )
+    result = VerificationResult(
+        check=check,
+        status="pass",
+        returncode=0,
+        stdout="ok\n",
+        stderr="",
+        started_at="now",
+        finished_at="now",
+    )
+    state.review = ReviewReport(
+        schema_version=1,
+        review_id="review-zero-files",
+        project_root=str(root),
+        base_revision="HEAD",
+        created_at="now",
+        updated_at="now",
+        status="complete",
+        files=(),
+    )
+    state.verification = VerificationReport(
+        schema_version=1,
+        verification_id="verification-zero-files",
+        project_root=str(root),
+        project_type="generic",
+        status="pass",
+        started_at="now",
+        finished_at="now",
+        results=(result,),
+        evidence_path=str(tmp_path / "evidence"),
+        finalized_at="now",
+    )
+
+    public = state.public()
+
+    assert public["release_gate"] == {
+        "status": "ready_for_export",
+        "ready": True,
+        "blockers": [],
+        "exported": False,
+    }
+
+
+def test_release_gate_blocks_failed_verification_before_export(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("demo\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "empy-workspace")
+    state.import_path(str(source))
+    state.create_plan("Audit the project")
+    root = state.detection.descriptor.root
+    state.review = ReviewReport(
+        schema_version=1,
+        review_id="review-blocked",
+        project_root=str(root),
+        base_revision="HEAD",
+        created_at="now",
+        updated_at="now",
+        status="complete",
+        files=(),
+    )
+    state.verification = VerificationReport(
+        schema_version=1,
+        verification_id="verification-blocked",
+        project_root=str(root),
+        project_type="generic",
+        status="fail",
+        started_at="now",
+        finished_at="now",
+        results=(),
+        evidence_path=str(tmp_path / "evidence"),
+        diagnostics=("Site audit failed: public_html/index.html is missing.",),
+    )
+
+    public = state.public()
+
+    assert public["release_gate"]["status"] == "blocked"
+    assert public["release_gate"]["ready"] is False
+    with pytest.raises(RuntimeError, match="Export is blocked"):
+        state.export_project(str(tmp_path / "blocked.zip"))
 
 
 def test_public_state_exposes_budget_brain_and_benchmark_without_paths(tmp_path: Path) -> None:

@@ -83,6 +83,33 @@ def test_detects_plain_php_without_index_or_composer(
     assert "public_html/" in result.markers
 
 
+def test_detects_nested_public_html_as_verification_root(
+    tmp_path: Path,
+) -> None:
+    public_html = tmp_path / "public_html"
+    public_html.mkdir()
+    (public_html / "composer.json").write_text(
+        '{"name":"demo/nested-site","scripts":{"test":"php tests/site-audit.php"}}\n',
+        encoding="utf-8",
+    )
+    (public_html / "composer.lock").write_text("{}\n", encoding="utf-8")
+    (public_html / "vendor").mkdir()
+    (public_html / "vendor" / "autoload.php").write_text("<?php\n", encoding="utf-8")
+    (public_html / "tests").mkdir()
+    (public_html / "tests" / "site-audit.php").write_text(
+        "<?php echo 'ok';\n",
+        encoding="utf-8",
+    )
+
+    result = DefaultProjectService().detect(tmp_path)
+
+    assert result.descriptor.root == tmp_path.resolve()
+    assert result.effective_verification_root == public_html.resolve()
+    assert "verification-root:public_html/" in result.markers
+    assert result.package_manager == "Composer"
+    assert result.has_tests
+
+
 def test_detects_python(
     tmp_path: Path,
 ) -> None:

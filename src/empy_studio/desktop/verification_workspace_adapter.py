@@ -73,6 +73,11 @@ class VerificationWorkspaceAdapter:
             evidence_path=str(value["evidence_path"]),
             finalized_at=str(value["finalized_at"]) if value.get("finalized_at") is not None else None,
             diagnostics=tuple(str(item) for item in value.get("diagnostics", []) if isinstance(item, str)),
+            verification_root=(
+                str(value["verification_root"])
+                if value.get("verification_root") is not None
+                else None
+            ),
         )
 
     def list_reports(self, project_root: str | None = None) -> tuple[VerificationReport, ...]:
