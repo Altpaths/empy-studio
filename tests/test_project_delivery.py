@@ -10,6 +10,7 @@ from empy_studio.project_delivery import (
     import_project_archive,
     import_project_folder,
     safe_upload_relative_path,
+    summarize_import_skips,
 )
 
 
@@ -28,6 +29,26 @@ def test_folder_import_creates_isolated_clean_git_baseline(tmp_path: Path) -> No
     assert not (imported.project_root / ".env").exists()
     assert (imported.project_root / ".git").is_dir()
     assert ".env" in imported.skipped_members
+    assert imported.copied_members == 2
+
+
+def test_summarize_import_skips_explains_expected_exclusions() -> None:
+    summary = summarize_import_skips(
+        (
+            "__MACOSX/._README.md",
+            "vendor/package.php",
+            "logs/app.log",
+            "private_html",
+            "<browser-upload-skipped>",
+        )
+    )
+
+    assert summary == {
+        "access_or_copy": 2,
+        "dependencies": 1,
+        "macos_metadata": 1,
+        "sensitive_or_runtime": 1,
+    }
 
 
 def test_import_and_export_keep_runtime_config_and_logs_out_of_delivery(
@@ -90,6 +111,7 @@ def test_archive_import_rejects_traversal_and_export_is_single_root(tmp_path: Pa
         names = archive.namelist()
     assert names == [f"{imported.project_root.name}/README.md"]
     assert "../outside.txt" in imported.skipped_members
+    assert imported.copied_members == 1
     assert not (tmp_path / "outside.txt").exists()
 
 

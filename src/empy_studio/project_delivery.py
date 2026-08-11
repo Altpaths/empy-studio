@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import uuid
 import zipfile
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
@@ -61,6 +62,7 @@ class ImportedProject:
     project_root: Path
     workspace_root: Path
     skipped_members: tuple[str, ...]
+    copied_members: int = 0
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -68,6 +70,7 @@ class ImportedProject:
             "project_root": str(self.project_root),
             "workspace_root": str(self.workspace_root),
             "skipped_members": list(self.skipped_members),
+            "copied_members": self.copied_members,
         }
 
 
@@ -119,6 +122,31 @@ def _safe_member_name(name: str) -> PurePosixPath | None:
     if relative.is_absolute() or ".." in relative.parts or _excluded(relative):
         return None
     return relative
+
+
+def summarize_import_skips(skipped_members: Iterable[str]) -> dict[str, int]:
+    """Classify excluded import entries without exposing their paths."""
+
+    counts: Counter[str] = Counter()
+    for raw_name in skipped_members:
+        normalized = raw_name.replace("\\", "/").strip("/")
+        parts = PurePosixPath(normalized).parts
+        if raw_name.startswith("<") or not normalized:
+            category = "access_or_copy"
+        elif "__MACOSX" in parts:
+            category = "macos_metadata"
+        elif ".git" in parts:
+            category = "git_metadata"
+        elif any(part in {"node_modules", "vendor", "venv", ".venv"} for part in parts):
+            category = "dependencies"
+        elif is_sensitive_relative_path(PurePosixPath(normalized)):
+            category = "sensitive_or_runtime"
+        elif _safe_member_name(raw_name) is None:
+            category = "unsafe_path"
+        else:
+            category = "access_or_copy"
+        counts[category] += 1
+    return dict(sorted(counts.items()))
 
 
 def safe_upload_relative_path(name: str) -> PurePosixPath | None:
@@ -281,19 +309,27 @@ def import_project_folder(source: str | Path, workspace_root: str | Path) -> Imp
         raise NotADirectoryError(source_path)
     _validate_import_source(source_path)
     destination = _new_workspace(Path(workspace_root), source_path.name)
-    members, skipped = _walk_files(source_path)
-    copied: list[str] = list(skipped)
+    members, skipped_members = _walk_files(source_path)
+    skipped = list(skipped_members)
+    copied_members = 0
     for path, relative_name in members:
         target = destination / Path(relative_name)
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, target)
+            copied_members += 1
         except OSError:
-            copied.append(relative_name)
+            skipped.append(relative_name)
     if not _safe_files(destination):
         raise ValueError("project import contains no safe files")
     _initialize_git(destination)
-    return ImportedProject(source_path, destination, destination, tuple(copied))
+    return ImportedProject(
+        source_path,
+        destination,
+        destination,
+        tuple(skipped),
+        copied_members,
+    )
 
 
 def import_project_archive(source: str | Path, workspace_root: str | Path) -> ImportedProject:
@@ -328,7 +364,13 @@ def import_project_archive(source: str | Path, workspace_root: str | Path) -> Im
     top_levels = {item.parts[0] for item in extracted}
     project_root = destination / next(iter(top_levels)) if len(top_levels) == 1 else destination
     _initialize_git(project_root)
-    return ImportedProject(source_path, project_root, destination, tuple(skipped))
+    return ImportedProject(
+        source_path,
+        project_root,
+        destination,
+        tuple(skipped),
+        len(extracted),
+    )
 
 
 def _deterministic_zip(destination: Path, root_name: str, members: Iterable[tuple[Path, str]]) -> None:

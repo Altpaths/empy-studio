@@ -128,6 +128,14 @@ def test_browser_folder_upload_isolated_and_security_filtered(tmp_path: Path) ->
     assert (state.detection.descriptor.root / "README.md").is_file()
     assert not (state.detection.descriptor.root / ".env").exists()
     assert upload_id not in state.upload_sessions
+    public = state.public()
+    assert public["message_level"] == "warning"
+    assert public["import_report"] == {
+        "status": "partial",
+        "copied_files": 1,
+        "skipped_files": 1,
+        "categories": {"access_or_copy": 1},
+    }
 
 
 def test_export_registers_release_history(tmp_path: Path) -> None:

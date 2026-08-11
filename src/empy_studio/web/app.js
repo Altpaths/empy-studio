@@ -7,6 +7,7 @@ const t = {
   fa: {
     subtitle: "توسعه‌ی پروژه با ایجنت‌های هماهنگ", project: "پروژه‌ها", import: "مسیر پوشه یا ZIP پروژه",
     importButton: "واردکردن پروژه", folder: "انتخاب پوشه", zip: "انتخاب ZIP", tasks: "تیکت جدید", taskHint: "درخواست را مثل توضیح به یک همکار بنویسید…",
+    importReview: "بررسی واردسازی پروژه", importedFiles: "فایل قابل‌استفاده", excludedItems: "مورد کنارگذاشته‌شده", importContinue: "فایل اصلی تغییر نکرده است؛ می‌توانید با فایل‌های قابل‌استفاده ادامه دهید.", importReady: "پروژه آماده‌ی ادامه است", importPartial: "برخی موارد از واردسازی کنار گذاشته شدند؛ دسته‌بندی زیر را بررسی کنید.",
     plan: "تحلیل و ساخت برنامه", start: "شروع اجرا", accept: "تأیید تغییرات", revert: "بازگردانی تغییرات", export: "خروجی ZIP پروژه",
     newProject: "پروژه‌ی دیگر", noProject: "هنوز پروژه‌ای ثبت نشده است.", noTask: "هنوز تیکتی ثبت نشده است.", engine: "وضعیت Codex",
     ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", cancel: "توقف اجرا", cancelled: "اجرا لغو شد", failed: "اجرا متوقف شد", backToTicket: "بازگشت به تیکت", continueTicket: "ادامه و اصلاح تیکت", result: "نتیجه و بررسی", resume: "ادامه تیکت",
@@ -15,6 +16,7 @@ const t = {
   en: {
     subtitle: "Coordinated project development with bounded agents", project: "Projects", import: "Project folder or ZIP path",
     importButton: "Import project", folder: "Choose folder", zip: "Choose ZIP", tasks: "New ticket", taskHint: "Describe the work as you would to a teammate…",
+    importReview: "Project import review", importedFiles: "usable files", excludedItems: "excluded items", importContinue: "The original project was not changed; you can continue with the usable files.", importReady: "Project is ready to continue", importPartial: "Some items were excluded from import; review the categories below.",
     plan: "Analyze and build plan", start: "Start run", accept: "Accept changes", revert: "Restore changes", export: "Export project ZIP",
     newProject: "Another project", noProject: "No projects have been registered.", noTask: "No tickets have been registered.", engine: "Codex status",
     ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", cancel: "Stop run", cancelled: "Run cancelled", failed: "Run stopped", backToTicket: "Back to ticket", continueTicket: "Continue and fix ticket", result: "Result and review", resume: "Resume ticket",
@@ -39,7 +41,14 @@ function localizeMessage(value = "") {
     "تصمیم روی تغییرات ثبت شد.": "The change decision was recorded.",
     "فایل ZIP تک‌ریشه و قابل استخراج آماده شد.": "A verified single-root ZIP is ready.",
   };
+  const imported = value.match(/^پروژه در یک کپی ایزوله وارد شد؛ (\d+) فایل قابل‌استفاده کپی شد و (\d+) مورد کنارگذاشته‌شده/);
+  if (imported) return `Project imported into an isolated copy. ${imported[1]} usable file(s) copied; ${imported[2]} excluded item(s) are explained below.`;
   return messages[value] || value;
+}
+function importStatusMessage(report) {
+  if (!report || !report.skipped_files) return "";
+  if (language === "fa") return `پروژه در یک کپی ایزوله وارد شد؛ ${Number(report.copied_files || 0).toLocaleString()} فایل قابل‌استفاده کپی شد و ${Number(report.skipped_files || 0).toLocaleString()} مورد کنارگذاشته‌شده در بررسی واردسازی توضیح داده شده است.`;
+  return `Project imported into an isolated copy. ${Number(report.copied_files || 0).toLocaleString()} usable file(s) copied; ${Number(report.skipped_files || 0).toLocaleString()} excluded item(s) are explained below.`;
 }
 async function api(path, body = null) {
   const options = { headers: { "X-Empy-Token": token } };
@@ -81,7 +90,9 @@ function banner() {
   const notice = document.querySelector("#notice");
   notice.textContent = localizeMessage(state?.error || ""); notice.classList.toggle("hidden", !state?.error);
   const message = document.querySelector("#message");
-  message.textContent = localizeMessage(state?.message || ""); message.classList.toggle("hidden", !state?.message || state?.error);
+  message.textContent = importStatusMessage(state?.import_report) || localizeMessage(state?.message || "");
+  message.className = "message " + (state?.message_level || "info");
+  message.classList.toggle("hidden", !state?.message || state?.error);
 }
 function projectList() {
   const projects = state.projects || [];
@@ -90,6 +101,30 @@ function projectList() {
 function renderProject() {
   const engine = state.engine || {};
   return `<div class="grid"><div class="card"><h1>${text().project}</h1><p class="muted">${language === "fa" ? "Empy یک کپی ایزوله می‌سازد و اصل پروژه را تغییر نمی‌دهد." : "Empy creates an isolated copy and never changes the original project."}</p><label class="field-label" for="path">${text().import}</label><input id="path" aria-label="${text().import}" placeholder="${text().import}"><div class="actions"><button type="button" class="primary" data-action="import-path">${text().importButton}</button><button type="button" class="secondary" data-action="choose-folder">${text().folder}</button><button type="button" class="secondary" data-action="choose-zip">${text().zip}</button></div></div><div class="card"><h2>${text().project}</h2><div class="project-list">${projectList()}</div><div class="engine"><div class="row"><strong>${text().engine}: ${engine.ready ? text().ready : text().unavailable}</strong><span class="status-pill ${engine.ready ? "completed" : "failed"}">${engine.ready ? text().ready : text().unavailable}</span></div><small>${escapeHtml(engine.message || "")}</small>${engine.remediation ? `<small class="engine-help">${escapeHtml(engine.remediation)}</small>` : `<small class="engine-help">${text().engineHelp}</small>`}<div class="actions"><button type="button" class="secondary" data-action="refresh-engine">${text().refresh}</button><button type="button" class="secondary" data-action="open-engine">${text().openCodex}</button></div></div></div></div>`;
+}
+function renderImportReport() {
+  const report = state.import_report;
+  if (!report || !report.skipped_files) return "";
+  const labels = language === "fa" ? {
+    macos_metadata: "فایل‌های جانبی macOS",
+    dependencies: "وابستگی‌ها مثل vendor و node_modules",
+    git_metadata: "تاریخچه و متادیتای Git",
+    sensitive_or_runtime: "فایل‌های حساس یا گزارش‌های اجرایی",
+    unsafe_path: "مسیرهای ناامن",
+    access_or_copy: "فایل‌های غیرقابل‌خواندن یا کپی‌نشده",
+  } : {
+    macos_metadata: "macOS metadata",
+    dependencies: "Dependencies such as vendor and node_modules",
+    git_metadata: "Git history and metadata",
+    sensitive_or_runtime: "Sensitive or runtime files",
+    unsafe_path: "Unsafe paths",
+    access_or_copy: "Unreadable or uncopied files",
+  };
+  const rows = Object.entries(report.categories || {}).map(([key, count]) => "<li><span>" + escapeHtml(labels[key] || key) + "</span><strong>" + Number(count).toLocaleString() + "</strong></li>").join("");
+  const status = report.status === "partial"
+    ? text().importPartial
+    : text().importReady;
+  return '<section class="import-report warning"><h2>' + text().importReview + '</h2><p>' + escapeHtml(status) + '</p><div class="import-stats"><div><small>' + text().importedFiles + '</small><strong>' + Number(report.copied_files || 0).toLocaleString() + '</strong></div><div><small>' + text().excludedItems + '</small><strong>' + Number(report.skipped_files || 0).toLocaleString() + '</strong></div></div><p class="muted">' + text().importContinue + '</p><ul>' + rows + '</ul></section>';
 }
 function renderTask() {
   const tasks = state.tasks || [];
@@ -159,6 +194,12 @@ function renderRun() {
     : `<button type="button" class="primary" data-action="resume-ticket">${text().continueTicket}</button>`;
   return `<div class="card"><h1>${title}</h1>${error}<div class="node-list">${nodes.map(node => `<div class="node ${node.status}"><span>${escapeHtml(node.status)}</span><strong>${escapeHtml(node.title)}</strong></div>`).join("")}</div><pre class="log">${(state.logs || []).map(item => `[${escapeHtml(item.time)}] ${escapeHtml(item.text)}`).join("\n")}</pre><div class="actions">${action}</div></div>`;
 }
+function enhanceImportUi() {
+  if (state?.phase !== "task") return;
+  const card = document.querySelector("#screen > .card");
+  if (!card || !state?.import_report?.skipped_files) return;
+  card.insertAdjacentHTML("afterbegin", renderImportReport());
+}
 function renderResult() {
   const review = state.review || {files:[], pending_count:0}; const verification = state.verification || {}; const gate = state.release_gate || state.run_report?.export || {};
   const continuation = verification.finalized_at ? "" : `<button type="button" class="primary" data-action="resume-ticket">${text().continueTicket}</button>`;
@@ -188,6 +229,7 @@ function render() {
   if (state.export) html = renderSaved(); else if (!state.active_project) html = renderProject(); else if (state.phase === "task") html = renderTask(); else if (state.phase === "plan") html = renderPlan(); else if (state.phase === "run") html = renderRun(); else html = renderResult();
   document.querySelector("#screen").innerHTML = html;
   enhanceReportUi();
+  enhanceImportUi();
   document.querySelector("#screen").setAttribute("aria-busy", "false");
   if (state.running && !poller) poller = setInterval(refresh, 900); if (!state.running && poller) { clearInterval(poller); poller = null; }
 }

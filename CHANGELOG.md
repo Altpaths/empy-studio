@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+## [0.1.13] - 2026-08-11
+
+### Transparent project import
+
+- Show imported and excluded item counts instead of reporting a filtered
+  import as an unexplained success.
+- Classify excluded metadata, dependencies, sensitive/runtime files, unsafe
+  paths, and unreadable items without exposing local source paths.
+- Keep the original project untouched and present a bilingual warning before
+  the user continues with the isolated copy.
+
 ## [0.1.12] - 2026-08-11
 
 ### User-facing failure guidance

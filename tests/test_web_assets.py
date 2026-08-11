@@ -22,6 +22,9 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert "window.importPath" not in app_js
     assert "renderRunReport" in app_js
     assert "renderGuidance" in app_js
+    assert "renderImportReport" in app_js
+    assert "enhanceImportUi" in app_js
+    assert "import_report" in app_js
     assert "enhanceReportUi" in app_js
     assert "technicalDetails" in app_js
     assert "run_report" in app_js
@@ -38,3 +41,5 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert ".report" in app_css
     assert ".action-guide" in app_css
     assert ".technical-details" in app_css
+    assert ".import-report" in app_css
+    assert ".message.warning" in app_css

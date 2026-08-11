@@ -64,6 +64,7 @@ from empy_studio.project_delivery import (
     import_project_archive,
     import_project_folder,
     safe_upload_relative_path,
+    summarize_import_skips,
 )
 from empy_studio.review_workspace import ReviewReport, ReviewWorkspaceAdapter
 from empy_studio.security_audit import redact_sensitive_output
@@ -227,9 +228,11 @@ class GuidedState:
     language: str = "fa"
     phase: str = "project"
     message: str = ""
+    message_level: str = "info"
     error: str | None = None
     continuation_context: str | None = None
     imported: ImportedProject | None = None
+    import_report: dict[str, Any] | None = None
     detection: ProjectDetection | None = None
     task: ProductTask | None = None
     plan: ExecutionPlan | None = None
@@ -349,6 +352,7 @@ class GuidedState:
                 workspace_root=Path(project.root).parent,
                 skipped_members=(),
             )
+            self.import_report = None
             self.detection = detection
             self.task = None
             self.plan = None
@@ -362,6 +366,7 @@ class GuidedState:
             self.review = None
             self.export = None
             self.phase = "task"
+            self.message_level = "info"
             self.error = None
             self.continuation_context = None
             self.message = "پروژه بازیابی شد." if restore else "پروژه انتخاب شد."
@@ -386,13 +391,29 @@ class GuidedState:
             self.imported = imported
             self.detection = detection
             skipped = len(imported.skipped_members)
+            categories = summarize_import_skips(imported.skipped_members)
+            self.import_report = {
+                "status": "ready"
+                if not skipped
+                else (
+                    "partial"
+                    if categories.get("access_or_copy", 0)
+                    else "ready_with_exclusions"
+                ),
+                "copied_files": imported.copied_members,
+                "skipped_files": skipped,
+                "categories": categories,
+            }
+            self.message_level = "success" if not skipped else "warning"
             self.message = (
                 (
-                    "Project saved in an isolated copy. "
-                    f"{skipped} file(s) were skipped by security or access policy."
+                    "Project imported into an isolated copy. "
+                    f"{imported.copied_members} usable file(s) copied; "
+                    f"{skipped} excluded item(s) are explained below."
                     if self.language == "en"
-                    else "پروژه در یک کپی ایزوله ذخیره شد. "
-                    f"{skipped} فایل به‌دلیل سیاست امنیتی یا دسترسی رد شد."
+                    else "پروژه در یک کپی ایزوله وارد شد؛ "
+                    f"{imported.copied_members} فایل قابل‌استفاده کپی شد و "
+                    f"{skipped} مورد کنارگذاشته‌شده در بررسی واردسازی توضیح داده شده است."
                 )
                 if skipped
                 else (
@@ -1238,9 +1259,11 @@ class GuidedState:
             self.verification = None
             self.review = None
             self.export = None
+            self.import_report = None
             self.runtime = None
             self.cancel_event = None
             self.phase = "project"
+            self.message_level = "info"
             self.error = None
             self.continuation_context = None
             self.message = ""
@@ -1297,6 +1320,7 @@ class GuidedState:
                     "language": self.language,
                     "phase": "saved" if self.export else self.phase,
                     "message": self.message,
+                    "message_level": self.message_level,
                     "error": self.error,
                     "projects": self._project_records(),
                     "active_project": project,
@@ -1317,6 +1341,7 @@ class GuidedState:
                     "verification": verification,
                     "review": review,
                     "export": self.export.to_dict() if self.export is not None else None,
+                    "import_report": self.import_report,
                     "release_gate": self._release_gate(),
                     "engine": {
                         "provider": inspection.display_name,
