@@ -370,7 +370,10 @@ def test_restart_invalidates_old_passing_verification_evidence(tmp_path: Path) -
     assert any("older or different" in item for item in reopened.verification.diagnostics)
     assert reopened.run is not None
     assert reopened.run.status == "failed"
-    assert reopened.public()["release_gate"]["status"] == "blocked"
+    public = reopened.public()
+    assert public["release_gate"]["status"] == "blocked"
+    assert public["run_report"]["guidance"]["kind"] == "stale_verification"
+    assert "ادامه" in public["run_report"]["guidance"]["steps"][0]
 
 
 def test_public_state_exposes_budget_brain_and_benchmark_without_paths(tmp_path: Path) -> None:
@@ -608,6 +611,8 @@ def test_failed_verification_is_visible_and_can_seed_a_follow_up_ticket(tmp_path
     report = public["run_report"]
     assert report["verification"]["diagnostics"] == ["The project entry page is missing."]
     assert report["verification"]["failures"][0]["label"] == "Site audit"
+    assert report["guidance"]["kind"] == "verification_failed"
+    assert "ZIP" in report["guidance"]["summary"]
     assert str(state.detection.descriptor.root) not in str(report)
     assert "<project>" in report["verification"]["failures"][0]["detail"]
 

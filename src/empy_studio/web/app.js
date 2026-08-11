@@ -10,7 +10,7 @@ const t = {
     plan: "تحلیل و ساخت برنامه", start: "شروع اجرا", accept: "تأیید تغییرات", revert: "بازگردانی تغییرات", export: "خروجی ZIP پروژه",
     newProject: "پروژه‌ی دیگر", noProject: "هنوز پروژه‌ای ثبت نشده است.", noTask: "هنوز تیکتی ثبت نشده است.", engine: "وضعیت Codex",
     ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", cancel: "توقف اجرا", cancelled: "اجرا لغو شد", failed: "اجرا متوقف شد", backToTicket: "بازگشت به تیکت", continueTicket: "ادامه و اصلاح تیکت", result: "نتیجه و بررسی", resume: "ادامه تیکت",
-    benchmark: "بنچمارک محلی", runBenchmark: "اجرای بنچمارک", full: "تخمین کامل", bounded: "تخمین محدود", saved: "صرفه‌جویی", brain: "Project Brain", report: "گزارش اجرای Agentها", agent: "Agent", duration: "زمان اجرا", summary: "خلاصه", usage: "مصرف Token", actual: "مصرف واقعی", estimate: "تخمین محلی", notReported: "گزارش نشده", verification: "Verification", verificationDiagnostics: "تشخیص‌های Verification", verificationFailures: "خطاهای Verification", review: "Review", pending: "در انتظار تصمیم", evidence: "Evidence", filesChanged: "فایل تغییرکرده", exportReady: "آماده خروجی", readyForExport: "آماده تولید ZIP", releaseGate: "گیت انتشار", blocked: "مسدود", exported: "خروجی تولید شد", noReviewChanges: "تغییری برای تأیید یا بازگردانی وجود ندارد.", noReport: "گزارش اجرا هنوز موجود نیست", noDiagnostic: "جزئیات تشخیصی ثبت نشده است.", refresh: "به‌روزرسانی وضعیت", openCodex: "بازکردن Codex", engineHelp: "برای اجرای واقعی، Codex باید نصب و احراز هویت شده باشد.", fieldRequired: "درخواست Ticket را وارد کنید.", schedule: "زمان‌بندی", parallel: "موازی", serial: "ترتیبی",
+    benchmark: "بنچمارک محلی", runBenchmark: "اجرای بنچمارک", full: "تخمین کامل", bounded: "تخمین محدود", saved: "صرفه‌جویی", brain: "Project Brain", report: "گزارش اجرای Agentها", agent: "Agent", duration: "زمان اجرا", summary: "خلاصه", usage: "مصرف Token", actual: "مصرف واقعی", estimate: "تخمین محلی", notReported: "گزارش نشده", verification: "Verification", verificationDiagnostics: "تشخیص‌های Verification", verificationFailures: "خطاهای Verification", review: "Review", pending: "در انتظار تصمیم", evidence: "Evidence", filesChanged: "فایل تغییرکرده", exportReady: "آماده خروجی", readyForExport: "آماده تولید ZIP", releaseGate: "گیت انتشار", blocked: "مسدود", exported: "خروجی تولید شد", noReviewChanges: "تغییری برای تأیید یا بازگردانی وجود ندارد.", noReport: "گزارش اجرا هنوز موجود نیست", noDiagnostic: "جزئیات تشخیصی ثبت نشده است.", nextStep: "قدم بعدی", technicalDetails: "جزئیات فنی (اختیاری)", refresh: "به‌روزرسانی وضعیت", openCodex: "بازکردن Codex", engineHelp: "برای اجرای واقعی، Codex باید نصب و احراز هویت شده باشد.", fieldRequired: "درخواست Ticket را وارد کنید.", schedule: "زمان‌بندی", parallel: "موازی", serial: "ترتیبی",
   },
   en: {
     subtitle: "Coordinated project development with bounded agents", project: "Projects", import: "Project folder or ZIP path",
@@ -18,7 +18,7 @@ const t = {
     plan: "Analyze and build plan", start: "Start run", accept: "Accept changes", revert: "Restore changes", export: "Export project ZIP",
     newProject: "Another project", noProject: "No projects have been registered.", noTask: "No tickets have been registered.", engine: "Codex status",
     ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", cancel: "Stop run", cancelled: "Run cancelled", failed: "Run stopped", backToTicket: "Back to ticket", continueTicket: "Continue and fix ticket", result: "Result and review", resume: "Resume ticket",
-    benchmark: "Local benchmark", runBenchmark: "Run benchmark", full: "Full estimate", bounded: "Bounded estimate", saved: "Saved", brain: "Project Brain", report: "Agent run report", agent: "Agent", duration: "Duration", summary: "Summary", usage: "Token usage", actual: "Actual usage", estimate: "Local estimate", notReported: "Not reported", verification: "Verification", verificationDiagnostics: "Verification diagnostics", verificationFailures: "Verification failures", review: "Review", pending: "Pending decisions", evidence: "Evidence", filesChanged: "Changed files", exportReady: "Export status", readyForExport: "Ready to create ZIP", releaseGate: "Release gate", blocked: "Blocked", exported: "Export created", noReviewChanges: "There are no file changes to accept or restore.", noReport: "Run report is not available yet", noDiagnostic: "No diagnostic details were recorded.", refresh: "Refresh status", openCodex: "Open Codex", engineHelp: "Codex must be installed and authenticated for a real run.", fieldRequired: "Enter a ticket request.", schedule: "Schedule", parallel: "Parallel", serial: "Serial",
+    benchmark: "Local benchmark", runBenchmark: "Run benchmark", full: "Full estimate", bounded: "Bounded estimate", saved: "Saved", brain: "Project Brain", report: "Agent run report", agent: "Agent", duration: "Duration", summary: "Summary", usage: "Token usage", actual: "Actual usage", estimate: "Local estimate", notReported: "Not reported", verification: "Verification", verificationDiagnostics: "Verification diagnostics", verificationFailures: "Verification failures", review: "Review", pending: "Pending decisions", evidence: "Evidence", filesChanged: "Changed files", exportReady: "Export status", readyForExport: "Ready to create ZIP", releaseGate: "Release gate", blocked: "Blocked", exported: "Export created", noReviewChanges: "There are no file changes to accept or restore.", noReport: "Run report is not available yet", noDiagnostic: "No diagnostic details were recorded.", nextStep: "Next step", technicalDetails: "Technical details (optional)", refresh: "Refresh status", openCodex: "Open Codex", engineHelp: "Codex must be installed and authenticated for a real run.", fieldRequired: "Enter a ticket request.", schedule: "Schedule", parallel: "Parallel", serial: "Serial",
   },
 };
 function text() { return t[language]; }
@@ -111,13 +111,18 @@ function formatDuration(value) {
   return `${seconds.toLocaleString(undefined, {maximumFractionDigits: 2})}s`;
 }
 function statusLabel(value) {
-  const labels = language === "fa" ? {completed:"کامل شد", failed:"ناموفق", cancelled:"لغو شد", timed_out:"پایان زمان", unavailable:"در دسترس نیست", skipped:"رد شد", running:"در حال اجرا", waiting:"در انتظار", not_run:"اجرا نشده", ready_for_export:"آماده تولید ZIP", blocked:"مسدود", exported:"خروجی تولید شد"} : {completed:"Completed", failed:"Failed", cancelled:"Cancelled", timed_out:"Timed out", unavailable:"Unavailable", skipped:"Skipped", running:"Running", waiting:"Waiting", not_run:"Not run", ready_for_export:"Ready to create ZIP", blocked:"Blocked", exported:"Export created"};
+  const labels = language === "fa" ? {completed:"کامل شد", pass:"موفق", failed:"ناموفق", fail:"ناموفق", cancelled:"لغو شد", timed_out:"پایان زمان", unavailable:"در دسترس نیست", skipped:"رد شد", running:"در حال اجرا", waiting:"در انتظار", not_run:"اجرا نشده", ready_for_export:"آماده تولید ZIP", blocked:"مسدود", exported:"خروجی تولید شد"} : {completed:"Completed", pass:"Passed", failed:"Failed", fail:"Failed", cancelled:"Cancelled", timed_out:"Timed out", unavailable:"Unavailable", skipped:"Skipped", running:"Running", waiting:"Waiting", not_run:"Not run", ready_for_export:"Ready to create ZIP", blocked:"Blocked", exported:"Export created"};
   return labels[value] || value || "—";
 }
 function renderUsage(usage) {
   if (!usage) return `<span class="usage unavailable">${text().notReported}</span>`;
   if (!usage.available) return `<span class="usage unavailable">${text().notReported} · ${escapeHtml(usage.source || "not_reported")}</span>`;
   return `<span class="usage">${text().actual}: ${Number(usage.total_tokens || 0).toLocaleString()} · ${escapeHtml(usage.source || "provider")}</span>`;
+}
+function renderGuidance(guidance) {
+  if (!guidance) return "";
+  const steps = (guidance.steps || []).map(step => "<li>" + escapeHtml(step) + "</li>").join("");
+  return '<section class="action-guide" role="status"><h3>' + escapeHtml(guidance.title || "") + "</h3><p>" + escapeHtml(guidance.summary || "") + "</p>" + (steps ? "<strong>" + text().nextStep + "</strong><ol>" + steps + "</ol>" : "") + "</section>";
 }
 function renderRunReport() {
   const report = state.run_report;
@@ -141,7 +146,7 @@ function renderRunReport() {
   const exportStatus = exported.verified ? "✓" : exported.ready ? text().readyForExport : statusLabel(exported.status || "blocked");
   const exportDetail = exported.verified
     ? `${exported.file_count || 0} ${text().files}`
-    : (exported.blockers || [statusLabel(exported.status || "blocked")])[0];
+    : (report.guidance?.summary || statusLabel(exported.status || "blocked"));
   const gateDetails = (exported.blockers || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
   return `<section class="report"><div class="row"><div><h2>${text().report}</h2><p class="muted">${escapeHtml(report.provider || "")} · ${escapeHtml(statusLabel(report.status))}</p></div><strong>${formatDuration(report.duration_seconds)}</strong></div><div class="report-stats"><div><small>${text().actual}</small><strong>${usage.available ? Number(usage.total_tokens || 0).toLocaleString() : "—"}</strong><span>${usage.available ? escapeHtml(usage.source || "provider") : text().notReported}</span></div><div><small>${text().estimate}</small><strong>${estimate}</strong><span>${text().bounded}</span></div><div><small>${text().saved}</small><strong>${savings}</strong><span>${text().benchmark}</span></div><div><small>${text().verification}</small><strong>${escapeHtml(statusLabel(verification.status))}</strong><span>${verification.passed_checks || 0}/${verification.total_checks || 0}</span></div><div><small>${text().review}</small><strong>${review.pending || 0}</strong><span>${text().pending}</span></div><div><small>${text().exportReady}</small><strong>${exportStatus}</strong><span>${escapeHtml(exportDetail)}</span></div></div><p class="muted report-schedule">${escapeHtml(scheduleText)}</p>${gateDetails ? `<section class="verification-details"><h3>${text().releaseGate}</h3><ul>${gateDetails}</ul></section>` : ""}${verificationDetails}<div class="report-node-list">${nodes || `<p class="muted">${text().noReport}</p>`}</div></section>`;
 }
@@ -162,11 +167,27 @@ function renderResult() {
   if (!gateReady && gate.status !== "exported") gate.status = "blocked";
   return `<div class="card"><h1>${text().result}</h1>${renderRunReport()}<div class="quality ${gateReady || gate.status === "exported" ? "pass" : "fail"}">${escapeHtml(statusLabel(gate.status || verification.status || "unknown"))}</div><div class="file-list">${(review.files || []).map(file => `<div class="file"><strong>${escapeHtml(file.relative_path)}</strong><small>${escapeHtml(file.decision)}</small><pre>${escapeHtml(file.diff_text || "")}</pre></div>`).join("") || `<p class="muted">${language === "fa" ? "تغییری ثبت نشده است. در صورت عبور از گیت، خروجی باید با دکمه زیر تولید شود." : "No changes recorded. If the gate passes, create the ZIP with the button below."}</p>`}</div><div class="actions">${continuation}<button type="button" class="primary" data-action="decide" data-decision="accept" ${review.pending_count ? "" : "disabled"}>${text().accept}</button><button type="button" class="danger" data-action="decide" data-decision="revert" ${review.pending_count ? "" : "disabled"}>${text().revert}</button><button type="button" class="secondary" data-action="export-project" ${gateReady ? "" : "disabled"}>${text().export}</button></div></div>`;
 }
+function enhanceReportUi() {
+  const report = document.querySelector(".report");
+  const guidance = state?.run_report?.guidance;
+  if (!report || !guidance) return;
+  report.insertAdjacentHTML("afterbegin", renderGuidance(guidance));
+  const technicalNodes = Array.from(report.querySelectorAll(".verification-details"));
+  if (!technicalNodes.length) return;
+  const details = document.createElement("details");
+  details.className = "technical-details";
+  const summary = document.createElement("summary");
+  summary.textContent = text().technicalDetails;
+  details.appendChild(summary);
+  technicalNodes.forEach(node => details.appendChild(node));
+  report.appendChild(details);
+}
 function renderSaved() { return `<div class="card center"><h1>✓</h1><h2>${language === "fa" ? "خروجی آماده است" : "Export is ready"}</h2><p class="muted">${escapeHtml(state.export?.archive_path || "")}</p><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div>`; }
 function render() {
   if (!state) return; language = state.language || language; banner(); let html = "";
   if (state.export) html = renderSaved(); else if (!state.active_project) html = renderProject(); else if (state.phase === "task") html = renderTask(); else if (state.phase === "plan") html = renderPlan(); else if (state.phase === "run") html = renderRun(); else html = renderResult();
   document.querySelector("#screen").innerHTML = html;
+  enhanceReportUi();
   document.querySelector("#screen").setAttribute("aria-busy", "false");
   if (state.running && !poller) poller = setInterval(refresh, 900); if (!state.running && poller) { clearInterval(poller); poller = null; }
 }

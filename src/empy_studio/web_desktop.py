@@ -653,6 +653,7 @@ class GuidedState:
                 restored_review = self.review_store.load(str(review_id))
         except (OSError, KeyError, TypeError, ValueError):
             return
+        stale_reason: str | None = None
         if restored_verification is not None and self.detection is not None:
             try:
                 stale_reason = verification_staleness_reason(
@@ -695,7 +696,11 @@ class GuidedState:
             }
             if self.export is None:
                 self.phase = "result" if restored_review is not None else "run"
-            self.message = "نتیجهٔ تیکت بازیابی شد."
+            self.message = (
+                "نتیجه‌ی قبلی بازیابی شد؛ برای ادامه باید Verification دوباره اجرا شود."
+                if stale_reason is not None
+                else "نتیجهٔ تیکت بازیابی شد."
+            )
 
     def _build_continuation_context(self) -> str:
         roots = (
@@ -1344,6 +1349,115 @@ class GuidedState:
         except (OSError, ValueError):
             return Path(value).name or "evidence"
 
+    def _user_guidance(
+        self,
+        *,
+        diagnostics: list[str],
+        failures: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        """Turn internal run state into the next action a user can take."""
+
+        stale = any(
+            "older or different verification contract" in item.casefold()
+            for item in diagnostics
+        )
+        if stale:
+            if self.language == "en":
+                return {
+                    "kind": "stale_verification",
+                    "title": "This result needs a fresh verification",
+                    "summary": (
+                        "Empy cannot safely use the saved verification after its "
+                        "rules changed. No ZIP will be created from this result."
+                    ),
+                    "steps": [
+                        "Choose Continue and fix ticket to start a new verification.",
+                        "Review the new result; the ZIP becomes available only after Verification passes.",
+                    ],
+                    "action": "resume-ticket",
+                }
+            return {
+                "kind": "stale_verification",
+                "title": "این نتیجه به بررسی تازه نیاز دارد",
+                "summary": (
+                    "قواعد بررسی Empy تغییر کرده است؛ نتیجه‌ی ذخیره‌شده دیگر برای ساخت ZIP معتبر نیست."
+                ),
+                "steps": [
+                    "روی «ادامه و اصلاح تیکت» بزنید تا بررسی تازه شروع شود.",
+                    "نتیجه‌ی جدید را مرور کنید؛ ZIP فقط بعد از موفق شدن Verification فعال می‌شود.",
+                ],
+                "action": "resume-ticket",
+            }
+
+        if failures:
+            if self.language == "en":
+                return {
+                    "kind": "verification_failed",
+                    "title": "A project check did not pass",
+                    "summary": (
+                        "Empy found a problem in the project checks, so it has blocked the ZIP."
+                    ),
+                    "steps": [
+                        "Open the optional technical details only if you need the exact check output.",
+                        "Choose Continue and fix ticket so Empy can prepare a correction in the isolated copy.",
+                        "Run Verification again after the correction; the ZIP will unlock only after it passes.",
+                    ],
+                    "action": "resume-ticket",
+                }
+            return {
+                "kind": "verification_failed",
+                "title": "یک بررسی پروژه موفق نشد",
+                "summary": "Empy در بررسی پروژه مشکل پیدا کرد؛ برای جلوگیری از ZIP ناقص، خروجی مسدود شد.",
+                "steps": [
+                    "جزئیات فنی فقط در صورت نیاز، داخل بخش «جزئیات فنی (اختیاری)» قرار دارد.",
+                    "روی «ادامه و اصلاح تیکت» بزنید تا Empy اصلاح را در کپی ایزوله‌ی پروژه آماده کند.",
+                    "بعد از اصلاح، Verification دوباره اجرا می‌شود و فقط در صورت موفقیت ZIP فعال خواهد شد.",
+                ],
+                "action": "resume-ticket",
+            }
+
+        if self.run is not None and self.run.status != "completed":
+            if self.language == "en":
+                return {
+                    "kind": "run_failed",
+                    "title": "The Agent run did not finish",
+                    "summary": "The result is not safe to deliver because the Agent run did not complete.",
+                    "steps": [
+                        "Choose Continue and fix ticket to retry the work in the isolated copy.",
+                        "Review the result and Verification before creating a ZIP.",
+                    ],
+                    "action": "resume-ticket",
+                }
+            return {
+                "kind": "run_failed",
+                "title": "اجرای Agentها کامل نشد",
+                "summary": "چون اجرای Agentها کامل نشده است، نتیجه برای تحویل امن نیست.",
+                "steps": [
+                    "برای تلاش دوباره روی «ادامه و اصلاح تیکت» بزنید.",
+                    "قبل از ساخت ZIP، نتیجه و Verification را مرور کنید.",
+                ],
+                "action": "resume-ticket",
+            }
+
+        if self.verification is None:
+            if self.language == "en":
+                return {
+                    "kind": "verification_missing",
+                    "title": "Final project verification has not run",
+                    "summary": "Empy needs a completed Verification before it can create a ZIP.",
+                    "steps": ["Choose Continue and fix ticket to continue the workflow."],
+                    "action": "resume-ticket",
+                }
+            return {
+                "kind": "verification_missing",
+                "title": "بررسی نهایی پروژه هنوز اجرا نشده است",
+                "summary": "Empy قبل از ساخت ZIP باید Verification کامل داشته باشد.",
+                "steps": ["برای ادامه‌ی مسیر روی «ادامه و اصلاح تیکت» بزنید."],
+                "action": "resume-ticket",
+            }
+
+        return None
+
     def _execution_report(self) -> dict[str, Any] | None:
         if self.run is None:
             return None
@@ -1415,6 +1529,10 @@ class GuidedState:
             for item in verification_results
             if item.status == "fail"
         ]
+        guidance = self._user_guidance(
+            diagnostics=verification_diagnostics,
+            failures=verification_failures,
+        )
         review_files = self.review.files if self.review is not None else ()
         benchmark = self.benchmark
         estimates = {
@@ -1452,6 +1570,7 @@ class GuidedState:
                 "diagnostics": verification_diagnostics,
                 "failures": verification_failures,
             },
+            "guidance": guidance,
             "review": {
                 "changed_files": len(review_files),
                 "pending": self.review.pending_count if self.review is not None else 0,
@@ -1464,6 +1583,7 @@ class GuidedState:
                 "available": self.export is not None,
                 "verified": bool(self.export and self.export.verified),
                 "file_count": self.export.file_count if self.export is not None else None,
+                "guidance": guidance,
             },
         }
 

@@ -21,6 +21,9 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert "onclick=" not in app_js
     assert "window.importPath" not in app_js
     assert "renderRunReport" in app_js
+    assert "renderGuidance" in app_js
+    assert "enhanceReportUi" in app_js
+    assert "technicalDetails" in app_js
     assert "run_report" in app_js
     assert "verificationReady" in app_js
     assert 'state.run_status === "completed"' in app_js
@@ -31,4 +34,7 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert 'id="zip-upload"' in index
     assert 'aria-label=' in app_js
     assert "localizeMessage" in app_js
-    assert ".report" in (WEB_ROOT / "app.css").read_text(encoding="utf-8")
+    app_css = (WEB_ROOT / "app.css").read_text(encoding="utf-8")
+    assert ".report" in app_css
+    assert ".action-guide" in app_css
+    assert ".technical-details" in app_css

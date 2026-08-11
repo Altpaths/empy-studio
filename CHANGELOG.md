@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+## [0.1.11] - 2026-08-11
+
+### User-facing failure guidance
+
+- Translate stale Verification evidence and failed project checks into a
+  bilingual explanation of what happened and what the user should do next.
+- Move raw gate and Verification output into an optional technical-details
+  section instead of making it the primary error experience.
+- Expose structured guidance in the run report and cover stale-evidence and
+  failed-check regressions with automated tests.
+
 ## [0.1.10] - 2026-08-11
 
 ### Installer upgrade safety
