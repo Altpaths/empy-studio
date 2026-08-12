@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+## [0.1.25] - 2026-08-12
+
+### Python 3.10 release compatibility
+
+- Use the declared `tomli` dependency when building release assets on Python
+  3.10, where `tomllib` is not part of the standard library.
+- Keep the release builder compatible with the full supported Python matrix.
+
 ## [0.1.24] - 2026-08-12
 
 ### Verification handoff correctness
