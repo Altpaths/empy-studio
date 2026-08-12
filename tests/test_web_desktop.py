@@ -649,14 +649,53 @@ def test_failed_verification_is_visible_and_can_seed_a_follow_up_ticket(tmp_path
     assert all("Agent run" not in item for item in public["release_gate"]["blockers"])
     assert str(state.detection.descriptor.root) not in str(report)
     assert "<project>" in report["verification"]["failures"][0]["detail"]
+    assert public["failure_context"]["title"] == "علت دقیق توقف اجرای قبلی"
+    assert "public_html/index.html" in public["failure_context"]["suggested_ticket"]
+    assert "قرارداد تست" in public["failure_context"]["failures"][0]["action"]
 
     state.resume_ticket()
     assert state.phase == "task"
     assert state.continuation_context is not None
     assert "Site audit" in state.continuation_context
+    follow_up = state.public()["failure_context"]
+    assert follow_up is not None
+    assert any("public_html/index.html" in item for item in follow_up["findings"])
+    assert "public_html/index.html" in follow_up["suggested_ticket"]
     state.create_plan("Update index.html to address the reported project entry page issue")
     assert state.task is not None
     assert "Previous Empy verification findings" in state.task.objective
+
+    reopened = GuidedState(tmp_path / "workspace")
+    assert reopened.public()["failure_context"] is not None
+    assert "public_html/index.html" in reopened.public()["failure_context"]["suggested_ticket"]
+
+
+def test_diagnostic_only_failure_has_required_action(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "composer.json").write_text("{\"scripts\": {\"test\": \"php tests.php\"}}\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+    state.create_plan("Audit dependencies")
+    state.verification = VerificationReport(
+        schema_version=1,
+        verification_id="verification-diagnostic-only",
+        project_root=str(state.detection.descriptor.root),
+        project_type="php",
+        status="fail",
+        started_at="now",
+        finished_at="now",
+        results=(),
+        evidence_path=str(tmp_path / "evidence"),
+        diagnostics=(
+            "Composer test/release scripts were not executed because vendor/autoload.php is missing.",
+        ),
+    )
+    context = state.public()["failure_context"]
+    assert context is not None
+    assert context["failures"][0]["label"] == "Verification configuration"
+    assert "وابستگی" in context["failures"][0]["action"]
+    assert "vendor/autoload.php" in context["suggested_ticket"]
 
 
 def test_verified_export_has_authenticated_download_endpoint(tmp_path: Path) -> None:

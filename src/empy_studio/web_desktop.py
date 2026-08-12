@@ -142,6 +142,23 @@ def _safe_verification_detail(value: str, roots: tuple[Path, ...]) -> str:
     return detail[-1200:] if detail else "No diagnostic output was produced."
 
 
+def _failure_kind(detail: str) -> str:
+    """Classify a failure into a user-actionable category without guessing a fix."""
+
+    normalized = detail.casefold()
+    if "vendor/autoload.php" in normalized or "composer" in normalized and "missing" in normalized:
+        return "missing_dependency"
+    if "no safe verification checks" in normalized or "verification.json" in normalized:
+        return "missing_verification_contract"
+    if any(marker in normalized for marker in ("permission denied", "permissionerror", "access is denied")):
+        return "permission"
+    if any(marker in normalized for marker in ("timed out", "timeout", "time limit")):
+        return "timeout"
+    if any(marker in normalized for marker in ("missing", "not found", "does not exist", "no such file")):
+        return "missing_file_or_route"
+    return "check_failed"
+
+
 def _duration_seconds(started_at: str | None, finished_at: str | None) -> float | None:
     if not started_at or not finished_at:
         return None
@@ -241,6 +258,7 @@ class GuidedState:
     message_level: str = "info"
     error: str | None = None
     continuation_context: str | None = None
+    failure_context: dict[str, Any] | None = None
     imported: ImportedProject | None = None
     import_report: dict[str, Any] | None = None
     detection: ProjectDetection | None = None
@@ -342,6 +360,10 @@ class GuidedState:
     def _import_report_setting_key(project_id: str) -> str:
         return f"import-report:{project_id}"
 
+    @staticmethod
+    def _failure_context_setting_key(project_id: str) -> str:
+        return f"failure-context:{project_id}"
+
     def _load_import_report(self, project_id: str) -> dict[str, Any] | None:
         value = self.store.get_setting(self._import_report_setting_key(project_id))
         if not isinstance(value, dict):
@@ -373,6 +395,28 @@ class GuidedState:
             "categories": normalized_categories,
         }
 
+    def _load_failure_context(self, project_id: str) -> dict[str, Any] | None:
+        value = self.store.get_setting(self._failure_context_setting_key(project_id))
+        if not isinstance(value, dict):
+            return None
+        diagnostics = value.get("diagnostics")
+        failures = value.get("failures")
+        if not isinstance(diagnostics, list) or not all(
+            isinstance(item, str) for item in diagnostics
+        ):
+            return None
+        if not isinstance(failures, list) or not all(
+            isinstance(item, dict) for item in failures
+        ):
+            return None
+        return {
+            "kind": str(value.get("kind", "check_failed")),
+            "diagnostics": [str(item) for item in diagnostics[:8]],
+            "failures": [dict(item) for item in failures[:8]],
+            "evidence": str(value.get("evidence", "")),
+            "created_at": str(value.get("created_at", "")),
+        }
+
     def _refresh_brain_index(self) -> ProjectBrainIndex:
         if self.active_project_id is None or self.detection is None:
             raise RuntimeError("Choose a project first.")
@@ -389,6 +433,7 @@ class GuidedState:
         project = self.store.get_project(project_id)
         detection = self.project_service.detect(project.root)
         import_report = self._load_import_report(project.project_id)
+        failure_context = self._load_failure_context(project.project_id)
         with self.lock:
             self.active_project_id = project.project_id
             self.active_task_id = None
@@ -421,6 +466,7 @@ class GuidedState:
             )
             self.error = None
             self.continuation_context = None
+            self.failure_context = failure_context
             self.message = "پروژه بازیابی شد." if restore else "پروژه انتخاب شد."
         self.store.set_setting("active_project_id", project.project_id)
         if not restore:
@@ -779,6 +825,213 @@ class GuidedState:
                 if stale_reason is not None
                 else "نتیجهٔ تیکت بازیابی شد."
             )
+        self._capture_failure_context()
+
+    def _failure_context_from_state(self) -> dict[str, Any] | None:
+        """Build a bounded, redacted incident record from the current run."""
+
+        roots = (
+            self.detection.descriptor.root
+            if self.detection is not None
+            else self.workspace_root,
+            self.workspace_root,
+        )
+        diagnostics: list[str] = []
+        failures: list[dict[str, Any]] = []
+        evidence = ""
+        kind = "check_failed"
+        if self.verification is not None:
+            evidence = self._workspace_reference(self.verification.evidence_path)
+            diagnostics = [
+                _safe_verification_detail(item, roots)
+                for item in self.verification.diagnostics
+                if item.strip()
+            ]
+            for result in self.verification.results:
+                if result.status != "fail":
+                    continue
+                detail = _safe_verification_detail(
+                    result.stderr.strip() or result.stdout.strip(),
+                    roots,
+                )
+                failures.append(
+                    {
+                        "label": result.check.label,
+                        "category": result.check.category,
+                        "returncode": result.returncode,
+                        "detail": detail,
+                        "kind": _failure_kind(detail),
+                    }
+                )
+            existing_details = {str(item.get("detail", "")) for item in failures}
+            for diagnostic in diagnostics:
+                if diagnostic in existing_details:
+                    continue
+                failures.append(
+                    {
+                        "label": "Verification configuration",
+                        "category": "configuration",
+                        "returncode": None,
+                        "detail": diagnostic,
+                        "kind": _failure_kind(diagnostic),
+                    }
+                )
+            if diagnostics or failures or self.verification.status != "pass":
+                kind = "verification_failed"
+        if self.run is not None and self.run.status != "completed":
+            message = _safe_verification_detail(
+                self.run.error_message or "The Agent run ended without a complete result.",
+                roots,
+            )
+            if message not in diagnostics:
+                diagnostics.append(message)
+            failures.append(
+                {
+                    "label": "Agent execution",
+                    "category": "execution",
+                    "returncode": None,
+                    "detail": message,
+                    "kind": _failure_kind(message),
+                }
+            )
+            kind = "run_failed"
+        if not diagnostics and not failures and self.error:
+            message = _safe_verification_detail(self.error, roots)
+            diagnostics.append(message)
+            failures.append(
+                {
+                    "label": "Empy execution",
+                    "category": "execution",
+                    "returncode": None,
+                    "detail": message,
+                    "kind": _failure_kind(message),
+                }
+            )
+            kind = "run_failed"
+        if not diagnostics and not failures:
+            return None
+        unique_diagnostics = list(dict.fromkeys(diagnostics))[:8]
+        unique_failures: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for failure in failures:
+            marker = (str(failure.get("label", "")), str(failure.get("detail", "")))
+            if marker in seen:
+                continue
+            seen.add(marker)
+            unique_failures.append(failure)
+        return {
+            "kind": kind,
+            "diagnostics": unique_diagnostics,
+            "failures": unique_failures[:8],
+            "evidence": evidence,
+            "created_at": _now(),
+        }
+
+    def _capture_failure_context(self) -> None:
+        """Persist the last actionable failure so returning to a ticket is not a reset."""
+
+        context = self._failure_context_from_state()
+        with self.lock:
+            self.failure_context = context
+            project_id = self.active_project_id
+        if project_id is not None:
+            self.store.set_setting(self._failure_context_setting_key(project_id), context)
+
+    def _clear_failure_context(self) -> None:
+        with self.lock:
+            self.failure_context = None
+            project_id = self.active_project_id
+        if project_id is not None:
+            self.store.set_setting(self._failure_context_setting_key(project_id), None)
+
+    def _localized_failure_context(self) -> dict[str, Any] | None:
+        raw = self.failure_context
+        if raw is None and (
+            (self.verification is not None and self.verification.status != "pass")
+            or (self.run is not None and self.run.status != "completed")
+            or self.error
+        ):
+            raw = self._failure_context_from_state()
+        if raw is None:
+            return None
+        failures = raw.get("failures", [])
+        diagnostics = raw.get("diagnostics", [])
+        if self.language == "en":
+            title = "Why the previous run stopped"
+            summary = (
+                "Empy found a concrete problem in the project or its verification contract. "
+                "Changing the ticket alone is not a fix; the finding below must be resolved "
+                "in the isolated project and Verification must be run again."
+            )
+            next_step = (
+                "The corrective ticket is prefilled below. Review it, keep the exact finding, "
+                "then choose Analyze and build plan."
+            )
+            suggested_prefix = "Resolve the previous failure at its root, not by changing the ticket text."
+            action_map = {
+                "missing_dependency": "Install the missing project dependency in the isolated copy, or add an explicit safe verification manifest. Do not silently skip the required check.",
+                "missing_verification_contract": "Add or repair the project's explicit .empy/verification.json contract, or provide a supported test/build/lint entry point.",
+                "missing_file_or_route": "Inspect whether the reported file or route is truly required. If the check is inconsistent with the project's real entry point, fix the check contract; do not create a placeholder only to make it pass.",
+                "permission": "Choose an accessible project copy or repair the isolated workspace permissions, then rerun the same check.",
+                "timeout": "Reduce the check scope or repair the hanging command, then rerun it with bounded output.",
+                "check_failed": "Fix the exact issue reported by this check in the isolated project, then rerun Verification.",
+            }
+        else:
+            title = "علت دقیق توقف اجرای قبلی"
+            summary = (
+                "Empy در پروژه یا قرارداد بررسی آن یک مشکل مشخص پیدا کرده است. "
+                "عوض‌کردن متن تیکت به‌تنهایی اصلاح نیست؛ یافتهٔ زیر باید در کپی ایزوله برطرف شود "
+                "و Verification دوباره اجرا شود."
+            )
+            next_step = (
+                "تیکت اصلاحی بر اساس همین خطا در کادر زیر آماده شده است؛ آن را مرور کنید، "
+                "یافتهٔ دقیق را نگه دارید و «تحلیل و ساخت برنامه» را بزنید."
+            )
+            suggested_prefix = "علت خطای قبلی را ریشه‌ای اصلاح کن، نه اینکه فقط متن تیکت را عوض کنی."
+            action_map = {
+                "missing_dependency": "وابستگی گمشده را در کپی ایزوله نصب/تأمین کن یا یک قرارداد بررسی امن در .empy/verification.json تعریف کن؛ تست لازم نباید بی‌صدا رد شود.",
+                "missing_verification_contract": "قرارداد .empy/verification.json یا ورودی تست/build/lint پشتیبانی‌شده را اصلاح کن تا Verification دقیقاً بداند چه چیزی را باید اجرا کند.",
+                "missing_file_or_route": "بررسی کن فایل یا مسیر گزارش‌شده واقعاً برای پروژه لازم است یا تست با ورودی واقعی پروژه ناسازگار است. قرارداد تست را اصلاح کن؛ فقط برای سبزکردن تست فایل صوری نساز.",
+                "permission": "کپی ایزولهٔ قابل‌دسترسی را انتخاب یا دسترسی همان workspace را اصلاح کن و همان بررسی را دوباره اجرا کن.",
+                "timeout": "فرمان متوقف‌شده را محدود یا اصلاح کن و Verification را دوباره با خروجی کنترل‌شده اجرا کن.",
+                "check_failed": "ایراد دقیق گزارش‌شده توسط همین بررسی را در پروژهٔ ایزوله اصلاح کن و سپس Verification را دوباره اجرا کن.",
+            }
+        findings = list(dict.fromkeys(str(item) for item in diagnostics if str(item).strip()))
+        rendered_failures: list[dict[str, Any]] = []
+        ticket_lines = [suggested_prefix]
+        for item in failures:
+            label = str(item.get("label", "Verification check"))
+            detail = str(item.get("detail", "No diagnostic output was produced."))
+            item_kind = str(item.get("kind", "check_failed"))
+            rendered_failures.append(
+                {
+                    "label": label,
+                    "category": str(item.get("category", "")),
+                    "returncode": item.get("returncode"),
+                    "detail": detail,
+                    "action": action_map.get(item_kind, action_map["check_failed"]),
+                }
+            )
+            findings.append(f"{label}: {detail}")
+            ticket_lines.append(f"- {label}: {detail}")
+            ticket_lines.append(f"- Required action: {action_map.get(item_kind, action_map['check_failed'])}")
+        if not rendered_failures and findings:
+            ticket_lines.extend(f"- Finding: {item}" for item in findings)
+        ticket_lines.append(
+            "- After the correction, run the same verification checks again and report the real evidence; do not claim success if a check was skipped or failed."
+            if self.language == "en"
+            else "- بعد از اصلاح، همان بررسی‌ها را دوباره اجرا کن و evidence واقعی بده؛ اگر بررسی رد یا skip شد، موفق اعلام نکن."
+        )
+        return {
+            "kind": raw.get("kind", "check_failed"),
+            "title": title,
+            "summary": summary,
+            "next_step": next_step,
+            "findings": list(dict.fromkeys(findings))[:12],
+            "failures": rendered_failures,
+            "evidence": raw.get("evidence", ""),
+            "suggested_ticket": "\n".join(ticket_lines)[:4000],
+        }
 
     def _build_continuation_context(self) -> str:
         roots = (
@@ -812,6 +1065,7 @@ class GuidedState:
             raise RuntimeError("Choose a project first.")
         if self.running:
             raise RuntimeError("Stop the active run before continuing the ticket.")
+        self._capture_failure_context()
         context = self._build_continuation_context()
         with self.lock:
             self.continuation_context = context
@@ -1020,6 +1274,10 @@ class GuidedState:
                 else "نتیجه برای Review آماده است."
             )
         self.add_log(message, level)
+        if state == "completed":
+            self._clear_failure_context()
+        else:
+            self._capture_failure_context()
 
     def _run_worker(self, workspace_run_id: str) -> None:
         graph = self.graph
@@ -1124,6 +1382,10 @@ class GuidedState:
                 )
                 self.message_level = "success" if verification.finalize_allowed else "warning"
                 self.error = None
+            if verification.finalize_allowed:
+                self._clear_failure_context()
+            else:
+                self._capture_failure_context()
         except VerificationCancelled as exc:
             cancelled = (
                 replace(
@@ -1203,6 +1465,7 @@ class GuidedState:
             self.error = message
             self.message = "اجرا لغو شد." if state == "cancelled" else "اجرا متوقف شد."
         self.add_log(message, "warning" if state == "cancelled" else "error")
+        self._capture_failure_context()
 
     def _verification_event(self, event: VerificationEvent) -> None:
         if event.text.strip():
@@ -1350,6 +1613,7 @@ class GuidedState:
             self.message_level = "info"
             self.error = None
             self.continuation_context = None
+            self.failure_context = None
             self.message = ""
             self.logs.clear()
         self.store.set_setting("active_project_id", None)
@@ -1425,6 +1689,7 @@ class GuidedState:
                     "verification": verification,
                     "review": review,
                     "export": self.export.to_dict() if self.export is not None else None,
+                    "failure_context": self._localized_failure_context(),
                     "import_report": self.import_report,
                     "release_gate": self._release_gate(),
                     "engine": {
