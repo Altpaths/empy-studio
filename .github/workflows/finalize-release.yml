@@ -6,7 +6,7 @@ on:
       tag:
         description: "Existing release-candidate tag to finalize"
         required: true
-        default: v0.1.25
+        default: v0.1.26
         type: string
       promote_latest:
         description: "Sign, notarize, and promote the candidate to Latest"

@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.1.26] - 2026-08-12
+
 ### Release hardening
 
 - Execute the generated Windows installer on a real Windows runner, verify its
