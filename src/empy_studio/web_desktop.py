@@ -199,13 +199,19 @@ def _split_task_lines(raw: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     requirements: list[str] = []
     constraints: list[str] = []
     for raw_line in raw.splitlines():
-        line = raw_line.strip(" -•\t")
-        if not line:
-            continue
-        if any(marker in line.casefold() for marker in markers):
-            constraints.append(line)
-        else:
-            requirements.append(line)
+        # Users commonly put the action and its safety constraint in one
+        # sentence. Split explicit clause separators first so a request such
+        # as "audit the project; without changing the original" remains
+        # actionable instead of being classified as constraints-only.
+        for raw_clause in raw_line.replace("؛", ";").split(";"):
+            line = raw_clause.strip(" -•\t")
+            if not line:
+                continue
+            normalized = line.casefold()
+            if any(normalized.startswith(marker) for marker in markers):
+                constraints.append(line)
+            else:
+                requirements.append(line)
     return tuple(requirements), tuple(constraints)
 
 

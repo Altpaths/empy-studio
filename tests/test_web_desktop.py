@@ -90,6 +90,22 @@ def test_guided_state_persists_project_and_follow_up_ticket(tmp_path: Path) -> N
     assert restarted.public()["brain"]["source"] == "local_project_brain_index"
 
 
+def test_ticket_with_inline_constraint_still_has_an_actionable_requirement(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("demo\n", encoding="utf-8")
+
+    state = GuidedState(tmp_path / "empy-workspace")
+    state.import_path(str(source))
+    state.create_plan(
+        "Review and verify the project; without changing the original files or including secrets"
+    )
+
+    assert state.phase == "plan"
+    assert state.task is not None
+    assert state.task.title == "Review and verify the project"
+
+
 def test_reset_keeps_project_history(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()

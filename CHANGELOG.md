@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+## [0.1.16] - 2026-08-12
+
+### Natural ticket requests
+
+- Keep an actionable clause when a user combines the requested work and its
+  safety constraint in one sentence.
+- Split explicit Persian or English semicolon clauses before classifying
+  constraints, so ordinary one-line tickets are not rejected as empty.
+
 ## [0.1.15] - 2026-08-12
 
 ### Reliable ticket submission
