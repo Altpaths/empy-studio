@@ -54,6 +54,29 @@ jobs:
       - run: python -m empy_studio.web_desktop --help
       - run: python -m pytest -q tests/test_platform_support.py tests/test_user_errors.py tests/test_project_delivery.py tests/test_web_assets.py
 
+  windows-installer-smoke:
+    name: Windows installer smoke
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install ".[dev]"
+      - name: Build Windows installer assets
+        shell: pwsh
+        run: |
+          python scripts/build_release_assets.py --output build/release-assets
+      - name: Install and exercise the relocated Windows installer
+        shell: pwsh
+        run: |
+          $package = (Get-ChildItem build/release-assets -Filter *.whl | Select-Object -First 1).FullName
+          python scripts/smoke_windows_installer.py `
+            --installer build/release-assets/install-windows-x86_64.ps1 `
+            --package $package `
+            --target windows-x86_64
+
   release-assets:
     needs: quality
     runs-on: ubuntu-latest

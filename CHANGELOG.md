@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+### Release hardening
+
+- Execute the generated Windows installer on a real Windows runner, verify its
+  isolated installation state, and run the relocated `empy.cmd` wrapper.
+- Gate final publication on the Windows installer smoke job in addition to
+  package verification and macOS notarization.
+- Keep existing release-candidate finalization idempotent so an existing tag is
+  updated instead of attempting a duplicate GitHub release.
+
 ## [0.1.25] - 2026-08-12
 
 ### Python 3.10 release compatibility
