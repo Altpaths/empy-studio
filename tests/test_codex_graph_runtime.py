@@ -137,8 +137,31 @@ def test_prompt_contains_bounded_context_and_safety_rules(tmp_path: Path) -> Non
     assert "Verification handoff" in prompt
     assert "Provider-neutral local estimate" in prompt
     assert "Writing nodes must not spend provider time" in prompt
+    assert "Empy's verification pipeline" in prompt
+    assert "A provider Quality node is planned" in prompt
+    assert "Do not claim that a provider Quality node" in prompt
     assert "current working tree and current file contents" in prompt
     assert str(node.token_limit) in prompt
+
+    without_quality_nodes = tuple(
+        item for item in graph.nodes if item.agent_role != "quality"
+    )
+    without_quality_ids = {item.node_id for item in without_quality_nodes}
+    without_quality = replace(
+        graph,
+        nodes=without_quality_nodes,
+        waves=tuple(
+            tuple(node_id for node_id in wave if node_id in without_quality_ids)
+            for wave in graph.waves
+            if any(node_id in without_quality_ids for node_id in wave)
+        ),
+    )
+    deterministic_prompt = build_codex_node_prompt(
+        graph=without_quality,
+        selection=selection,
+        node=without_quality.nodes[0],
+    )
+    assert "Empy's deterministic verification pipeline" in deterministic_prompt
 
 
 def test_prompt_contains_approved_user_task_contract(tmp_path: Path) -> None:
