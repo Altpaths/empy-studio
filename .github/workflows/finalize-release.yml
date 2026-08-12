@@ -199,12 +199,12 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --dir release-assets
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: macos-signed-arm64
           path: signed/arm64
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: macos-signed-x86_64
           path: signed/x86_64
