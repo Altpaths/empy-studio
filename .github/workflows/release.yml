@@ -259,7 +259,23 @@ jobs:
           test "$GITHUB_REF_TYPE" = tag
           test -n "$GITHUB_REF_NAME"
           test -n "$(find release-assets -type f -print -quit)"
-          gh release create "$GITHUB_REF_NAME" release-assets/* \
-            --verify-tag \
-            --title "Empy Studio $GITHUB_REF_NAME" \
-            --notes-file release-assets/RELEASE_NOTES.md
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber \
+              release-assets/*
+            gh release edit "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Empy Studio $GITHUB_REF_NAME" \
+              --notes-file release-assets/RELEASE_NOTES.md \
+              --draft=false \
+              --prerelease=false \
+              --latest
+          else
+            gh release create "$GITHUB_REF_NAME" release-assets/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "Empy Studio $GITHUB_REF_NAME" \
+              --notes-file release-assets/RELEASE_NOTES.md \
+              --latest
+          fi
