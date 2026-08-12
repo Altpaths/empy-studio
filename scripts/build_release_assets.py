@@ -21,7 +21,10 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 uses the declared tomli dependency.
+    import tomli as tomllib
 
 from empy_studio.distribution_builder import (
     DistributionBuildConfig,
