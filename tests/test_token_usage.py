@@ -83,3 +83,19 @@ def test_validation_rejects_negative_and_inconsistent_counts() -> None:
         TokenUsage(input=-1, output=0, cached=0, total=0)
     with pytest.raises(ValueError):
         TokenUsage(input=10, output=0, cached=0, total=5)
+
+
+def test_reports_fresh_and_uncached_totals_separately() -> None:
+    usage = TokenUsage(
+        input=100,
+        output=12,
+        cached=70,
+        total=112,
+        source="provider",
+        provider="codex",
+    )
+
+    assert usage.fresh_input == 30
+    assert usage.uncached_total == 42
+    assert usage.to_dict()["fresh_input"] == 30
+    assert usage.to_dict()["uncached_total"] == 42

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.metadata
 import json
 import os
 import re
@@ -21,6 +20,8 @@ import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+
+import tomllib
 
 from empy_studio.distribution_builder import (
     DistributionBuildConfig,
@@ -58,6 +59,30 @@ def _tag_version(package_version: str) -> str:
     if kind is None or number is None:
         return core
     return f"{core}-{kind}.{number}"
+
+
+def _source_package_version(source_root: Path) -> str:
+    """Read the release version from the source tree being built.
+
+    Release generation must not depend on whichever Empy wheel happens to be
+    installed in the caller's virtual environment.  That made it possible to
+    build the current source with an older tag when ``PYTHONPATH`` was used.
+    """
+
+    path = source_root / "pyproject.toml"
+    try:
+        document = tomllib.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise FileNotFoundError(path) from exc
+    project = document.get("project")
+    if not isinstance(project, dict):
+        raise TypeError("pyproject.toml project table is invalid")
+    if not isinstance(project.get("version"), str):
+        raise TypeError("pyproject.toml must define project.version")
+    version = project["version"].strip()
+    if not version:
+        raise ValueError("project.version cannot be empty")
+    return version
 
 
 def _require_single(paths: list[Path], label: str) -> Path:
@@ -188,7 +213,7 @@ def build_release_assets(
     if repository.count("/") != 1 or any(not part for part in repository.split("/")):
         raise ValueError("repository must use OWNER/REPO format")
 
-    package_version = importlib.metadata.version("empy-studio")
+    package_version = _source_package_version(source_root)
     if not release_tag:
         release_tag = f"v{_tag_version(package_version)}"
     if not release_tag.startswith("v") or "/" in release_tag:

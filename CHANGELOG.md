@@ -1,5 +1,20 @@
 ## [Unreleased]
 
+## [0.1.23] - 2026-08-12
+
+### Enforced token budgets and adaptive context
+
+- Report provider total, fresh input, cached input, and uncached work
+  separately so token claims are measurable.
+- Enforce a per-node fresh-token safety limit and stop an over-budget Codex
+  process without allowing the run to pass silently.
+- Run Codex with bounded reasoning and without unrelated user configuration
+  noise by default.
+- Restrict explicit-file tickets to the named context and omit redundant
+  Provider Quality nodes when deterministic project Verification is available.
+- Avoid repeating complete stale source packs to Quality nodes and show fresh
+  and cached usage in the bilingual run report.
+
 ## [0.1.22] - 2026-08-12
 
 ### Honest verification status and real project downloads

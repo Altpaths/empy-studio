@@ -4,6 +4,7 @@ import errno
 import io
 import os
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -312,6 +313,29 @@ def test_build_command_allows_explicit_host_sandbox_override(tmp_path: Path) -> 
     assert command[command.index("--sandbox") + 1] == "danger-full-access"
 
 
+def test_build_command_uses_bounded_runtime_configuration(tmp_path: Path) -> None:
+    driver = CodexDriver(artifact_root=tmp_path)
+    bounded = DriverExecutionRequest(
+        project=request(tmp_path).project,
+        task_id="task:bounded",
+        prompt="Do bounded work.",
+        allowed_paths=("src/example.py",),
+        timeout_seconds=30,
+        fresh_token_limit=20_000,
+        reasoning_effort="low",
+    )
+
+    command = driver.build_command(
+        bounded,
+        executable="/usr/local/bin/codex",
+        final_message_path=tmp_path / "final.md",
+    )
+
+    assert "--ignore-user-config" in command
+    assert command[command.index("--config") + 1] == 'model_reasoning_effort="low"'
+    assert command[-1] == "-"
+
+
 def test_streams_json_events_and_preserves_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -361,6 +385,85 @@ def test_streams_json_events_and_preserves_evidence(
     assert Path(result.events_path).is_file()
     assert any(event.event_type == "thread.started" for event in events)
     assert any(event.event_type == "run.completed" for event in events)
+
+
+def test_allows_final_turn_accounting_overage_after_process_completion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "empy_studio.drivers.codex.shutil.which",
+        lambda value: "/usr/local/bin/codex",
+    )
+
+    def process_factory(command: list[str], **kwargs: Any) -> FakeProcess:
+        del kwargs
+        final_path = Path(command[command.index("--output-last-message") + 1])
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        final_path.write_text("Stopped by budget", encoding="utf-8")
+        return FakeProcess(
+            stdout=(
+                '{"type":"thread.started","thread_id":"thread-budget"}\n'
+                '{"type":"turn.completed","usage":{"input_tokens":60,'
+                '"output_tokens":5,"cached_input_tokens":0,"total_tokens":65}}\n'
+            )
+        )
+
+    driver = CodexDriver(
+        artifact_root=tmp_path,
+        command_runner=ready_runner,
+        process_factory=process_factory,
+    )
+    bounded = replace(request(tmp_path), fresh_token_limit=50)
+    result = driver.execute_streaming(
+        bounded,
+        node_id="node-budget",
+        artifact_dir=tmp_path / "run" / "node-budget",
+    )
+
+    assert result.status == "completed"
+    assert result.error_code is None
+    assert result.usage is not None
+    assert result.usage.uncached_total == 65
+
+
+def test_stops_a_follow_up_turn_after_final_accounting_overage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "empy_studio.drivers.codex.shutil.which",
+        lambda value: "/usr/local/bin/codex",
+    )
+
+    def process_factory(command: list[str], **kwargs: Any) -> FakeProcess:
+        del kwargs
+        final_path = Path(command[command.index("--output-last-message") + 1])
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        final_path.write_text("Stopped during follow-up", encoding="utf-8")
+        return FakeProcess(
+            running=True,
+            stdout=(
+                '{"type":"turn.completed","usage":{"input_tokens":60,'
+                '"output_tokens":5,"cached_input_tokens":0,"total_tokens":65}}\n'
+                '{"type":"turn.started"}\n'
+                '{"type":"item.started"}\n'
+            )
+        )
+
+    driver = CodexDriver(
+        artifact_root=tmp_path,
+        command_runner=ready_runner,
+        process_factory=process_factory,
+    )
+    result = driver.execute_streaming(
+        replace(request(tmp_path), fresh_token_limit=50),
+        node_id="node-budget-follow-up",
+        artifact_dir=tmp_path / "run" / "node-budget-follow-up",
+    )
+
+    assert result.status == "failed"
+    assert result.error_code == "budget_exceeded"
 
 
 def test_streaming_succeeds_when_usage_is_absent(

@@ -66,6 +66,9 @@ class DriverExecutionRequest:
     prompt: str
     allowed_paths: tuple[str, ...]
     timeout_seconds: int
+    fresh_token_limit: int | None = None
+    reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
+    ignore_user_config: bool = True
 
     def validate(self) -> None:
         self.project.validate()
@@ -75,6 +78,10 @@ class DriverExecutionRequest:
             raise ValueError("prompt cannot be empty")
         if self.timeout_seconds < 1:
             raise ValueError("timeout_seconds must be positive")
+        if self.fresh_token_limit is not None and self.fresh_token_limit < 1:
+            raise ValueError("fresh_token_limit must be positive when provided")
+        if self.reasoning_effort not in {None, "none", "low", "medium", "high"}:
+            raise ValueError("unsupported reasoning_effort")
         for item in self.allowed_paths:
             path = Path(item)
             if path.is_absolute() or ".." in path.parts:

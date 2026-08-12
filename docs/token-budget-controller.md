@@ -4,8 +4,9 @@
 
 The controller is the provider-neutral budget boundary between visible Context
 Packs and agent dispatch. It provides deterministic preflight estimates and
-accounting guards; it is not a provider quota. The Codex driver separately
-records provider-reported usage when the CLI emits it.
+accounting guards. The Codex driver additionally enforces a per-node fresh
+token safety limit because the CLI does not expose a portable output-token
+flag.
 
 The controller makes four limits explicit before a run:
 
@@ -38,18 +39,19 @@ tokenizer. ASCII content uses a conservative four-characters-per-token
 estimate; non-ASCII content uses a two-characters-per-token estimate. The
 Project Brain and bounded Context Packs reduce the amount sent to an agent.
 
-After a Codex run, `TokenUsage` records input, output, cached-input, total,
-provider, and source fields from structured events. If a provider omits usage,
-Empy reports `not_reported` rather than turning an estimate into a false exact
-value. The local benchmark and provider usage are shown as separate signals.
+After a Codex run, `TokenUsage` records input, output, cached-input, fresh
+input, uncached total, total, provider, and source fields from structured
+events. If a provider omits usage, Empy reports `not_reported` rather than
+turning an estimate into a false exact value. The local benchmark and provider
+usage are shown as separate signals.
 
 ## Locking
 
 A budget starts as `draft`. The user can change the preset and recalculate it.
 Selecting **Lock Run Limits** freezes the budget. A run state cannot be created
-from an unlocked budget. Actual provider usage is evidence after the run; it
-does not silently rewrite the approved local estimate or pretend that estimate
-was a provider charge cap.
+from an unlocked budget. Actual provider usage is evidence after the run, and
+the driver applies a conservative fresh-token safety margin around the locked
+node allocation; it does not silently rewrite the approved local estimate.
 
 ## Loop prevention
 
