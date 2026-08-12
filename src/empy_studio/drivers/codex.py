@@ -998,6 +998,7 @@ class CodexDriver(BaseDriver):
 
         command.extend(
             [
+                "--ephemeral",
                 "--output-last-message",
                 str(final_message_path),
                 "-",

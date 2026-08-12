@@ -1487,8 +1487,9 @@ class EmpyDesktopShell:
         ttk.Label(
             self.page,
             text=(
-                "Provider-neutral estimates define hard limits for planning, "
-                "each agent step, retry attempts and handoffs."
+                "Provider-neutral estimates guide planning, each agent step, "
+                "retry attempts and handoffs. The provider reports actual usage "
+                "after execution."
             ),
             style="Body.TLabel",
             wraplength=800,
@@ -1498,7 +1499,7 @@ class EmpyDesktopShell:
         summary.pack(fill="x", pady=(0, 14))
         self._metadata_card(
             summary,
-            "Total hard limit",
+            "Total local estimate",
             f"{budget.total_limit_tokens:,} tokens",
         ).pack(side="left", fill="both", expand=True, padx=(0, 6))
         self._metadata_card(
@@ -1605,9 +1606,10 @@ class EmpyDesktopShell:
                     f"Handoffs: maximum {allocation.max_handoffs} · "
                     f"{allocation.handoff_tokens_per_event:,} tokens each · "
                     f"pool {allocation.handoff_limit_tokens:,}\n\n"
-                    f"STEP HARD LIMIT: {allocation.total_limit_tokens:,} tokens\n"
-                    "AUTO-STOP: exceeding the step, retry, handoff or total "
-                    "limit denies further usage."
+                    f"STEP LOCAL ESTIMATE: {allocation.total_limit_tokens:,} tokens\n"
+                    "Accounting guard: exceeding the step, retry, handoff or "
+                    "total estimate denies further internally recorded usage. "
+                    "The provider reports actual usage after execution."
                 ),
             )
             details.configure(state="disabled")

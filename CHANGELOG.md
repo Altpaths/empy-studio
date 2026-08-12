@@ -1,5 +1,19 @@
 ## [Unreleased]
 
+## [0.1.21] - 2026-08-12
+
+### Measured token and report correctness
+
+- Skip a separate Discovery provider call for low-risk tickets that already
+  name their exact files, while retaining Discovery for analysis and audit
+  requests.
+- Keep README and documentation context out of code-only writer and Quality
+  packs, but retain it when a ticket explicitly changes documentation.
+- Run Codex nodes ephemerally and clarify that local token estimates guide
+  accounting while provider-reported usage is the measured signal.
+- Require Quality agents to inspect the current working tree after upstream
+  changes so stale context cannot become a false residual-risk report.
+
 ## [0.1.20] - 2026-08-12
 
 ### Follow-up ticket baseline

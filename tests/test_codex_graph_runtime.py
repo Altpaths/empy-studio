@@ -135,6 +135,9 @@ def test_prompt_contains_bounded_context_and_safety_rules(tmp_path: Path) -> Non
     assert "Do not commit, push, merge, tag, publish" in prompt
     assert "Bounded context pack" in prompt
     assert "Verification handoff" in prompt
+    assert "Provider-neutral local estimate" in prompt
+    assert "Writing nodes must not spend provider time" in prompt
+    assert "current working tree and current file contents" in prompt
     assert str(node.token_limit) in prompt
 
 

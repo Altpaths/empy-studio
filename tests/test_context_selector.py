@@ -176,6 +176,85 @@ def test_relevance_prefers_task_scope_and_quality_files(tmp_path: Path) -> None:
     )
 
 
+def test_scoped_code_ticket_skips_discovery_and_repeated_documentation(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"name":"scoped-demo","scripts":{"test":"node tests/test_greeting.js"}}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "Project documentation that is not part of this code change.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "greeting.js").write_text(
+        "export const greeting = () => 'Hello';\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_greeting.js").write_text(
+        "// greeting test\n",
+        encoding="utf-8",
+    )
+
+    project = DefaultProjectService().detect(tmp_path)
+    task = ProductTask(
+        task_id="scoped-code-ticket",
+        project_root=str(tmp_path.resolve()),
+        kind="feature",
+        title="Change src/greeting.js and tests/test_greeting.js",
+        objective="Update the greeting implementation and its test.",
+        requirements=(
+            "Change src/greeting.js",
+            "Update tests/test_greeting.js",
+            "Run the project tests",
+        ),
+        constraints=("Do not change README.md or package.json",),
+        definition_of_done=("The greeting and test agree",),
+        status="ready_for_planning",
+    )
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+
+    assert "discovery" not in {step.step_id for step in plan.steps}
+    selection = build_context_selection(task=task, project=project, plan=plan)
+    for pack in selection.packs:
+        if pack.agent_role in {"backend", "quality"}:
+            assert "README.md" not in {item.relative_path for item in pack.files}
+
+
+def test_documentation_ticket_keeps_named_readme_in_writer_context(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"name":"docs-demo"}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text("Old note\n", encoding="utf-8")
+    project = DefaultProjectService().detect(tmp_path)
+    task = ProductTask(
+        task_id="readme-ticket",
+        project_root=str(tmp_path.resolve()),
+        kind="custom",
+        title="Update README.md",
+        objective="Add a short follow-up note to README.md.",
+        requirements=("Change README.md only",),
+        constraints=(),
+        definition_of_done=("The note is present",),
+        status="ready_for_planning",
+    )
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+    selection = build_context_selection(task=task, project=project, plan=plan)
+    backend = next(pack for pack in selection.packs if pack.agent_role == "backend")
+    assert "README.md" in {item.relative_path for item in backend.files}
+
+
 def test_symlink_is_never_followed(tmp_path: Path) -> None:
     task, project, plan = _approved_plan(tmp_path)
     outside = tmp_path.parent / "outside-context-secret.txt"

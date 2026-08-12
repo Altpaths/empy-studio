@@ -3,8 +3,9 @@
 ## Purpose
 
 The controller is the provider-neutral budget boundary between visible Context
-Packs and agent dispatch. It remains responsible for preflight limits; the
-Codex driver separately records provider-reported usage when the CLI emits it.
+Packs and agent dispatch. It provides deterministic preflight estimates and
+accounting guards; it is not a provider quota. The Codex driver separately
+records provider-reported usage when the CLI emits it.
 
 The controller makes four limits explicit before a run:
 
@@ -23,10 +24,12 @@ Empy provides three deterministic presets:
 | Standard | 5,000 | 5,000 | 2 × 2,000 | 2 × 800 | 2,000 |
 | Extended | 8,000 | 8,000 | 3 × 3,000 | 3 × 1,200 | 4,000 |
 
-The total hard limit is derived from the selected Context Pack, instruction
+The total local estimate is derived from the selected Context Pack, instruction
 estimate, response allowance, retry pool, handoff pool, planning allowance and
-reserve. A caller may also provide a smaller explicit `hard_total_limit`; Empy
-rejects a budget that cannot fit inside it.
+reserve. A caller may also provide a smaller explicit `hard_total_limit` for
+internal accounting; Empy rejects a budget that cannot fit inside it. The
+current Codex CLI driver does not expose a portable maximum-output option, so
+the actual provider total is measured after each node and shown separately.
 
 ## Token estimate and measured usage
 
@@ -45,7 +48,8 @@ value. The local benchmark and provider usage are shown as separate signals.
 A budget starts as `draft`. The user can change the preset and recalculate it.
 Selecting **Lock Run Limits** freezes the budget. A run state cannot be created
 from an unlocked budget. Actual provider usage is evidence after the run; it
-does not silently rewrite the approved hard limit.
+does not silently rewrite the approved local estimate or pretend that estimate
+was a provider charge cap.
 
 ## Loop prevention
 
@@ -84,6 +88,6 @@ Approved Plan
   → Lock Run Limits
 ```
 
-The panel exposes the total cap and the allocation for every planned step.
+The panel exposes the total local estimate and the allocation for every planned step.
 Ticket 9 does not dispatch agents. The locked budget becomes an input to Ticket
 10, Agent Dispatcher.

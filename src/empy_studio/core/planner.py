@@ -291,9 +291,59 @@ def _contains_any_term(text: str, terms: tuple[str, ...]) -> bool:
     )
 
 
+def _has_explicit_file_scope(text: str) -> bool:
+    """Detect a ticket that already names concrete files to change."""
+
+    return bool(
+        re.search(
+            r"(?:^|[\s(])(?:[\w.-]+/)+[\w./-]+\.[A-Za-z0-9_-]+\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:readme|package|composer|pyproject|cargo|go)\.[A-Za-z0-9_-]+\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _should_skip_discovery(
+    task: ProductTask,
+    risk: RiskLevel,
+    likely_paths: tuple[str, ...],
+) -> bool:
+    """Skip redundant discovery only for small, explicitly scoped tickets."""
+
+    text = " ".join(
+        (task.title, task.objective, *task.requirements)
+    ).casefold()
+    discovery_terms = (
+        "discover",
+        "inspect",
+        "understand",
+        "analy",
+        "audit",
+        "architecture",
+        "review",
+        "بررسی",
+        "تحلیل",
+        "ممیزی",
+        "معماری",
+        "شناخت",
+    )
+    return (
+        risk == "low"
+        and bool(likely_paths)
+        and _has_explicit_file_scope(text)
+        and not any(term in text for term in discovery_terms)
+    )
+
+
 def _roles(
     task: ProductTask,
     risk: RiskLevel,
+    *,
+    include_discovery: bool = True,
 ) -> tuple[AgentRole, ...]:
     text = " ".join(
         (
@@ -303,7 +353,7 @@ def _roles(
         )
     ).lower()
 
-    roles: list[AgentRole] = ["discovery"]
+    roles: list[AgentRole] = ["discovery"] if include_discovery else []
 
     if _contains_any_term(
         text,
@@ -391,26 +441,30 @@ def _build_steps(
     roles: tuple[AgentRole, ...],
     risk: RiskLevel,
     estimated_files: int,
+    *,
+    include_discovery: bool = True,
 ) -> tuple[PlanStep, ...]:
-    steps: list[PlanStep] = [
-        PlanStep(
-            step_id="discovery",
-            title="Discover relevant project scope",
-            objective=(
-                "Locate only the files and modules "
-                "required by this task."
-            ),
-            depends_on=(),
-            suggested_agent="discovery",
-            estimated_files=max(
-                1,
-                estimated_files // 2,
-            ),
-            risk="low",
+    steps: list[PlanStep] = []
+    if include_discovery:
+        steps.append(
+            PlanStep(
+                step_id="discovery",
+                title="Discover relevant project scope",
+                objective=(
+                    "Locate only the files and modules "
+                    "required by this task."
+                ),
+                depends_on=(),
+                suggested_agent="discovery",
+                estimated_files=max(
+                    1,
+                    estimated_files // 2,
+                ),
+                risk="low",
+            )
         )
-    ]
 
-    previous = "discovery"
+    previous: str | None = "discovery" if include_discovery else None
     implementation_roles = tuple(
         role
         for role in roles
@@ -422,6 +476,10 @@ def _build_steps(
 
     for role in implementation_roles:
         step_id = f"implement-{role}"
+        if previous is None:
+            step_dependencies: tuple[str, ...] = ()
+        else:
+            step_dependencies = (previous,)
         steps.append(
             PlanStep(
                 step_id=step_id,
@@ -432,7 +490,7 @@ def _build_steps(
                     "Apply only the approved "
                     f"{role} changes."
                 ),
-                depends_on=(previous,),
+                depends_on=step_dependencies,
                 suggested_agent=role,
                 estimated_files=max(
                     1,
@@ -447,6 +505,10 @@ def _build_steps(
         )
         previous = step_id
 
+    if previous is None:
+        quality_dependencies: tuple[str, ...] = ()
+    else:
+        quality_dependencies = (previous,)
     steps.append(
         PlanStep(
             step_id="quality",
@@ -455,7 +517,7 @@ def _build_steps(
                 "Run relevant checks and collect "
                 "evidence without publishing."
             ),
-            depends_on=(previous,),
+            depends_on=quality_dependencies,
             suggested_agent="quality",
             estimated_files=0,
             risk="low",
@@ -492,7 +554,16 @@ def generate_execution_plan(
         project,
     )
     risk = _risk(task, likely_paths)
-    roles = _roles(task, risk)
+    include_discovery = not _should_skip_discovery(
+        task,
+        risk,
+        likely_paths,
+    )
+    roles = _roles(
+        task,
+        risk,
+        include_discovery=include_discovery,
+    )
 
     base_files = (
         len(task.requirements)
@@ -526,6 +597,7 @@ def generate_execution_plan(
         roles,
         risk,
         estimated_files,
+        include_discovery=include_discovery,
     )
 
     fingerprint = _fingerprint_task(task)

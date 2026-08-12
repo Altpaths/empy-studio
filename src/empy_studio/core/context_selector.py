@@ -174,6 +174,12 @@ ROLE_KEYWORDS: Final[dict[str, tuple[str, ...]]] = {
 TEST_PATH_PARTS: Final[frozenset[str]] = frozenset(
     {"test", "tests", "spec", "specs", "__tests__", "آزمون", "تست"}
 )
+DOCUMENTATION_PATH_PARTS: Final[frozenset[str]] = frozenset(
+    {"docs", "documentation", "مستندات", "راهنما"}
+)
+DOCUMENTATION_SUFFIXES: Final[frozenset[str]] = frozenset(
+    {".md", ".mdx", ".rst", ".adoc"}
+)
 TEST_CHANGE_ACTIONS: Final[frozenset[str]] = frozenset(
     {
         "add",
@@ -394,6 +400,32 @@ def _task_requests_test_changes(task_text: str) -> bool:
         if any(item in TEST_PATH_PARTS for item in window):
             return True
     return False
+
+
+def _task_requests_documentation_changes(task_text: str) -> bool:
+    """Return whether documentation is part of the requested change.
+
+    README and documentation files are useful for discovery, but passing them
+    to every implementation and quality node adds repeated context without
+    helping a code-only ticket.  Keep them available when the ticket actually
+    asks for documentation, notes, or a named README/Markdown file.
+    """
+
+    normalised = task_text.casefold().replace("\u200c", "")
+    documentation_terms = (
+        "readme",
+        "documentation",
+        "document",
+        "markdown",
+        "docs",
+        "changelog",
+        "release notes",
+        "note",
+        "مستند",
+        "راهنما",
+        "یادداشت",
+    )
+    return any(term in normalised for term in documentation_terms)
 
 
 def _normalise_relative(path: Path, root: Path) -> str:
@@ -655,6 +687,18 @@ def _score_candidate(
     relative = candidate.relative_path
     path_tokens = _tokens(relative.replace("/", " ").replace(".", " "))
     role = step.suggested_agent
+    path_parts = {part.casefold() for part in Path(relative).parts[:-1]}
+    documentation_path = (
+        Path(relative).suffix.casefold() in DOCUMENTATION_SUFFIXES
+        or bool(path_parts & DOCUMENTATION_PATH_PARTS)
+        or Path(relative).name.casefold() in {"readme", "readme.txt"}
+    )
+    if (
+        documentation_path
+        and role not in {"discovery", "release"}
+        and not _task_requests_documentation_changes(task_text)
+    ):
+        return 0, ()
     score = 0
     reasons: list[str] = []
 
