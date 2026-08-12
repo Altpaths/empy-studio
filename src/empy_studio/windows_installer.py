@@ -259,11 +259,7 @@ function Install-Package {{
             }}
         }}
         $existingPython = Join-Path $VersionRoot "venv\\Scripts\\python.exe"
-        if (
-            $null -ne $existingState
-            -and $existingState.package_sha256 -eq $PackageSha256
-            -and (Test-Path -LiteralPath $existingPython -PathType Leaf)
-        ) {{
+        if ($null -ne $existingState -and $existingState.package_sha256 -eq $PackageSha256 -and (Test-Path -LiteralPath $existingPython -PathType Leaf)) {{
             Write-Host "$Product $Version is already installed and verified."
             Write-Host "Command: $WrapperPath"
             return
@@ -328,10 +324,7 @@ function Install-Package {{
             $stagedRoot `
             "venv\\Scripts\\$Entrypoint.cmd"
 
-        if (
-            -not (Test-Path -LiteralPath $entrypointExe)
-            -and -not (Test-Path -LiteralPath $entrypointCmd)
-        ) {{
+        if ((-not (Test-Path -LiteralPath $entrypointExe)) -and (-not (Test-Path -LiteralPath $entrypointCmd))) {{
             Fail "Installed package did not provide entrypoint"
         }}
 
