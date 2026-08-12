@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+## [0.1.24] - 2026-08-12
+
+### Verification handoff correctness
+
+- Make Agent reports match the actual graph by naming deterministic
+  verification when no provider Quality node is planned.
+- Prevent final Agent messages from claiming that a skipped Quality node will
+  run checks.
+
 ## [0.1.23] - 2026-08-12
 
 ### Enforced token budgets and adaptive context

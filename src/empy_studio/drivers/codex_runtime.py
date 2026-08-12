@@ -195,6 +195,17 @@ def build_codex_node_prompt(
                 f"```text\n{item.content.rstrip()}\n```"
             )
     context = "\n\n".join(context_sections) or "No file content was selected for this node."
+    provider_quality_planned = any(
+        item.agent_role == "quality" for item in graph.nodes
+    )
+    verification_handoff = (
+        "A provider Quality node is planned after implementation; it will inspect "
+        "the current working tree when scheduled."
+        if provider_quality_planned
+        else
+        "No provider Quality node is planned for this graph; Empy's deterministic "
+        "verification pipeline will decide and run the applicable checks."
+    )
     task_contract = (
         "## Approved user task\n"
         f"Task ID: {task.task_id}\n"
@@ -243,8 +254,11 @@ def build_codex_node_prompt(
         "## Verification handoff\n"
         "Empy will run project-aware, allowlisted verification after the Agent graph. "
         "Writing nodes must not spend provider time running tests, builds, lint, or "
-        "type checks; record those checks for the Quality node unless verification "
-        "itself is the approved objective. "
+        "type checks; record those checks for Empy's verification pipeline unless "
+        "verification itself is the approved objective. "
+        f"{verification_handoff} "
+        "Do not claim that a provider Quality node will run checks when one is not "
+        "planned. "
         "Quality nodes must inspect the current working tree and current file contents "
         "after upstream nodes finish; the bounded context pack is only a hint and may "
         "be stale. Do not report a remaining risk from the initial context unless it "
