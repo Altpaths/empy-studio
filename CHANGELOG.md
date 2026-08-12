@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+## [0.1.15] - 2026-08-12
+
+### Reliable ticket submission
+
+- Preserve the ticket draft while the web interface refreshes after an error
+  or language/status update.
+- Read and persist the current ticket input before submitting the plan so a
+  visible request cannot be lost between the editor and the API call.
+- Keep drafts scoped to the active project and clear them when starting over.
+
 ## [0.1.14] - 2026-08-11
 
 ### Persistent import review

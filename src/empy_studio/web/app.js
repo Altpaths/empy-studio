@@ -2,6 +2,8 @@ const token = new URLSearchParams(location.search).get("token") || "";
 let state = null;
 let language = "fa";
 let poller = null;
+let taskDraft = "";
+let taskDraftProjectId = null;
 
 const t = {
   fa: {
@@ -128,7 +130,9 @@ function renderImportReport() {
 }
 function renderTask() {
   const tasks = state.tasks || [];
-  return `<div class="card"><div class="row"><div><h1>${text().tasks}</h1><p class="muted">${escapeHtml(state.active_project?.name || "")}</p></div><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div><label class="field-label" for="tasks">${text().tasks}</label><textarea id="tasks" aria-label="${text().tasks}" placeholder="${text().taskHint}"></textarea><div class="actions"><button type="button" class="primary" data-action="build-plan">${text().plan}</button></div><h2>${language === "fa" ? "تاریخچه تیکت‌ها" : "Ticket history"}</h2><div class="task-list">${tasks.length ? tasks.map(task => `<button type="button" class="task ${task.id === state.active_task_id ? "active" : ""}" data-action="select-task" data-task-id="${escapeHtml(task.id)}"><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.status)} · ${text().resume}</small></button>`).join("") : `<p class="muted">${text().noTask}</p>`}</div></div>`;
+  const projectId = state.active_project?.id || null;
+  const draft = taskDraftProjectId === projectId ? taskDraft : "";
+  return `<div class="card"><div class="row"><div><h1>${text().tasks}</h1><p class="muted">${escapeHtml(state.active_project?.name || "")}</p></div><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div><label class="field-label" for="tasks">${text().tasks}</label><textarea id="tasks" aria-label="${text().tasks}" placeholder="${text().taskHint}">${escapeHtml(draft)}</textarea><div class="actions"><button type="button" class="primary" data-action="build-plan">${text().plan}</button></div><h2>${language === "fa" ? "تاریخچه تیکت‌ها" : "Ticket history"}</h2><div class="task-list">${tasks.length ? tasks.map(task => `<button type="button" class="task ${task.id === state.active_task_id ? "active" : ""}" data-action="select-task" data-task-id="${escapeHtml(task.id)}"><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.status)} · ${text().resume}</small></button>`).join("") : `<p class="muted">${text().noTask}</p>`}</div></div>`;
 }
 function renderPlan() {
   const plan = state.plan || {}; const nodes = plan.nodes || [];
@@ -261,7 +265,12 @@ async function handleAction(action, target) {
     case "select-project": await runAction(() => api("/api/project/select", {project_id: target.dataset.projectId})); break;
     case "select-task": await runAction(() => api("/api/task/select", {task_id: target.dataset.taskId})); break;
     case "build-plan": {
-      const tasks = document.querySelector("#tasks")?.value.trim() || "";
+      const field = document.querySelector("#tasks");
+      if (field) {
+        taskDraft = field.value;
+        taskDraftProjectId = state?.active_project?.id || null;
+      }
+      const tasks = (taskDraftProjectId === (state?.active_project?.id || null) ? taskDraft : "").trim();
       if (!tasks) { state = {...state, error: text().fieldRequired}; render(); break; }
       await runAction(() => api("/api/plan", {tasks}));
       break;
@@ -272,7 +281,7 @@ async function handleAction(action, target) {
     case "resume-ticket": await runAction(() => api("/api/resume-ticket", {})); break;
     case "decide": await runAction(() => api("/api/decision", {decision: target.dataset.decision})); break;
     case "export-project": await runAction(() => api("/api/export", {})); break;
-    case "reset-project": await runAction(() => api("/api/reset", {})); break;
+    case "reset-project": taskDraft = ""; taskDraftProjectId = null; await runAction(() => api("/api/reset", {})); break;
     case "go-task": state.phase = "task"; render(); break;
     default: break;
   }
@@ -282,6 +291,12 @@ document.querySelector("#screen").addEventListener("click", event => {
   if (!target || target.disabled) return;
   event.preventDefault();
   void handleAction(target.dataset.action, target);
+});
+document.querySelector("#screen").addEventListener("input", event => {
+  const target = event.target;
+  if (target?.id !== "tasks") return;
+  taskDraft = target.value;
+  taskDraftProjectId = state?.active_project?.id || null;
 });
 document.querySelector("#language").addEventListener("click", () => {
   language = language === "fa" ? "en" : "fa";

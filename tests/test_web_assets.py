@@ -32,6 +32,10 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert 'state.run_status === "completed"' in app_js
     assert 'data-action="choose-zip"' in app_js
     assert 'data-action="refresh-engine"' in app_js
+    assert "let taskDraft = \"\"" in app_js
+    assert 'addEventListener("input"' in app_js
+    assert "taskDraftProjectId" in app_js
+    assert "const field = document.querySelector(\"#tasks\")" in app_js
     index = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert 'id="folder-upload"' in index
     assert 'id="zip-upload"' in index
