@@ -50,7 +50,9 @@ def test_installer_uses_secure_download_and_hash() -> None:
     assert "SecurityProtocol" in script
     assert "Tls12" in script
     assert "Invoke-WebRequest" in script
-    assert "Get-FileHash" in script
+    assert "Get-PackageSha256" in script
+    assert "System.Security.Cryptography.SHA256" in script
+    assert "Get-FileHash" not in script
     assert "Package SHA-256 mismatch" in script
 
 

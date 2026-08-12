@@ -221,6 +221,22 @@ function Download-Package {{
     }}
 }}
 
+function Get-PackageSha256 {{
+    param([string]$Path)
+
+    $algorithm = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {{
+        return (
+            [System.BitConverter]::ToString($algorithm.ComputeHash($stream))
+        ).Replace("-", "").ToLowerInvariant()
+    }}
+    finally {{
+        $stream.Dispose()
+        $algorithm.Dispose()
+    }}
+}}
+
 function Write-JsonAtomic {{
     param(
         [string]$Path,
@@ -281,9 +297,7 @@ function Install-Package {{
 
         Download-Package $packagePath
 
-        $actualSha256 = (
-            Get-FileHash -LiteralPath $packagePath -Algorithm SHA256
-        ).Hash.ToLowerInvariant()
+        $actualSha256 = Get-PackageSha256 -Path $packagePath
 
         if ($actualSha256 -ne $PackageSha256) {{
             Fail "Package SHA-256 mismatch"
