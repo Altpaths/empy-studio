@@ -1,5 +1,25 @@
 ## [Unreleased]
 
+## [0.1.27] - 2026-08-13
+
+### Actionable verification recovery
+
+- Persist the exact failed check, diagnostic, return code, evidence path, and
+  required action when a run cannot pass verification.
+- Keep the failure explanation visible when returning to a ticket and prefill a
+  corrective ticket instead of discarding the root cause.
+- Add bilingual guidance for missing dependencies, missing files or routes,
+  invalid verification contracts, permissions, and timeouts.
+- Do not treat a changed ticket or placeholder file as a verification fix; the
+  same checks must pass with fresh evidence.
+
+### macOS distribution status
+
+The macOS app archives in this release remain ad-hoc signed and are not
+Developer ID signed or notarized. macOS Gatekeeper may show a warning on first
+launch. This is an intentional distribution limitation and does not affect
+Python, Linux, or Windows use.
+
 ## [0.1.26] - 2026-08-12
 
 ### Release hardening
