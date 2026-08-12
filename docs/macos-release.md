@@ -23,6 +23,13 @@ run only from `workflow_dispatch` with `publish=true` and a protected
 `release` environment containing the Apple credentials. Local builds never
 pretend to have passed those gates.
 
+An existing candidate can be finalized without moving its tag by running the
+`Finalize macOS Release` workflow from `main`, selecting the candidate tag,
+and setting `promote_latest=true`. That workflow downloads the candidate app,
+signs and notarizes both architectures, rebuilds the manifest, replaces the
+candidate assets, and marks the existing release as Latest only after the
+notarization gate passes.
+
 ## Failure policy
 
 - Missing PyInstaller fails the build.
