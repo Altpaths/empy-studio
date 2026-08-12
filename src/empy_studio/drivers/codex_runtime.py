@@ -179,11 +179,21 @@ def build_codex_node_prompt(
     for item in pack.files:
         mode = "OWNED" if item.relative_path in node.owned_files else "READ ONLY"
         truncation = " (truncated)" if item.truncated else ""
-        context_sections.append(
-            f"## {item.relative_path} [{mode}]{truncation}\n"
-            f"Score: {item.score}; reasons: {', '.join(item.reasons)}\n\n"
-            f"```text\n{item.content.rstrip()}\n```"
-    )
+        if node.agent_role == "quality":
+            # Quality runs after writers. Repeating the complete source pack
+            # here makes the provider re-process stale content; the quality
+            # node must inspect the current worktree and deterministic checks.
+            context_sections.append(
+                f"## {item.relative_path} [{mode}]{truncation}\n"
+                f"SHA-256: {item.sha256}; selected bytes: {item.included_bytes}\n"
+                f"Reasons: {', '.join(item.reasons)}"
+            )
+        else:
+            context_sections.append(
+                f"## {item.relative_path} [{mode}]{truncation}\n"
+                f"Score: {item.score}; reasons: {', '.join(item.reasons)}\n\n"
+                f"```text\n{item.content.rstrip()}\n```"
+            )
     context = "\n\n".join(context_sections) or "No file content was selected for this node."
     task_contract = (
         "## Approved user task\n"
@@ -293,6 +303,20 @@ class CodexGraphRuntime:
             prompt=prompt,
             allowed_paths=node.owned_files,
             timeout_seconds=self.timeout_seconds,
+            # Provider usage includes repeated tool turns that the local
+            # estimate cannot predict. Keep a bounded safety margin while
+            # enforcing fresh (non-cache) work rather than penalising cache
+            # reads as if they were new reasoning. Small, explicitly scoped
+            # implementation nodes disable extra reasoning; higher-budget or
+            # sensitive roles retain low reasoning for safer judgment.
+            fresh_token_limit=max(16_000, node.token_limit * 2),
+            reasoning_effort=(
+                "none"
+                if node.agent_role in {"frontend", "backend"}
+                and node.token_limit <= 8_000
+                else "low"
+            ),
+            ignore_user_config=True,
         )
         before_snapshot = self._git_snapshot(project.root) if audit_snapshot else None
         node_result = self.driver.execute_streaming(

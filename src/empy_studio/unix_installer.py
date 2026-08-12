@@ -299,6 +299,35 @@ install_package() {{
     umask 077
     mkdir -p "$INSTALL_ROOT/versions" "$BIN_DIR"
 
+    # Re-running the exact release installer is safe and idempotent.  A
+    # successful first install should not turn a second click into an opaque
+    # failure after the package has already been verified.
+    if [ -d "$VERSION_ROOT" ]; then
+        if [ -f "$STATE_FILE" ] && [ -x "$VERSION_ROOT/venv/bin/python" ]; then
+            recorded_sha256="$($PYTHON - "$STATE_FILE" <<'PY'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        value = json.load(handle)
+except (OSError, ValueError, TypeError):
+    raise SystemExit(1)
+digest = value.get("package_sha256")
+if not isinstance(digest, str):
+    raise SystemExit(1)
+print(digest)
+PY
+            )" || recorded_sha256=""
+            if [ "$recorded_sha256" = "$PACKAGE_SHA256" ]; then
+                printf '%s %s is already installed and verified.\n' "$PRODUCT" "$VERSION"
+                printf 'Command: %s\n' "$WRAPPER_PATH"
+                return
+            fi
+        fi
+        fail "Version $VERSION is already installed with a different or incomplete package; remove it before retrying"
+    fi
+
     temporary_root="$(mktemp -d "${{TMPDIR:-/tmp}}/empy-install.XXXXXX")"
     trap 'rm -rf "$temporary_root"' EXIT HUP INT TERM
 
@@ -323,9 +352,6 @@ import importlib
 import sys
 importlib.import_module(sys.argv[1])
 PY
-
-    [ ! -e "$VERSION_ROOT" ] \
-        || fail "Version is already installed: $VERSION"
 
     mv "$staged_root" "$VERSION_ROOT"
 

@@ -178,6 +178,8 @@ def _usage_summary(
         "input_tokens": usage.input,
         "output_tokens": usage.output,
         "cached_input_tokens": usage.cached,
+        "fresh_input_tokens": usage.fresh_input,
+        "uncached_total_tokens": usage.uncached_total,
         "total_tokens": usage.total,
         "estimated_tokens": estimated_tokens,
         "available": usage.total > 0,

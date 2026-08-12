@@ -63,6 +63,7 @@ CodexErrorCode = Literal[
     "cancelled",
     "dirty_worktree",
     "scope_violation",
+    "budget_exceeded",
 ]
 CodexEventLevel = Literal["info", "warning", "error"]
 
@@ -708,10 +709,14 @@ class CodexDriver(BaseDriver):
         stderr_lines: list[str] = []
         thread_id: str | None = None
         parse_error: str | None = None
+        budget_exceeded = threading.Event()
+        budget_pending_after_turn = threading.Event()
+        budget_grace_deadline: float | None = None
+        budget_warning_emitted = False
         event_lock = threading.Lock()
 
         def read_stdout(stream: IO[str]) -> None:
-            nonlocal thread_id, parse_error
+            nonlocal thread_id, parse_error, budget_grace_deadline, budget_warning_emitted
             with events_path.open("w", encoding="utf-8") as event_file:
                 for raw_line in stream:
                     event_file.write(raw_line)
@@ -737,6 +742,57 @@ class CodexDriver(BaseDriver):
                     event = cast(dict[str, object], value)
                     with event_lock:
                         events.append(event)
+                    event_name = str(event.get("type", ""))
+                    if event_name == "turn.started":
+                        budget_pending_after_turn.clear()
+                        budget_grace_deadline = None
+                    if request.fresh_token_limit is not None:
+                        usage = TokenUsage.aggregate(
+                            (
+                                TokenUsage.extract_from_event(
+                                    item,
+                                    default_provider=self.provider_id,
+                                )
+                                for item in events
+                            ),
+                            provider=self.provider_id,
+                        )
+                        if usage is not None and usage.uncached_total > request.fresh_token_limit:
+                            if event_name == "turn.completed":
+                                # A provider reports the completed turn's
+                                # final accounting before its process exits.
+                                # Do not turn a completed implementation into
+                                # a false failure; allow a short grace period
+                                # for the process to close, while still
+                                # stopping a follow-up turn or a runaway host.
+                                budget_pending_after_turn.set()
+                                budget_grace_deadline = self.monotonic() + 5.0
+                                if not budget_warning_emitted:
+                                    budget_warning_emitted = True
+                                    self._emit(
+                                        on_progress,
+                                        level="warning",
+                                        event_type="run.budget_warning",
+                                        message=(
+                                            "Codex reached Empy's fresh-token "
+                                            f"limit ({request.fresh_token_limit}) "
+                                            "in final turn accounting; completion is being allowed."
+                                        ),
+                                        node_id=node_id,
+                                    )
+                            elif not budget_pending_after_turn.is_set():
+                                budget_exceeded.set()
+                                self._emit(
+                                    on_progress,
+                                    level="error",
+                                    event_type="run.budget_exceeded",
+                                    message=(
+                                        "Codex exceeded Empy's fresh-token limit "
+                                        f"({request.fresh_token_limit}) during an active turn."
+                                    ),
+                                    node_id=node_id,
+                                )
+                                self._terminate_process(process)
                     candidate = self._thread_id_from_event(event)
                     if candidate is not None:
                         thread_id = candidate
@@ -812,6 +868,19 @@ class CodexDriver(BaseDriver):
                 terminal_status = "timed_out"
                 self._terminate_process(process)
                 break
+            if budget_exceeded.is_set():
+                terminal_status = "failed"
+                self._terminate_process(process)
+                break
+            if (
+                budget_pending_after_turn.is_set()
+                and budget_grace_deadline is not None
+                and self.monotonic() >= budget_grace_deadline
+            ):
+                terminal_status = "failed"
+                budget_exceeded.set()
+                self._terminate_process(process)
+                break
             self.sleep(0.05)
 
         try:
@@ -884,6 +953,29 @@ class CodexDriver(BaseDriver):
                 return_code=return_code,
                 summary=final_message or "Codex execution timed out.",
                 error_code="timeout",
+                error_message=message,
+                thread_id=thread_id,
+                event_count=len(events),
+                changed_files=changed_files,
+                usage=usage,
+            )
+
+        if budget_exceeded.is_set():
+            self._status = "failed"
+            limit = request.fresh_token_limit or 0
+            message = (
+                "Codex exceeded Empy's fresh-token limit of "
+                f"{limit} tokens; the node was stopped before it could pass."
+            )
+            return self._terminal_result(
+                request=request,
+                node_id=node_id,
+                artifact_dir=run_dir,
+                status="failed",
+                started_at=started_at,
+                return_code=return_code,
+                summary=final_message or "Codex execution exceeded its token budget.",
+                error_code="budget_exceeded",
                 error_message=message,
                 thread_id=thread_id,
                 event_count=len(events),
@@ -1001,9 +1093,18 @@ class CodexDriver(BaseDriver):
                 "--ephemeral",
                 "--output-last-message",
                 str(final_message_path),
-                "-",
             ]
         )
+        if request.ignore_user_config:
+            command.append("--ignore-user-config")
+        if request.reasoning_effort is not None:
+            command.extend(
+                [
+                    "--config",
+                    f'model_reasoning_effort="{request.reasoning_effort}"',
+                ]
+            )
+        command.append("-")
         return command
 
     @staticmethod

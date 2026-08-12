@@ -344,6 +344,7 @@ def _roles(
     risk: RiskLevel,
     *,
     include_discovery: bool = True,
+    include_quality: bool = True,
 ) -> tuple[AgentRole, ...]:
     text = " ".join(
         (
@@ -432,8 +433,43 @@ def _roles(
     ):
         roles.append("backend")
 
-    roles.append("quality")
+    if include_quality:
+        roles.append("quality")
     return tuple(dict.fromkeys(roles))
+
+
+def _has_deterministic_verification(project: ProjectDetection) -> bool:
+    """Detect whether Empy can verify the project without a quality Agent."""
+
+    root = project.effective_verification_root
+    if project.descriptor.project_type == "node":
+        try:
+            value = json.loads((root / "package.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        scripts = value.get("scripts", {}) if isinstance(value, dict) else {}
+        return isinstance(scripts, dict) and any(
+            name in scripts for name in ("test", "build", "lint")
+        )
+    if project.descriptor.project_type == "python":
+        return True
+    if project.descriptor.project_type in {"php", "laravel", "rust", "go"}:
+        return True
+    return (root / ".empy" / "verification.json").is_file()
+
+
+def _should_skip_provider_quality(
+    task: ProductTask,
+    project: ProjectDetection,
+    risk: RiskLevel,
+) -> bool:
+    text = " ".join((task.title, task.objective, *task.requirements))
+    return (
+        risk == "low"
+        and _has_explicit_file_scope(text)
+        and task.kind in {"bug_fix", "feature", "ui_improvement", "custom"}
+        and _has_deterministic_verification(project)
+    )
 
 
 def _build_steps(
@@ -443,6 +479,7 @@ def _build_steps(
     estimated_files: int,
     *,
     include_discovery: bool = True,
+    include_quality: bool = True,
 ) -> tuple[PlanStep, ...]:
     steps: list[PlanStep] = []
     if include_discovery:
@@ -505,24 +542,25 @@ def _build_steps(
         )
         previous = step_id
 
-    if previous is None:
-        quality_dependencies: tuple[str, ...] = ()
-    else:
-        quality_dependencies = (previous,)
-    steps.append(
-        PlanStep(
-            step_id="quality",
-            title="Verify requested work",
-            objective=(
-                "Run relevant checks and collect "
-                "evidence without publishing."
-            ),
-            depends_on=quality_dependencies,
-            suggested_agent="quality",
-            estimated_files=0,
-            risk="low",
+    if include_quality:
+        if previous is None:
+            quality_dependencies: tuple[str, ...] = ()
+        else:
+            quality_dependencies = (previous,)
+        steps.append(
+            PlanStep(
+                step_id="quality",
+                title="Verify requested work",
+                objective=(
+                    "Run relevant checks and collect "
+                    "evidence without publishing."
+                ),
+                depends_on=quality_dependencies,
+                suggested_agent="quality",
+                estimated_files=0,
+                risk="low",
+            )
         )
-    )
     return tuple(steps)
 
 
@@ -559,10 +597,12 @@ def generate_execution_plan(
         risk,
         likely_paths,
     )
+    include_quality = not _should_skip_provider_quality(task, project, risk)
     roles = _roles(
         task,
         risk,
         include_discovery=include_discovery,
+        include_quality=include_quality,
     )
 
     base_files = (
@@ -598,6 +638,7 @@ def generate_execution_plan(
         risk,
         estimated_files,
         include_discovery=include_discovery,
+        include_quality=include_quality,
     )
 
     fingerprint = _fingerprint_task(task)
@@ -623,8 +664,12 @@ def generate_execution_plan(
         created_at=_utc_now(),
         approved_at=None,
         summary=(
-            f"{len(steps)} planned steps "
-            f"using {len(roles)} suggested roles"
+            f"{len(steps)} planned steps using {len(roles)} suggested roles"
+            + (
+                "; deterministic Verification replaces a redundant Provider quality node"
+                if not include_quality
+                else ""
+            )
         ),
         risk=risk,
         estimated_files=estimated_files,

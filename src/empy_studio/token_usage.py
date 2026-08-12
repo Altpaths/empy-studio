@@ -65,6 +65,18 @@ class TokenUsage:
     def total_tokens(self) -> int:
         return self.total
 
+    @property
+    def fresh_input(self) -> int:
+        """Input tokens that were not reported as provider-cache reads."""
+
+        return max(0, self.input - self.cached)
+
+    @property
+    def uncached_total(self) -> int:
+        """A conservative amount of newly processed provider work."""
+
+        return self.fresh_input + self.output
+
     def __post_init__(self) -> None:
         self.validate()
 
@@ -87,7 +99,10 @@ class TokenUsage:
             raise ValueError("token usage provider cannot be blank")
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        value = asdict(self)
+        value["fresh_input"] = self.fresh_input
+        value["uncached_total"] = self.uncached_total
+        return value
 
     @classmethod
     def from_dict(cls, value: Mapping[str, object]) -> TokenUsage:

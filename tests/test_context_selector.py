@@ -220,10 +220,13 @@ def test_scoped_code_ticket_skips_discovery_and_repeated_documentation(
     )
 
     assert "discovery" not in {step.step_id for step in plan.steps}
+    assert "quality" not in {step.step_id for step in plan.steps}
     selection = build_context_selection(task=task, project=project, plan=plan)
+    named = {"src/greeting.js", "tests/test_greeting.js"}
     for pack in selection.packs:
         if pack.agent_role in {"backend", "quality"}:
             assert "README.md" not in {item.relative_path for item in pack.files}
+            assert {item.relative_path for item in pack.files} <= named
 
 
 def test_documentation_ticket_keeps_named_readme_in_writer_context(

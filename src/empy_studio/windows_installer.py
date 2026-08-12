@@ -250,7 +250,25 @@ function Install-Package {{
         -Force | Out-Null
 
     if (Test-Path -LiteralPath $VersionRoot) {{
-        Fail "Version is already installed: $Version"
+        $existingState = $null
+        if (Test-Path -LiteralPath $StateFile -PathType Leaf) {{
+            try {{
+                $existingState = Get-Content -LiteralPath $StateFile -Raw | ConvertFrom-Json
+            }} catch {{
+                $existingState = $null
+            }}
+        }}
+        $existingPython = Join-Path $VersionRoot "venv\\Scripts\\python.exe"
+        if (
+            $null -ne $existingState
+            -and $existingState.package_sha256 -eq $PackageSha256
+            -and (Test-Path -LiteralPath $existingPython -PathType Leaf)
+        ) {{
+            Write-Host "$Product $Version is already installed and verified."
+            Write-Host "Command: $WrapperPath"
+            return
+        }}
+        Fail "Version $Version is already installed with a different or incomplete package; remove it before retrying"
     }}
 
     $temporaryRoot = Join-Path `

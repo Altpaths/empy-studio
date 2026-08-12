@@ -11,7 +11,10 @@ Build a visible, bounded context pack for every approved plan step without sendi
 3. `Context Selector` scans project metadata with a hard candidate limit.
 4. Sensitive paths, dependency directories, symlinks, binary files, and oversized files are excluded.
 5. Remaining files receive deterministic relevance scores from task terms, approved likely paths, project markers, and the planned agent role.
-6. Each plan step receives its own bounded context pack.
+6. A ticket that names existing files gets an exact-file context pack for its
+   writing and quality nodes; a misspelled or ambiguous path falls back to
+   normal relevance discovery.
+7. Each plan step receives its own bounded context pack.
 7. The Desktop UI exposes selected file paths, scores, reasons, hashes, truncation state, and included source content.
 
 ## Bounded defaults
@@ -22,7 +25,9 @@ Build a visible, bounded context pack for every approved plan step without sendi
 - Maximum bytes per pack: 192 KiB
 - Maximum candidate file size: 1 MiB
 
-These are context-selection limits only. Token budgets and retry limits remain Ticket 9.
+These are context-selection limits. Provider nodes also receive a compact
+quality manifest instead of a repeated source pack, and token budgets/retry
+limits remain enforced by the driver and Ticket 9 controller.
 
 ## Security rules
 

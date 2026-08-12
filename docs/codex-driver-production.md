@@ -39,6 +39,12 @@ Each Agent Run Graph node receives:
 Empy starts `codex exec` with JSONL output, passes the prompt through standard
 input, records the final agent message separately, and selects either
 `workspace-write` or `read-only` sandbox mode from the node ownership contract.
+Small, explicitly scoped implementation nodes disable extra reasoning effort;
+higher-budget or sensitive nodes use low reasoning. All graph nodes ignore
+unrelated user config and carry an enforceable fresh-token safety limit. The
+driver stops an active node when structured usage exceeds that limit and
+reports `budget_exceeded`; final-turn accounting is recorded as a warning so a
+completed implementation is not falsely marked failed.
 The runtime does not ask Codex to commit, push, merge, tag, publish, or modify
 Git remotes.
 
@@ -74,6 +80,8 @@ errors.
 - default node timeout: 1,800 seconds;
 - explicit cancellation from the desktop;
 - process-group termination on POSIX systems;
+- fresh-token limit enforcement based on provider-reported input/output usage;
+- separate total, fresh-input, cached-input, and output usage reporting;
 - remaining graph nodes are skipped after failure, cancellation, timeout, or a
   scope violation;
 - only one active Codex graph run per desktop controller.

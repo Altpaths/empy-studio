@@ -428,6 +428,26 @@ def _task_requests_documentation_changes(task_text: str) -> bool:
     return any(term in normalised for term in documentation_terms)
 
 
+def _explicit_task_paths(task_text: str) -> frozenset[str]:
+    """Extract concrete project-relative files named by a ticket.
+
+    This is deliberately conservative: only path-shaped values with a file
+    extension are treated as scope. If a named path does not exist, normal
+    relevance discovery remains available so a misspelt path cannot hide the
+    real implementation surface.
+    """
+
+    values: set[str] = set()
+    for match in re.finditer(
+        r"(?<![\w./-])(?:\.?[\w.-]+/)+[\w.-]+\.[A-Za-z0-9_-]+",
+        task_text,
+    ):
+        value = match.group(0).replace("\\", "/").lstrip("./")
+        if value:
+            values.add(value)
+    return frozenset(values)
+
+
 def _normalise_relative(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix()
 
@@ -702,6 +722,11 @@ def _score_candidate(
     score = 0
     reasons: list[str] = []
 
+    explicit_paths = _explicit_task_paths(task_text)
+    if relative in explicit_paths:
+        score += 120
+        reasons.append("explicitly named in ticket")
+
     overlap = task_tokens & path_tokens
     if overlap:
         points = min(35, len(overlap) * 7)
@@ -890,6 +915,16 @@ def _build_pack(
             scored.append((score, candidate.relative_path, reasons, candidate))
 
     scored.sort(key=lambda item: (-item[0], item[1]))
+
+    # When the user names an existing file, passing a broad directory pack to
+    # every node is wasteful and makes the provider rediscover the same scope.
+    # Keep exact named files for implementation/quality nodes. Discovery and
+    # ambiguous tickets retain the normal scored scope.
+    explicit_paths = _explicit_task_paths(task_text)
+    if explicit_paths and step.suggested_agent in (*WRITING_ROLES, "quality"):
+        exact = [item for item in scored if item[1] in explicit_paths]
+        if exact:
+            scored = exact
 
     files: list[ContextFile] = []
     total_bytes = 0
