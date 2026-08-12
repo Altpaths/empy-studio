@@ -13,7 +13,7 @@ const t = {
     plan: "تحلیل و ساخت برنامه", start: "شروع اجرا", accept: "تأیید تغییرات", revert: "بازگردانی تغییرات", export: "خروجی ZIP پروژه",
     newProject: "پروژه‌ی دیگر", noProject: "هنوز پروژه‌ای ثبت نشده است.", noTask: "هنوز تیکتی ثبت نشده است.", engine: "وضعیت Codex",
     ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", cancel: "توقف اجرا", cancelled: "اجرا لغو شد", failed: "اجرا متوقف شد", backToTicket: "بازگشت به تیکت", continueTicket: "ادامه و اصلاح تیکت", result: "نتیجه و بررسی", resume: "ادامه تیکت",
-    benchmark: "بنچمارک محلی", runBenchmark: "اجرای بنچمارک", full: "تخمین کامل", bounded: "تخمین محدود", saved: "صرفه‌جویی", brain: "Project Brain", report: "گزارش اجرای Agentها", agent: "Agent", duration: "زمان اجرا", summary: "خلاصه", usage: "مصرف Token", actual: "مصرف واقعی", estimate: "تخمین محلی", notReported: "گزارش نشده", verification: "Verification", verificationDiagnostics: "تشخیص‌های Verification", verificationFailures: "خطاهای Verification", review: "Review", pending: "در انتظار تصمیم", evidence: "Evidence", filesChanged: "فایل تغییرکرده", exportReady: "آماده خروجی", readyForExport: "آماده تولید ZIP", releaseGate: "گیت انتشار", blocked: "مسدود", exported: "خروجی تولید شد", noReviewChanges: "تغییری برای تأیید یا بازگردانی وجود ندارد.", noReport: "گزارش اجرا هنوز موجود نیست", noDiagnostic: "جزئیات تشخیصی ثبت نشده است.", nextStep: "قدم بعدی", technicalDetails: "جزئیات فنی (اختیاری)", refresh: "به‌روزرسانی وضعیت", openCodex: "بازکردن Codex", engineHelp: "برای اجرای واقعی، Codex باید نصب و احراز هویت شده باشد.", fieldRequired: "درخواست Ticket را وارد کنید.", schedule: "زمان‌بندی", parallel: "موازی", serial: "ترتیبی",
+    benchmark: "بنچمارک محلی", runBenchmark: "اجرای بنچمارک", full: "تخمین کامل", bounded: "تخمین محدود", saved: "صرفه‌جویی", brain: "Project Brain", report: "گزارش اجرای Agentها", agent: "Agent", duration: "زمان اجرا", summary: "خلاصه", usage: "مصرف Token", actual: "مصرف واقعی", estimate: "تخمین محلی", notReported: "گزارش نشده", verification: "Verification", verificationDiagnostics: "تشخیص‌های Verification", verificationFailures: "خطاهای Verification", review: "Review", pending: "در انتظار تصمیم", evidence: "Evidence", filesChanged: "فایل تغییرکرده", exportReady: "آماده خروجی", readyForExport: "آماده تولید ZIP", releaseGate: "گیت انتشار", blocked: "مسدود", exported: "خروجی تولید شد", download: "دانلود ZIP", revealExport: "نمایش محل فایل", noReviewChanges: "تغییری برای تأیید یا بازگردانی وجود ندارد.", noReport: "گزارش اجرا هنوز موجود نیست", noDiagnostic: "جزئیات تشخیصی ثبت نشده است.", nextStep: "قدم بعدی", technicalDetails: "جزئیات فنی (اختیاری)", refresh: "به‌روزرسانی وضعیت", openCodex: "بازکردن Codex", engineHelp: "برای اجرای واقعی، Codex باید نصب و احراز هویت شده باشد.", fieldRequired: "درخواست Ticket را وارد کنید.", schedule: "زمان‌بندی", parallel: "موازی", serial: "ترتیبی",
   },
   en: {
     subtitle: "Coordinated project development with bounded agents", project: "Projects", import: "Project folder or ZIP path",
@@ -22,7 +22,7 @@ const t = {
     plan: "Analyze and build plan", start: "Start run", accept: "Accept changes", revert: "Restore changes", export: "Export project ZIP",
     newProject: "Another project", noProject: "No projects have been registered.", noTask: "No tickets have been registered.", engine: "Codex status",
     ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", cancel: "Stop run", cancelled: "Run cancelled", failed: "Run stopped", backToTicket: "Back to ticket", continueTicket: "Continue and fix ticket", result: "Result and review", resume: "Resume ticket",
-    benchmark: "Local benchmark", runBenchmark: "Run benchmark", full: "Full estimate", bounded: "Bounded estimate", saved: "Saved", brain: "Project Brain", report: "Agent run report", agent: "Agent", duration: "Duration", summary: "Summary", usage: "Token usage", actual: "Actual usage", estimate: "Local estimate", notReported: "Not reported", verification: "Verification", verificationDiagnostics: "Verification diagnostics", verificationFailures: "Verification failures", review: "Review", pending: "Pending decisions", evidence: "Evidence", filesChanged: "Changed files", exportReady: "Export status", readyForExport: "Ready to create ZIP", releaseGate: "Release gate", blocked: "Blocked", exported: "Export created", noReviewChanges: "There are no file changes to accept or restore.", noReport: "Run report is not available yet", noDiagnostic: "No diagnostic details were recorded.", nextStep: "Next step", technicalDetails: "Technical details (optional)", refresh: "Refresh status", openCodex: "Open Codex", engineHelp: "Codex must be installed and authenticated for a real run.", fieldRequired: "Enter a ticket request.", schedule: "Schedule", parallel: "Parallel", serial: "Serial",
+    benchmark: "Local benchmark", runBenchmark: "Run benchmark", full: "Full estimate", bounded: "Bounded estimate", saved: "Saved", brain: "Project Brain", report: "Agent run report", agent: "Agent", duration: "Duration", summary: "Summary", usage: "Token usage", actual: "Actual usage", estimate: "Local estimate", notReported: "Not reported", verification: "Verification", verificationDiagnostics: "Verification diagnostics", verificationFailures: "Verification failures", review: "Review", pending: "Pending decisions", evidence: "Evidence", filesChanged: "Changed files", exportReady: "Export status", readyForExport: "Ready to create ZIP", releaseGate: "Release gate", blocked: "Blocked", exported: "Export created", download: "Download ZIP", revealExport: "Show file location", noReviewChanges: "There are no file changes to accept or restore.", noReport: "Run report is not available yet", noDiagnostic: "No diagnostic details were recorded.", nextStep: "Next step", technicalDetails: "Technical details (optional)", refresh: "Refresh status", openCodex: "Open Codex", engineHelp: "Codex must be installed and authenticated for a real run.", fieldRequired: "Enter a ticket request.", schedule: "Schedule", parallel: "Parallel", serial: "Serial",
   },
 };
 function text() { return t[language]; }
@@ -42,6 +42,7 @@ function localizeMessage(value = "") {
     "درخواست توقف اجرا ثبت شد.": "The stop request was recorded.",
     "تصمیم روی تغییرات ثبت شد.": "The change decision was recorded.",
     "فایل ZIP تک‌ریشه و قابل استخراج آماده شد.": "A verified single-root ZIP is ready.",
+    "Verification ناموفق بود؛ یافته‌ها را اصلاح و تیکت را ادامه دهید.": "Verification failed; fix the findings and continue the ticket.",
   };
   const imported = value.match(/^پروژه در یک کپی ایزوله وارد شد؛ (\d+) فایل قابل‌استفاده کپی شد و (\d+) مورد کنارگذاشته‌شده/);
   if (imported) return `Project imported into an isolated copy. ${imported[1]} usable file(s) copied; ${imported[2]} excluded item(s) are explained below.`;
@@ -227,7 +228,12 @@ function enhanceReportUi() {
   technicalNodes.forEach(node => details.appendChild(node));
   report.appendChild(details);
 }
-function renderSaved() { return `<div class="card center"><h1>✓</h1><h2>${language === "fa" ? "خروجی آماده است" : "Export is ready"}</h2><p class="muted">${escapeHtml(state.export?.archive_path || "")}</p><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div>`; }
+function renderSaved() {
+  const archive = state.export || {};
+  const archiveName = archive.archive_name || String(archive.archive_path || "project.zip").split(/[\\/]/).pop();
+  const downloadUrl = `/api/export/download?token=${encodeURIComponent(token)}`;
+  return `<div class="card center"><h1>✓</h1><h2>${language === "fa" ? "خروجی آماده است" : "Export is ready"}</h2><p class="muted">${language === "fa" ? "فایل ZIP با موفقیت ساخته و بررسی شد:" : "The verified ZIP was created:"}<br><strong>${escapeHtml(archiveName || "project.zip")}</strong></p><div class="actions centered-actions"><a class="primary download-link" href="${downloadUrl}" download="${escapeHtml(archiveName || "project.zip")}">${text().download}</a><button type="button" class="secondary" data-action="reveal-export">${text().revealExport}</button><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div></div>`;
+}
 function render() {
   if (!state) return; language = state.language || language; banner(); let html = "";
   if (state.export) html = renderSaved(); else if (!state.active_project) html = renderProject(); else if (state.phase === "task") html = renderTask(); else if (state.phase === "plan") html = renderPlan(); else if (state.phase === "run") html = renderRun(); else html = renderResult();
@@ -281,6 +287,7 @@ async function handleAction(action, target) {
     case "resume-ticket": await runAction(() => api("/api/resume-ticket", {})); break;
     case "decide": await runAction(() => api("/api/decision", {decision: target.dataset.decision})); break;
     case "export-project": await runAction(() => api("/api/export", {})); break;
+    case "reveal-export": await runAction(() => api("/api/reveal-export", {})); break;
     case "reset-project": taskDraft = ""; taskDraftProjectId = null; await runAction(() => api("/api/reset", {})); break;
     case "go-task": state.phase = "task"; render(); break;
     default: break;

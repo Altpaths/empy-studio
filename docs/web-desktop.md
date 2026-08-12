@@ -20,7 +20,8 @@ opens it in the default browser. API requests without the token are rejected.
    files, selected context, and token cap.
 4. Run Codex through the bounded driver, then inspect verification and review
    evidence.
-5. Accept or revert the changes and export a direct single-root project ZIP.
+5. Accept or revert the changes, export a direct single-root project ZIP, and
+   download it from the verified result screen.
 
 The guided Web Desktop is the canonical product path used by every platform
 package. Folder and ZIP selection use browser file inputs and upload into the
@@ -39,6 +40,12 @@ follow-up ticket does not repeat the full discovery pass.
 The SQLite workspace records project and ticket history. Resetting the current
 screen clears the active selection but does not delete an imported project or
 its evidence.
+
+The result screen exposes an authenticated local `Download ZIP` action. Empy
+streams only the current verified archive, confirms that it remains inside the
+workspace, and rechecks its recorded SHA-256 before sending it to the browser.
+If the archive is missing or has changed, the download is rejected and a new
+export is required.
 
 After a run, the result screen shows a compact report for every graph node:
 agent identity, role, status, duration, changed files, provider-reported usage

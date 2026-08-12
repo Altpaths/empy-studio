@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import mimetypes
 import os
@@ -17,7 +18,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, cast
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from empy_studio.benchmark import BenchmarkResult, run_local_benchmark
 from empy_studio.core import (
@@ -945,6 +946,7 @@ class GuidedState:
             self.phase = "run"
             self.error = None
             self.message = "اجرای Agentها شروع شد."
+            self.message_level = "info"
             self.logs.clear()
         thread = threading.Thread(target=self._run_worker, args=(run.run_id,), daemon=True, name="empy-web-run")
         thread.start()
@@ -1084,17 +1086,11 @@ class GuidedState:
             self.verification = verification
             self.review = review
             self.verification_store.save(verification)
-            final_result = (
-                result
-                if verification.finalize_allowed
-                else replace(
-                    result,
-                    status="failed",
-                    error_code="process_failed",
-                    error_message="Verification failed; review is required before export.",
-                )
-            )
-            self.run = final_result
+            # Keep the provider run status separate from project verification.
+            # Agent execution may complete while a project check fails; marking
+            # the whole run failed made the UI falsely blame the Agent phase.
+            final_result = result
+            self.run = result
             manifest_path = self._save_runtime_result(
                 workspace_run_id,
                 final_result,
@@ -1103,8 +1099,12 @@ class GuidedState:
             )
             self.store.update_run(
                 workspace_run_id,
-                state="completed" if verification.finalize_allowed else "failed",
-                summary="Run and verification completed" if verification.finalize_allowed else "Verification failed",
+                state="completed",
+                summary=(
+                    "Run and verification completed"
+                    if verification.finalize_allowed
+                    else "Run completed; verification failed"
+                ),
                 driver_name="codex",
                 evidence_path=str(manifest_path),
             )
@@ -1120,11 +1120,8 @@ class GuidedState:
                     if verification.finalize_allowed
                     else "Verification ناموفق بود؛ یافته‌ها را اصلاح و تیکت را ادامه دهید."
                 )
-                self.error = (
-                    None
-                    if verification.finalize_allowed
-                    else "Verification failed; review the findings and continue the ticket."
-                )
+                self.message_level = "success" if verification.finalize_allowed else "warning"
+                self.error = None
         except VerificationCancelled as exc:
             cancelled = (
                 replace(
@@ -1275,6 +1272,28 @@ class GuidedState:
             "blockers": blockers,
             "exported": bool(self.export and self.export.verified),
         }
+
+    def export_download_path(self) -> Path:
+        """Return the current verified ZIP only when it is safe to download."""
+
+        exported = self.export
+        if exported is None or not exported.verified:
+            raise RuntimeError("No verified project ZIP is ready for download.")
+        workspace = self.workspace_root.resolve()
+        archive = exported.archive_path.expanduser().resolve()
+        try:
+            archive.relative_to(workspace)
+        except ValueError as exc:
+            raise RuntimeError("The verified ZIP is outside the Empy workspace.") from exc
+        if archive.suffix.casefold() != ".zip" or not archive.is_file():
+            raise RuntimeError("The verified project ZIP is no longer available.")
+        digest = hashlib.sha256()
+        with archive.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != exported.sha256:
+            raise RuntimeError("The verified project ZIP changed; export it again.")
+        return archive
 
     def export_project(self, destination: str | None = None) -> None:
         gate = self._release_gate()
@@ -1477,7 +1496,12 @@ class GuidedState:
                 "action": "resume-ticket",
             }
 
-        if failures:
+        verification_failed = self.verification is not None and (
+            self.verification.status != "pass"
+            or not self.verification.finalize_allowed
+            or self.verification.finalized_at is None
+        )
+        if failures or verification_failed:
             if self.language == "en":
                 return {
                     "kind": "verification_failed",
@@ -1784,6 +1808,24 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_download(self, target: Path) -> None:
+        filename = target.name.replace('"', "_").replace("\r", "_").replace("\n", "_")
+        encoded_filename = quote(filename, safe="")
+        size = target.stat().st_size
+        self.send_response(200)
+        self.send_header("Content-Type", "application/zip")
+        self.send_header(
+            "Content-Disposition",
+            f'attachment; filename="project.zip"; filename*=UTF-8\'\'{encoded_filename}',
+        )
+        self.send_header("Content-Length", str(size))
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        with target.open("rb") as stream:
+            shutil.copyfileobj(stream, self.wfile, length=1024 * 1024)
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/":
@@ -1798,6 +1840,15 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
         if not self._authorized():
             self._send_json({"error": "unauthorized"}, 403)
+            return
+        if parsed.path == "/api/export/download":
+            try:
+                archive = self.app.state.export_download_path()
+            except (OSError, RuntimeError, ValueError) as exc:
+                message = safe_user_error(exc, language=self.app.state.language)
+                self._send_json({"error": message}, 409)
+                return
+            self._send_download(archive)
             return
         if parsed.path in {"/api/state", "/api/health"}:
             self._send_json(self.app.state.public() if parsed.path.endswith("state") else {"ok": True})

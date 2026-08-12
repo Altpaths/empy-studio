@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+## [0.1.22] - 2026-08-12
+
+### Honest verification status and real project downloads
+
+- Keep completed Agent execution separate from failed project Verification so
+  the UI reports the actual failing stage and does not blame the Agent run.
+- Add an authenticated ZIP download endpoint that rechecks workspace scope,
+  file existence, and the exported SHA-256 before streaming the artifact.
+- Add a user-facing Download ZIP action and regression coverage for auth,
+  tamper detection, and failed-Verification guidance.
+
 ## [0.1.21] - 2026-08-12
 
 ### Measured token and report correctness

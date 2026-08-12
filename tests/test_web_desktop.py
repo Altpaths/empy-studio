@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import io
+import threading
+import urllib.error
+import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,10 +16,11 @@ from empy_studio.drivers import (
     CodexNodeExecution,
     CodexWaveExecution,
 )
+from empy_studio.project_delivery import ExportedProject
 from empy_studio.review_workspace import ReviewReport
 from empy_studio.token_usage import TokenUsage
 from empy_studio.verification_pipeline import VerificationCheck, VerificationReport, VerificationResult
-from empy_studio.web_desktop import GuidedState, RequestHandler
+from empy_studio.web_desktop import GuidedState, RequestHandler, create_server
 
 
 def test_guided_state_persists_project_and_follow_up_ticket(tmp_path: Path) -> None:
@@ -618,7 +623,7 @@ def test_failed_verification_is_visible_and_can_seed_a_follow_up_ticket(tmp_path
         task_id=state.task.task_id,
         project_root=str(state.detection.descriptor.root),
         provider="codex",
-        status="failed",
+        status="completed",
         started_at="now",
         finished_at="now",
         installation=CodexInstallation(
@@ -632,8 +637,8 @@ def test_failed_verification_is_visible_and_can_seed_a_follow_up_ticket(tmp_path
         events=(),
         usage=None,
         schedule=(),
-        error_code="process_failed",
-        error_message="verification failed",
+        error_code=None,
+        error_message=None,
     )
     public = state.public()
     report = public["run_report"]
@@ -641,6 +646,7 @@ def test_failed_verification_is_visible_and_can_seed_a_follow_up_ticket(tmp_path
     assert report["verification"]["failures"][0]["label"] == "Site audit"
     assert report["guidance"]["kind"] == "verification_failed"
     assert "ZIP" in report["guidance"]["summary"]
+    assert all("Agent run" not in item for item in public["release_gate"]["blockers"])
     assert str(state.detection.descriptor.root) not in str(report)
     assert "<project>" in report["verification"]["failures"][0]["detail"]
 
@@ -651,3 +657,48 @@ def test_failed_verification_is_visible_and_can_seed_a_follow_up_ticket(tmp_path
     state.create_plan("Update index.html to address the reported project entry page issue")
     assert state.task is not None
     assert "Previous Empy verification findings" in state.task.objective
+
+
+def test_verified_export_has_authenticated_download_endpoint(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    archive = workspace / "releases" / "demo-release.zip"
+    archive.parent.mkdir(parents=True)
+    payload = b"verified zip payload"
+    archive.write_bytes(payload)
+    digest = hashlib.sha256(payload).hexdigest()
+
+    server = create_server(workspace=workspace, token="download-token", port=0)
+    server.state.export = ExportedProject(
+        project_root=workspace / "project",
+        archive_path=archive,
+        manifest_path=archive.with_suffix(".manifest.json"),
+        checksum_path=archive.with_suffix(".zip.sha256"),
+        sha256=digest,
+        file_count=1,
+        verified=True,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        with pytest.raises(urllib.error.HTTPError) as unauthorized:
+            urllib.request.urlopen(f"{base_url}/api/export/download", timeout=2)
+        assert unauthorized.value.code == 403
+
+        request = urllib.request.Request(
+            f"{base_url}/api/export/download?token=download-token"
+        )
+        with urllib.request.urlopen(request, timeout=2) as response:
+            assert response.status == 200
+            assert response.read() == payload
+            assert response.headers["Content-Type"] == "application/zip"
+            assert response.headers["Content-Disposition"].startswith("attachment;")
+
+        archive.write_bytes(b"tampered")
+        with pytest.raises(urllib.error.HTTPError) as tampered:
+            urllib.request.urlopen(request, timeout=2)
+        assert tampered.value.code == 409
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
