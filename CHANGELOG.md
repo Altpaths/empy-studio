@@ -1,5 +1,17 @@
 ## [Unreleased]
 
+## [0.1.17] - 2026-08-12
+
+### Actionable custom tickets
+
+- Route natural-language change, fix, update, and Persian implementation
+  requests to a bounded writer agent instead of producing only read-only
+  discovery and quality nodes.
+- Keep audit and test-only requests read-only by distinguishing implementation
+  verbs from inspection and verification language.
+- Extend generic code ownership to common JavaScript, Markdown, library, and
+  documentation paths while preserving narrower frontend ownership patterns.
+
 ## [0.1.16] - 2026-08-12
 
 ### Natural ticket requests

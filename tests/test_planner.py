@@ -176,3 +176,34 @@ def test_changed_task_cannot_approve(
             value,
             current_task=changed,
         )
+
+
+def test_custom_actionable_ticket_gets_a_generic_writer(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname='demo'\nversion='0.1'\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "greeting.py").write_text(
+        "def greeting():\n    return 'Hello'\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tests").mkdir()
+    project = DefaultProjectService().detect(tmp_path)
+    actionable = ProductTask(
+        task_id="custom-write-task",
+        project_root=str(tmp_path.resolve()),
+        kind="custom",
+        title="Change greeting",
+        objective="Change the greeting and update its test",
+        requirements=("Change greeting", "Update the test", "Run tests"),
+        constraints=("Do not change unrelated files",),
+        definition_of_done=("Requested work is complete",),
+        status="ready_for_planning",
+    )
+
+    plan = generate_execution_plan(task=actionable, project=project)
+
+    assert "implement-backend" in {step.step_id for step in plan.steps}

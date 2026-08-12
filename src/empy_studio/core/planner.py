@@ -335,6 +335,43 @@ def _roles(
     if task.kind == "release":
         roles.append("release")
 
+    # Natural-language custom tickets do not always contain a domain word
+    # such as "backend" or "frontend".  Without a fallback, an actionable
+    # ticket like "change the greeting and update its test" was reduced to
+    # discovery + quality, so no agent could own a file.  Keep explicit
+    # read-only/audit requests read-only, but route clear implementation
+    # language to the backend writer as the generic code owner.  More
+    # specific frontend/security/release roles above still win ownership by
+    # their narrower patterns.
+    implementation_terms = (
+        "add",
+        "change",
+        "create",
+        "delete",
+        "fix",
+        "implement",
+        "modify",
+        "refactor",
+        "remove",
+        "update",
+        "write",
+        "افزود",
+        "تغییر",
+        "اصلاح",
+        "حذف",
+        "ساخت",
+        "پیاده",
+        "رفع",
+        "به‌روزرسان",
+        "بروزرسان",
+        "نوشتن",
+    )
+    if not set(roles) & {"frontend", "backend", "security", "release"} and (
+        task.kind in {"bug_fix", "feature", "ui_improvement"}
+        or any(term in text for term in implementation_terms)
+    ):
+        roles.append("backend")
+
     roles.append("quality")
     return tuple(dict.fromkeys(roles))
 
