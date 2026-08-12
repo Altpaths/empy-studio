@@ -27,7 +27,10 @@ def _powershell_quote(value: str) -> str:
 def _replace_assignment(script: str, name: str, value: str) -> str:
     pattern = re.compile(rf"^\${re.escape(name)}\s*=.*$", re.MULTILINE)
     replacement = f"${name} = {_powershell_quote(value)}"
-    updated, count = pattern.subn(replacement, script, count=1)
+    # A Windows path contains backslashes. Passing the replacement as a raw
+    # string makes ``re`` interpret sequences such as ``\e`` as replacement
+    # escapes, so return it through a callable instead.
+    updated, count = pattern.subn(lambda _match: replacement, script, count=1)
     if count != 1:
         raise ValueError(
             f"Installer does not contain exactly one ${name} assignment"
