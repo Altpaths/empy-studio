@@ -122,6 +122,45 @@ def test_plain_php_plan_includes_application_and_test_scopes(
     assert "tests/" in value.likely_paths
 
 
+def test_path_fragments_do_not_create_unrelated_frontend_agents(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"name":"demo","scripts":{"test":"node tests/test_greeting.js"}}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "greeting.js").write_text(
+        "module.exports = { greeting: () => 'Hello' };\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_greeting.js").write_text(
+        "require('../src/greeting');\n",
+        encoding="utf-8",
+    )
+    project = DefaultProjectService().detect(tmp_path)
+    current = ProductTask(
+        task_id="path-fragment-task",
+        project_root=str(tmp_path.resolve()),
+        kind="custom",
+        title="Change the greeting and update its test",
+        objective=(
+            "Change the greeting in src/greeting.js and update "
+            "tests/test_greeting.js accordingly"
+        ),
+        requirements=("Run npm test",),
+        constraints=("Do not change package.json",),
+        definition_of_done=("The requested change is verified",),
+        status="ready_for_planning",
+    )
+
+    value = generate_execution_plan(task=current, project=project)
+
+    assert "implement-backend" in {step.step_id for step in value.steps}
+    assert all(step.suggested_agent != "frontend" for step in value.steps)
+
+
 def test_approval_freezes_plan(
     tmp_path: Path,
 ) -> None:

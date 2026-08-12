@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+## [0.1.19] - 2026-08-12
+
+### Deterministic agent selection
+
+- Match planner keywords as complete words or phrases so words inside file
+  names and ordinary prose cannot activate unrelated agent roles.
+- Keep actionable custom tickets on the generic bounded writer path when no
+  domain-specific role is actually requested.
+- Add regression coverage for a real Node ticket containing source and test
+  paths.
+
 ## [0.1.18] - 2026-08-12
 
 ### Test-file ownership

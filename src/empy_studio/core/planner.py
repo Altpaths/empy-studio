@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -270,15 +271,24 @@ def _risk(
         "refactor",
     )
 
-    if any(term in text for term in high_terms):
+    if _contains_any_term(text, high_terms):
         return "high"
     if (
-        any(term in text for term in medium_terms)
+        _contains_any_term(text, medium_terms)
         or len(likely_paths) > 5
         or len(task.requirements) > 8
     ):
         return "medium"
     return "low"
+
+
+def _contains_any_term(text: str, terms: tuple[str, ...]) -> bool:
+    """Match whole words/phrases without treating path fragments as domains."""
+
+    return any(
+        re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text) is not None
+        for term in terms
+    )
 
 
 def _roles(
@@ -295,9 +305,9 @@ def _roles(
 
     roles: list[AgentRole] = ["discovery"]
 
-    if any(
-        term in text
-        for term in (
+    if _contains_any_term(
+        text,
+        (
             "ui",
             "page",
             "font",
@@ -309,9 +319,9 @@ def _roles(
     ):
         roles.append("frontend")
 
-    if any(
-        term in text
-        for term in (
+    if _contains_any_term(
+        text,
+        (
             "backend",
             "api",
             "route",
@@ -322,9 +332,9 @@ def _roles(
     ):
         roles.append("backend")
 
-    if any(
-        term in text
-        for term in (
+    if _contains_any_term(
+        text,
+        (
             "security",
             "permission",
             "authentication",
@@ -368,7 +378,7 @@ def _roles(
     )
     if not set(roles) & {"frontend", "backend", "security", "release"} and (
         task.kind in {"bug_fix", "feature", "ui_improvement"}
-        or any(term in text for term in implementation_terms)
+        or _contains_any_term(text, implementation_terms)
     ):
         roles.append("backend")
 
