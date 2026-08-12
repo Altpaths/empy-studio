@@ -29,7 +29,7 @@ def test_rewrites_local_package_inputs_without_touching_other_assignments() -> N
     updated = module._replace_assignment(
         source,
         "PackageUrl",
-        r"file://C:\\tmp\\package.whl",
+        r"file://C:\tmp\package.whl",
     )
     updated = module._replace_assignment(updated, "PackageSha256", "a" * 64)
 
