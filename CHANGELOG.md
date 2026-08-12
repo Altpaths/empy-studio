@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+## [0.1.18] - 2026-08-12
+
+### Test-file ownership
+
+- Include test files in a writer's bounded context only when the ticket
+  explicitly asks to change or update those tests.
+- Assign requested Python, JavaScript, TypeScript, and PHP test files to the
+  single implementation owner while keeping Quality Agent read-only.
+- Add a regression test covering source and test-file ownership for a custom
+  ticket.
+
 ## [0.1.17] - 2026-08-12
 
 ### Actionable custom tickets

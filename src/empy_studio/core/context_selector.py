@@ -171,6 +171,35 @@ ROLE_KEYWORDS: Final[dict[str, tuple[str, ...]]] = {
     ),
 }
 
+TEST_PATH_PARTS: Final[frozenset[str]] = frozenset(
+    {"test", "tests", "spec", "specs", "__tests__", "آزمون", "تست"}
+)
+TEST_CHANGE_ACTIONS: Final[frozenset[str]] = frozenset(
+    {
+        "add",
+        "change",
+        "create",
+        "delete",
+        "fix",
+        "modify",
+        "remove",
+        "rewrite",
+        "update",
+        "اضافه",
+        "بروزرسان",
+        "تغییر",
+        "ایجاد",
+        "اصلاح",
+        "حذف",
+        "روزرسانی",
+        "ساخت",
+        "بهروزرسانی",
+    }
+)
+WRITING_ROLES: Final[frozenset[str]] = frozenset(
+    {"frontend", "backend", "security", "release"}
+)
+
 
 @dataclass(frozen=True)
 class ContextPolicy:
@@ -346,6 +375,25 @@ def _tokens(value: str) -> frozenset[str]:
         for token in re.findall(r"[^\W_]+", value, flags=re.UNICODE)
         if len(token) >= 2
     )
+
+
+def _task_requests_test_changes(task_text: str) -> bool:
+    """Return whether the ticket asks the writer to change a test file.
+
+    Merely asking to run tests must keep test files read-only.  This narrower
+    signal makes an explicit test-edit requirement visible to the writer while
+    preserving the bounded context contract for verification-only tickets.
+    """
+
+    normalised = task_text.casefold().replace("\u200c", "")
+    tokens = re.findall(r"[^\W_]+", normalised, flags=re.UNICODE)
+    for index, token in enumerate(tokens):
+        if token not in TEST_CHANGE_ACTIONS:
+            continue
+        window = tokens[max(0, index - 5) : index + 6]
+        if any(item in TEST_PATH_PARTS for item in window):
+            return True
+    return False
 
 
 def _normalise_relative(path: Path, root: Path) -> str:
@@ -598,6 +646,7 @@ def _score_candidate(
     candidate: _Candidate,
     *,
     task_tokens: frozenset[str],
+    task_text: str,
     step: PlanStep,
     plan: ExecutionPlan,
     project: ProjectDetection,
@@ -632,6 +681,14 @@ def _score_candidate(
     if any(keyword in path_tokens for keyword in role_keywords):
         score += 24
         reasons.append(f"{role} path signal")
+
+    if (
+        role in WRITING_ROLES
+        and _task_requests_test_changes(task_text)
+        and any(part in TEST_PATH_PARTS for part in path_tokens)
+    ):
+        score += 42
+        reasons.append("ticket explicitly requests test changes")
 
     if role == "discovery":
         if Path(relative).name.lower() in {
@@ -768,7 +825,6 @@ def _build_pack(
             task.title,
             task.objective,
             *task.requirements,
-            *task.constraints,
             step.title,
             step.objective,
         )
@@ -780,6 +836,7 @@ def _build_pack(
         score, reasons = _score_candidate(
             candidate,
             task_tokens=task_tokens,
+            task_text=task_text,
             step=step,
             plan=plan,
             project=project,

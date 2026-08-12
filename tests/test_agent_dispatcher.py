@@ -283,3 +283,49 @@ def test_writing_plan_without_owned_files_is_blocked(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="no writable files"):
         build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+
+
+def test_explicit_test_update_is_owned_by_the_writer(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname = 'demo'\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "greeting.py").write_text(
+        "def greeting():\n    return 'Hello'\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_greeting.py").write_text(
+        "def test_greeting():\n    assert greeting() == 'Hello'\n",
+        encoding="utf-8",
+    )
+    project = DefaultProjectService().detect(tmp_path)
+    task = ProductTask(
+        task_id="custom-test-update",
+        project_root=str(tmp_path.resolve()),
+        kind="custom",
+        title="Change the greeting and update its test",
+        objective="Change the greeting and update its test",
+        requirements=("Change greeting", "Update the test", "Run tests"),
+        constraints=("Do not change unrelated files",),
+        definition_of_done=("The greeting and its test agree",),
+        status="ready_for_planning",
+    )
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+    selection = build_context_selection(task=task, project=project, plan=plan)
+    budget = lock_token_budget(build_token_budget(plan=plan, selection=selection))
+    graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+
+    backend = next(node for node in graph.nodes if node.agent_role == "backend")
+    assert {"src/greeting.py", "tests/test_greeting.py"}.issubset(
+        backend.owned_files
+    )
+    assert all(
+        "tests/test_greeting.py" not in node.owned_files
+        for node in graph.nodes
+        if node.agent_role == "quality"
+    )
