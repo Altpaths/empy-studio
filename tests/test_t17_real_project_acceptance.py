@@ -147,8 +147,16 @@ def _install_acceptance_driver(
     assert owned_nodes, "the accepted plan must assign a file to an agent"
     owner = owned_nodes[0]
     target_relative = next(
-        (path for path in owner.owned_files if not path.endswith("/")),
-        None,
+        (
+            path
+            for path in owner.owned_files
+            if not path.endswith("/")
+            and (path.startswith("src/") or path.endswith(".php"))
+        ),
+        next(
+            (path for path in owner.owned_files if not path.endswith("/")),
+            None,
+        ),
     )
     assert target_relative is not None, "the accepted plan must own a file"
 
@@ -254,9 +262,10 @@ def _run_two_ticket_flow(
     assert b"Empy T17 acceptance marker" in (
         imported_root / target_relative
     ).read_bytes()
-    state.decide_all("revert")
-    assert (imported_root / target_relative).read_bytes() == baseline_target
-    assert (imported_root / "README.md").read_bytes() == baseline_readme
+    state.decide_all("accept")
+    assert (imported_root / target_relative).read_bytes() != baseline_target
+    if target_relative != "README.md":
+        assert (imported_root / "README.md").read_bytes() == baseline_readme
     first_archive = tmp_path / "first-release.zip"
     state.export_project(str(first_archive))
     assert state.export is not None

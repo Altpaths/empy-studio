@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from empy_studio.project_delivery import checkpoint_accepted_changes
 from empy_studio.review_workspace import ReviewRuntime, ReviewWorkspaceAdapter
 
 
@@ -83,6 +84,33 @@ def test_accept_keeps_change_and_records_explicit_decision(tmp_path: Path) -> No
     assert accepted.files[0].decision == "accepted"
     assert accepted.status == "complete"
     assert _git(root, "rev-parse", "HEAD") == revision_before
+
+
+def test_accepted_checkpoint_cleans_isolated_workspace_without_touching_source(
+    tmp_path: Path,
+) -> None:
+    root = _repository(tmp_path)
+    (root / "tracked.txt").write_text(
+        "accepted and checkpointed\n",
+        encoding="utf-8",
+    )
+    report = ReviewRuntime().capture(root)
+    accepted = ReviewRuntime().accept(report, "tracked.txt")
+
+    checkpoint_accepted_changes(
+        root,
+        (
+            item.relative_path
+            for item in accepted.files
+            if item.decision == "accepted"
+        ),
+    )
+
+    assert _git(root, "status", "--porcelain") == ""
+    assert _git(root, "log", "-1", "--pretty=%s") == "Empy accepted checkpoint"
+    assert (root / "tracked.txt").read_text(encoding="utf-8") == (
+        "accepted and checkpointed\n"
+    )
 
 
 def test_revert_restores_tracked_file_without_commit(tmp_path: Path) -> None:

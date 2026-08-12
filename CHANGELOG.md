@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+## [0.1.20] - 2026-08-12
+
+### Follow-up ticket baseline
+
+- Create an internal checkpoint after a user accepts a complete review so a
+  follow-up ticket can run without asking the user to commit changes.
+- Keep the checkpoint inside Empy's isolated copy; original project files,
+  remotes, and exported ZIP contents remain outside the checkpoint history.
+- Add acceptance coverage for a second ticket after an accepted first ticket.
+
 ## [0.1.19] - 2026-08-12
 
 ### Deterministic agent selection

@@ -293,6 +293,40 @@ def _initialize_git(root: Path) -> None:
     _run_git(root, "commit", "--quiet", "--allow-empty", "-m", "Empy baseline")
 
 
+def checkpoint_accepted_changes(
+    project_root: str | Path,
+    relative_paths: Iterable[str],
+) -> None:
+    """Checkpoint accepted changes inside Empy's isolated workspace only."""
+
+    root = Path(project_root).expanduser().resolve()
+    paths = tuple(
+        dict.fromkeys(
+            str(item).replace("\\", "/").strip("/")
+            for item in relative_paths
+        )
+    )
+    if not paths:
+        return
+    if not (root / ".git").is_dir():
+        raise RuntimeError("Accepted-change checkpoint requires an Empy Git workspace")
+    for relative in paths:
+        path = PurePosixPath(relative)
+        if not relative or path.is_absolute() or ".." in path.parts:
+            raise ValueError(f"invalid accepted checkpoint path: {relative!r}")
+        if is_sensitive_relative_path(path):
+            raise ValueError(f"sensitive path cannot be checkpointed: {relative}")
+    _run_git(root, "add", "--all", "--", *paths)
+    _run_git(
+        root,
+        "commit",
+        "--quiet",
+        "--allow-empty",
+        "-m",
+        "Empy accepted checkpoint",
+    )
+
+
 def _new_workspace(workspace_root: Path, source_name: str) -> Path:
     workspace_root = workspace_root.expanduser().resolve()
     workspace_root.mkdir(parents=True, exist_ok=True)

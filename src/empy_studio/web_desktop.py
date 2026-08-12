@@ -60,6 +60,7 @@ from empy_studio.project_delivery import (
     MAX_UPLOAD_TOTAL_BYTES,
     ExportedProject,
     ImportedProject,
+    checkpoint_accepted_changes,
     export_project_zip,
     import_project_archive,
     import_project_folder,
@@ -1221,6 +1222,15 @@ class GuidedState:
                 self.review_store.accept(report.review_id, item.relative_path)
                 if decision == "accept"
                 else self.review_store.revert(report.review_id, item.relative_path)
+            )
+        if decision == "accept":
+            checkpoint_accepted_changes(
+                report.project_root,
+                (
+                    item.relative_path
+                    for item in report.files
+                    if item.decision == "accepted"
+                ),
             )
         self.review = report
         if self.active_task_id is not None:
