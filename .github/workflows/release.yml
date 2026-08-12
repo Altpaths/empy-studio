@@ -100,6 +100,32 @@ jobs:
           name: macos-app-${{ matrix.architecture }}
           path: build/app/*.zip*
 
+  windows-installer:
+    name: Windows installer smoke
+    needs: quality
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install ".[dev]"
+      - name: Build Windows installer assets for the exact tag
+        shell: pwsh
+        run: |
+          python scripts/build_release_assets.py `
+            --output build/release-assets `
+            --release-tag "$env:GITHUB_REF_NAME"
+      - name: Install and exercise the relocated Windows installer
+        shell: pwsh
+        run: |
+          $package = (Get-ChildItem build/release-assets -Filter *.whl | Select-Object -First 1).FullName
+          python scripts/smoke_windows_installer.py `
+            --installer build/release-assets/install-windows-x86_64.ps1 `
+            --package $package `
+            --target windows-x86_64
+
   macos-release:
     name: Sign and notarize macOS app (${{ matrix.architecture }})
     if: github.event_name == 'workflow_dispatch' && inputs.publish == true
@@ -220,7 +246,7 @@ jobs:
   publish:
     name: Publish verified GitHub release
     if: github.event_name == 'workflow_dispatch' && inputs.publish == true
-    needs: [package, macos-release]
+    needs: [package, macos-release, windows-installer]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
