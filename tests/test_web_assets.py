@@ -38,10 +38,13 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert "project-card" in app_js
     render_project = app_js.split("function renderProject()", 1)[1].split("function renderImportReport", 1)[0]
     assert 'class="start-hint"' in render_project
+    assert "start-description" in render_project
+    assert 'id="path"' in render_project
     assert 'data-action="choose-folder"' in render_project
     assert 'data-action="choose-zip"' in render_project
     assert "renderEngine(engine)" in render_project
     assert "import-path" not in render_project
+    assert 'target?.id !== "path"' in app_js
     assert "projectUnavailable" in app_js
     assert 'data-action="refresh-engine"' in app_js
     assert "let taskDraft = \"\"" in app_js

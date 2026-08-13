@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+## [0.1.35] - 2026-08-13
+
+### Restore project guidance and manual path entry
+
+- Restore the isolated-copy explanation and project path field in the start
+  card.
+- Keep folder and ZIP selection controls visible in that card.
+- Allow a manually entered project path to be submitted with Enter without
+  restoring the removed duplicate import button.
+
 ## [0.1.34] - 2026-08-13
 
 ### Restore the intended project controls

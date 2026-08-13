@@ -123,7 +123,7 @@ function renderEngine(engine) {
 }
 function renderProject() {
   const engine = state.engine || {};
-  return `<div class="grid"><div class="card start-card"><h1 class="start-title">${text().startHere}</h1><div class="start-hint" style="margin:10px 0 0;padding:12px 14px;border:1px solid #ccefe0;border-radius:12px;background:#effbf6;color:#2f7d5a;font-size:13px;line-height:1.8">${text().projectStartHint}</div><div class="actions"><button type="button" class="secondary" data-action="choose-folder">${text().folder}</button><button type="button" class="secondary" data-action="choose-zip">${text().zip}</button></div></div><div class="card project-card"><h1>${text().project}</h1><div class="project-list">${projectList()}</div><div class="actions project-actions"><button type="button" class="primary" data-action="choose-folder">${text().chooseProject}</button></div>${renderEngine(engine)}</div></div>`;
+  return `<div class="grid"><div class="card start-card"><h1 class="start-title">${text().startHere}</h1><div class="start-hint" style="margin:10px 0 0;padding:12px 14px;border:1px solid #ccefe0;border-radius:12px;background:#effbf6;color:#2f7d5a;font-size:13px;line-height:1.8">${text().projectStartHint}</div><p class="muted start-description">${language === "fa" ? "Empy یک کپی ایزوله می‌سازد و اصل پروژه را تغییر نمی‌دهد." : "Empy creates an isolated copy and never changes the original project."}</p><label class="field-label" for="path">${text().import}</label><input id="path" aria-label="${text().import}" placeholder="${text().import}"><div class="actions"><button type="button" class="secondary" data-action="choose-folder">${text().folder}</button><button type="button" class="secondary" data-action="choose-zip">${text().zip}</button></div></div><div class="card project-card"><h1>${text().project}</h1><div class="project-list">${projectList()}</div><div class="actions project-actions"><button type="button" class="primary" data-action="choose-folder">${text().chooseProject}</button></div>${renderEngine(engine)}</div></div>`;
 }
 function renderImportReport() {
   const report = state.import_report;
@@ -347,6 +347,12 @@ document.querySelector("#screen").addEventListener("input", event => {
   if (target?.id !== "tasks") return;
   taskDraft = target.value;
   taskDraftProjectId = state?.active_project?.id || null;
+});
+document.querySelector("#screen").addEventListener("keydown", event => {
+  const target = event.target;
+  if (event.key !== "Enter" || target?.id !== "path") return;
+  event.preventDefault();
+  void handleAction("import-path", target);
 });
 document.querySelector("#language").addEventListener("click", () => {
   language = language === "fa" ? "en" : "fa";
