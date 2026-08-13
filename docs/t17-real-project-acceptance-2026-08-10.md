@@ -19,6 +19,11 @@ Ticket 17 validates the product path through Empy Studio itself. The Holda sourc
 
 ## Acceptance evidence
 
+The repository-owned deterministic PHP fixture at
+`examples/fixtures/php-site` is the normal acceptance input. It is copied into
+the temporary Empy workspace before execution; the fixture in Git is never
+edited.
+
 The deterministic PHP scenario passed:
 
 1. Import a PHP project through Empy into an isolated copy.
@@ -29,7 +34,8 @@ The deterministic PHP scenario passed:
 6. Import a second project and confirm its project/task history is separate.
 7. Compare the source witness digest before and after the full flow.
 
-The same test was run with the Holda witness at:
+The same test may also be run as an optional one-off with the external Holda
+witness at:
 
 `/Users/azadehsharifi/Documents/Codex/2026-08-09/lk/work/empy-holda-acceptance/holda-fixture`
 

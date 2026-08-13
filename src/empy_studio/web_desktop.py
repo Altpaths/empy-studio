@@ -89,6 +89,7 @@ from empy_studio.workspace import SQLiteWorkspaceStore
 
 WEB_ROOT = Path(__file__).with_name("web")
 MAX_AUTOMATIC_REPAIR_ATTEMPTS = 1
+MAX_VISIBLE_PROJECTS = 5
 DEFAULT_CONSTRAINTS = (
     "Do not change unrelated features or business behavior.\n"
     "Do not read secrets or environment files, and do not modify logs, generated dependency directories (vendor or node_modules), or Git history.\n"
@@ -404,49 +405,54 @@ class GuidedState:
             self.logs = self.logs[-300:]
 
     def _project_records(self) -> list[dict[str, Any]]:
-        records: list[dict[str, Any]] = []
-        for project in self.store.list_projects():
-            project_root = Path(project.root)
-            records.append(
+        # Keep the complete history in SQLite, but expose only a bounded,
+        # newest-first list to the UI and state API so the start screen stays
+        # usable as projects accumulate.
+        return [
+            self._project_record(project)
+            for project in self.store.list_projects()[:MAX_VISIBLE_PROJECTS]
+        ]
+
+    def _project_record(self, project: Any) -> dict[str, Any]:
+        project_root = Path(project.root)
+        return {
+            "id": project.project_id,
+            "name": project.display_name,
+            "root": project.root,
+            "type": project.project_type,
+            "available": project_root.is_dir(),
+            "last_opened_at": project.last_opened_at,
+            "tasks": [
                 {
-                    "id": project.project_id,
-                    "name": project.display_name,
-                    "root": project.root,
-                    "type": project.project_type,
-                    "available": project_root.is_dir(),
-                    "last_opened_at": project.last_opened_at,
-                        "tasks": [
-                        {
-                            "id": task.task_id,
-                            "title": task.title,
-                            "status": task.status,
-                            "updated_at": task.updated_at,
-                        }
-                        for task in self.store.list_tasks(project.project_id)
-                    ],
-                    "releases": [
-                        {
-                            "id": release.release_id,
-                            "task_id": release.task_id,
-                            "sha256": release.sha256,
-                            "file_count": release.file_count,
-                            "verified": release.verified,
-                            "archive_path": release.archive_path,
-                            "created_at": release.created_at,
-                        }
-                        for release in self.store.list_releases(project.project_id)
-                    ],
+                    "id": task.task_id,
+                    "title": task.title,
+                    "status": task.status,
+                    "updated_at": task.updated_at,
                 }
-            )
-        return records
+                for task in self.store.list_tasks(project.project_id)
+            ],
+            "releases": [
+                {
+                    "id": release.release_id,
+                    "task_id": release.task_id,
+                    "sha256": release.sha256,
+                    "file_count": release.file_count,
+                    "verified": release.verified,
+                    "archive_path": release.archive_path,
+                    "created_at": release.created_at,
+                }
+                for release in self.store.list_releases(project.project_id)
+            ],
+        }
 
     def _active_project(self) -> dict[str, Any] | None:
         if self.active_project_id is None:
             return None
-        for project in self._project_records():
-            if project["id"] == self.active_project_id:
-                return project
-        return None
+        try:
+            project = self.store.get_project(self.active_project_id)
+        except KeyError:
+            return None
+        return self._project_record(project)
 
     def _brain_index_path(self, project_id: str) -> Path:
         return self.workspace_root / "project-brain" / f"{project_id}.json"

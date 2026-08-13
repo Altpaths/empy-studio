@@ -100,6 +100,27 @@ def test_guided_state_persists_project_and_follow_up_ticket(tmp_path: Path) -> N
     assert restarted.public()["brain"]["source"] == "local_project_brain_index"
 
 
+def test_guided_state_shows_only_five_newest_projects(tmp_path: Path) -> None:
+    state = GuidedState(tmp_path / "empy-workspace")
+    imported_ids: list[str] = []
+
+    for index in range(6):
+        source = tmp_path / f"project-{index}"
+        source.mkdir()
+        (source / "README.md").write_text(f"project {index}\n", encoding="utf-8")
+        state.import_path(str(source))
+        assert state.active_project_id is not None
+        imported_ids.append(state.active_project_id)
+
+    visible = state.public()["projects"]
+
+    assert len(visible) == 5
+    assert [item["id"] for item in visible] == list(reversed(imported_ids[-5:]))
+    # The sixth record remains persisted for recovery/history; only the API
+    # presentation is bounded.
+    assert len(state.store.list_projects()) == 6
+
+
 def test_ticket_with_inline_constraint_still_has_an_actionable_requirement(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()

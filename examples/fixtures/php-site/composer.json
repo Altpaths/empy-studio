@@ -1,0 +1,11 @@
+{
+  "name": "empy/php-fixture",
+  "description": "A dependency-free PHP fixture for Empy Studio acceptance tests",
+  "type": "project",
+  "require": {
+    "php": ">=8.0"
+  },
+  "scripts": {
+    "test": "php tests/site-audit.php"
+  }
+}

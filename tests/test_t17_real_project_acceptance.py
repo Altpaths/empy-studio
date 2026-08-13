@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -99,31 +100,8 @@ def _tree_digest(root: Path) -> str:
 
 
 def _php_project(root: Path) -> Path:
-    root.mkdir()
-    (root / "README.md").write_text(
-        "# Acceptance PHP project\n\nOriginal content.\n",
-        encoding="utf-8",
-    )
-    (root / "index.php").write_text(
-        "<?php\necho 'ok';\n",
-        encoding="utf-8",
-    )
-    (root / "src").mkdir()
-    (root / "src" / "App.php").write_text(
-        "<?php\nfinal class App {}\n",
-        encoding="utf-8",
-    )
-    (root / "composer.json").write_text(
-        json.dumps(
-            {
-                "name": "empy/t17-acceptance",
-                "require": {"php": ">=8.2"},
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    fixture = Path(__file__).resolve().parents[1] / "examples" / "fixtures" / "php-site"
+    shutil.copytree(fixture, root)
     return root
 
 

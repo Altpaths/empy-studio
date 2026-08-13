@@ -1,4 +1,11 @@
-## [Unreleased]
+## [0.1.40] - 2026-08-13
+
+### Bound the saved-project list and replace the Holda test dependency
+
+- Show only the five newest saved projects in the UI/API while retaining the
+  complete local history for recovery.
+- Add an independent repository-owned PHP fixture for acceptance tests; Holda
+  remains an external read-only witness and is never bundled.
 
 ## [0.1.39] - 2026-08-13
 
