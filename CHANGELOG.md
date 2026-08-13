@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+## [0.1.31] - 2026-08-13
+
+### Clear project selection and recovery
+
+- Explain that the Projects panel contains projects already imported in the
+  current workspace and provide an explicit first-import action when it is
+  empty.
+- Keep saved projects visible when their old folder was removed, with a direct
+  re-import action instead of failing during application startup.
+- Replace the generic operation error with a clear path/workspace instruction.
+
 ## [0.1.30] - 2026-08-13
 
 ### Complete command installation

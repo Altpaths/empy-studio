@@ -14,9 +14,9 @@ _PATH_MARKERS: Final[tuple[str, ...]] = (
 
 def _generic(language: str) -> str:
     return (
-        "عملیات انجام نشد؛ مسیر، دسترسی یا تنظیمات محیط را بررسی کنید."
+        "عملیات انجام نشد. یک پوشهٔ موجود پروژه یا فایل ZIP انتخاب کنید؛ برای بازکردن پروژهٔ قبلی، Empy را با همان workspace قبلی اجرا کنید."
         if language == "fa"
-        else "The operation could not be completed; check the path, permissions, or environment."
+        else "The operation could not be completed. Choose an existing project folder or ZIP; to reopen an earlier project, run Empy with the same workspace."
     )
 
 
@@ -73,6 +73,11 @@ def safe_user_error(error: BaseException, *, language: str = "fa") -> str:
                 "حجم ZIP از سقف امن Empy بیشتر است."
                 if language == "fa"
                 else "The ZIP exceeds Empy's safe total size limit."
+            ),
+            "saved project is no longer available; re-import its folder or ZIP.": (
+                "مسیر پروژهٔ ذخیره‌شده دیگر وجود ندارد؛ پوشه یا ZIP پروژه را دوباره وارد کنید."
+                if language == "fa"
+                else "The saved project path is no longer available; re-import its folder or ZIP."
             ),
         }
         if message in known:

@@ -18,7 +18,7 @@ exclude = [
 
 [project]
 name = "empy-studio"
-version = "0.1.30"
+version = "0.1.31"
 description = "A lightweight operating layer for bounded, verifiable AI-assisted product development."
 readme = "README.md"
 requires-python = ">=3.10"

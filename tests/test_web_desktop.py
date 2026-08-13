@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import shutil
 import threading
 import urllib.error
 import urllib.request
@@ -124,6 +125,25 @@ def test_reset_keeps_project_history(tmp_path: Path) -> None:
     assert state.active_project_id is None
     assert project_id is not None
     assert state.public()["projects"][0]["id"] == project_id
+
+
+def test_missing_saved_project_keeps_project_list_open(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("demo\n", encoding="utf-8")
+
+    state = GuidedState(tmp_path / "empy-workspace")
+    state.import_path(str(source))
+    assert state.detection is not None
+    imported_root = state.detection.descriptor.root
+
+    shutil.rmtree(imported_root)
+    reopened = GuidedState(tmp_path / "empy-workspace")
+    public = reopened.public()
+
+    assert public["active_project"] is None
+    assert public["projects"][0]["available"] is False
+    assert "دوباره وارد" in public["error"]
 
 
 def test_browser_folder_upload_isolated_and_security_filtered(tmp_path: Path) -> None:

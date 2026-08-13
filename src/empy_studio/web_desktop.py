@@ -375,9 +375,23 @@ class GuidedState:
         self.language = saved_language if saved_language in {"fa", "en"} else "fa"
         saved_project = self.store.get_setting("active_project_id")
         if isinstance(saved_project, str):
-            self.select_project(saved_project, restore=True)
+            try:
+                self.select_project(saved_project, restore=True)
+            except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+                # A saved project can outlive the folder it pointed to. Keep the
+                # project record visible so the user can re-import it instead of
+                # making the whole UI fail during startup.
+                with self.lock:
+                    self.active_project_id = None
+                    self.active_task_id = None
+                    self.phase = "project"
+                    self.message_level = "warning"
+                    self.error = safe_user_error(exc, language=self.language)
+                    self.message = ""
+                self.store.set_setting("active_project_id", None)
+                self.store.set_setting("active_task_id", None)
             saved_task = self.store.get_setting("active_task_id")
-            if isinstance(saved_task, str):
+            if self.active_project_id is not None and isinstance(saved_task, str):
                 try:
                     self.select_task(saved_task, restore=True)
                 except (KeyError, OSError, RuntimeError, TypeError, ValueError):
@@ -391,12 +405,14 @@ class GuidedState:
     def _project_records(self) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
         for project in self.store.list_projects():
+            project_root = Path(project.root)
             records.append(
                 {
                     "id": project.project_id,
                     "name": project.display_name,
                     "root": project.root,
                     "type": project.project_type,
+                    "available": project_root.is_dir(),
                     "last_opened_at": project.last_opened_at,
                         "tasks": [
                         {
@@ -535,6 +551,10 @@ class GuidedState:
 
     def select_project(self, project_id: str, *, restore: bool = False) -> None:
         project = self.store.get_project(project_id)
+        if not Path(project.root).is_dir():
+            raise ValueError(
+                "saved project is no longer available; re-import its folder or ZIP."
+            )
         detection = self.project_service.detect(project.root)
         import_report = self._load_import_report(project.project_id)
         if import_report is not None:

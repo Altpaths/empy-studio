@@ -31,6 +31,9 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert "verificationReady" in app_js
     assert 'state.run_status === "completed"' in app_js
     assert 'data-action="choose-zip"' in app_js
+    assert "savedProjects" in app_js
+    assert "projectListHelp" in app_js
+    assert "projectUnavailable" in app_js
     assert 'data-action="refresh-engine"' in app_js
     assert "let taskDraft = \"\"" in app_js
     assert 'addEventListener("input"' in app_js

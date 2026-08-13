@@ -22,3 +22,12 @@ def test_translocated_path_has_actionable_bilingual_message() -> None:
     english = safe_user_error(error, language="en")
     assert "AppTranslocation" in english
     assert "/AppTranslocation/temporary" not in english
+
+
+def test_missing_saved_project_has_a_reimport_action() -> None:
+    error = ValueError(
+        "saved project is no longer available; re-import its folder or ZIP."
+    )
+
+    assert "دوباره وارد" in safe_user_error(error)
+    assert "re-import" in safe_user_error(error, language="en")
