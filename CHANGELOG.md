@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+## [0.1.32] - 2026-08-13
+
+### Simpler project start screen
+
+- Remove duplicate import controls from the saved-projects panel.
+- Show a concise start hint in a readable muted green when the current
+  workspace is empty.
+- Keep the primary import card as the single place for selecting a folder or
+  ZIP.
+
 ## [0.1.31] - 2026-08-13
 
 ### Clear project selection and recovery
