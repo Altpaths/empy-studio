@@ -682,7 +682,9 @@ def test_failed_verification_is_visible_and_can_seed_a_follow_up_ticket(tmp_path
     assert all("Agent run" not in item for item in public["release_gate"]["blockers"])
     assert str(state.detection.descriptor.root) not in str(report)
     assert "<project>" in report["verification"]["failures"][0]["detail"]
-    assert public["failure_context"]["title"] == "علت دقیق توقف اجرای قبلی"
+    assert public["failure_context"]["title"] == "علت واضح توقف کار"
+    assert public["failure_context"]["repair_available"] is True
+    assert public["failure_context"]["failures"][0]["user_finding"]
     assert "public_html/index.html" in public["failure_context"]["suggested_ticket"]
     assert "قرارداد تست" in public["failure_context"]["failures"][0]["action"]
 
@@ -750,8 +752,65 @@ def test_failure_context_identifies_entrypoint_contract_mismatch(tmp_path: Path)
 
     assert context is not None
     assert context["failures"][0]["kind"] == "verification_contract_mismatch"
+    assert context["failures"][0]["user_finding"] == (
+        "صفحهٔ اول ساخته نشد: تست دنبال «public_html/index.html» است، "
+        "اما فایل واقعی پروژه «public_html/index.php» است."
+    )
+    assert context["repair_available"] is True
     assert "detected application entry point is index.php" in context["failures"][0]["detail"]
     assert "قرارداد Verification" in context["failures"][0]["action"]
+
+
+def test_auto_repair_creates_real_follow_up_plan_once(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "public_html").mkdir(parents=True)
+    (source / "public_html" / "composer.json").write_text(
+        '{"name":"demo/site","scripts":{"test":"php tests/site-audit.php"}}\n',
+        encoding="utf-8",
+    )
+    (source / "public_html" / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
+    (source / "public_html" / "tests").mkdir()
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+    state.create_plan("صفحه ایندکس و لینک دکمه ها را اصلاح کن")
+    assert state.detection is not None
+    state.verification = VerificationReport(
+        schema_version=1,
+        verification_id="verification-contract-mismatch",
+        project_root=str(state.detection.descriptor.root),
+        project_type="php",
+        status="fail",
+        started_at="now",
+        finished_at="now",
+        results=(
+            VerificationResult(
+                check=VerificationCheck(
+                    check_id="site-audit",
+                    label="Site audit",
+                    category="tests",
+                    command=("php", "tests/site-audit.php"),
+                ),
+                status="fail",
+                returncode=1,
+                stdout="missing public_html/index.html\n",
+                stderr="",
+                started_at="now",
+                finished_at="now",
+            ),
+        ),
+        evidence_path=str(tmp_path / "evidence"),
+    )
+    state.start_run = lambda: None  # type: ignore[method-assign]
+
+    state.auto_repair()
+
+    assert state.repair_attempts == 1
+    assert state.task is not None
+    assert "علت قطعی شکست قبلی" in state.task.objective
+    assert state.plan is not None
+    assert any(step.suggested_agent == "backend" for step in state.plan.steps)
+    with pytest.raises(RuntimeError, match="already attempted"):
+        state.auto_repair()
 
 
 def test_diagnostic_only_failure_has_required_action(tmp_path: Path) -> None:

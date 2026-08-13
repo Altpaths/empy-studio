@@ -122,6 +122,40 @@ def test_plain_php_plan_includes_application_and_test_scopes(
     assert "tests/" in value.likely_paths
 
 
+def test_persian_php_homepage_ticket_gets_a_writer_for_nested_entrypoint(
+    tmp_path: Path,
+) -> None:
+    public_html = tmp_path / "public_html"
+    public_html.mkdir()
+    (public_html / "composer.json").write_text(
+        '{"name":"demo/site","scripts":{"test":"php tests/site-audit.php"}}\n',
+        encoding="utf-8",
+    )
+    (public_html / "index.php").write_text(
+        "<?php echo 'home';\n",
+        encoding="utf-8",
+    )
+    (public_html / "tests").mkdir()
+    project = DefaultProjectService().detect(tmp_path)
+    current = ProductTask(
+        task_id="persian-homepage-ticket",
+        project_root=str(tmp_path.resolve()),
+        kind="custom",
+        title="صفحه ایندکس",
+        objective="ارتباط دهی و همگام سازی لینک ها و دکمه ها را بررسی و اصلاح کن",
+        requirements=("صفحه اول قابل استفاده باشد",),
+        constraints=(),
+        definition_of_done=("Verification واقعی موفق شود",),
+        status="ready_for_planning",
+    )
+
+    value = generate_execution_plan(task=current, project=project)
+
+    agents = {step.suggested_agent for step in value.steps}
+    assert {"discovery", "frontend", "backend", "quality"} <= agents
+    assert any(path.startswith("public_html/") for path in value.likely_paths)
+
+
 def test_path_fragments_do_not_create_unrelated_frontend_agents(
     tmp_path: Path,
 ) -> None:

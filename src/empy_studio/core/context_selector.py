@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Final
 
 from .path_policy import is_sensitive_relative_path
-from .planner import AgentRole, ExecutionPlan, PlanStep
+from .planner import IMPLEMENTATION_TERMS, AgentRole, ExecutionPlan, PlanStep
 from .project_brain import ProjectBrainIndex, ProjectBrainRecord
 from .project_service import ProjectDetection
 from .task_intake import ProductTask
@@ -926,7 +926,44 @@ def _build_pack(
         if exact:
             scored = exact
 
-    files: list[ContextFile] = []
+    virtual_homepage: ContextFile | None = None
+    task_requests_implementation = any(
+        term in task_text.casefold()
+        for term in IMPLEMENTATION_TERMS
+    )
+    if (
+        step.suggested_agent == "frontend"
+        and task_requests_implementation
+        and project.descriptor.project_type == "php"
+        and (project.effective_verification_root / "index.php").is_file()
+        and not (project.effective_verification_root / "index.html").is_file()
+    ):
+        try:
+            verification_prefix = project.effective_verification_root.relative_to(
+                project.descriptor.root
+            ).as_posix()
+        except ValueError:
+            verification_prefix = ""
+        relative_homepage = (
+            f"{verification_prefix}/index.html"
+            if verification_prefix
+            else "index.html"
+        )
+        if not any(item[1] == relative_homepage for item in scored):
+            virtual_homepage = ContextFile(
+                relative_path=relative_homepage,
+                score=60,
+                reasons=("approved frontend target is currently missing",),
+                size_bytes=0,
+                included_bytes=0,
+                sha256=hashlib.sha256(b"").hexdigest(),
+                truncated=False,
+                content="",
+            )
+
+    files: list[ContextFile] = (
+        [virtual_homepage] if virtual_homepage is not None else []
+    )
     total_bytes = 0
     for score, _relative, reasons, candidate in scored:
         if len(files) >= policy.max_files_per_pack:
@@ -956,9 +993,9 @@ def _build_pack(
 
     pack_seed = json.dumps(
         {
-            "plan_id": plan.plan_id,
-            "step_id": step.step_id,
-            "files": [item.sha256 for item in files],
+        "plan_id": plan.plan_id,
+        "step_id": step.step_id,
+        "files": [item.sha256 for item in files],
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -972,7 +1009,7 @@ def _build_pack(
         objective=step.objective,
         files=tuple(files),
         total_bytes=total_bytes,
-        candidate_count=len(scored),
+        candidate_count=len(scored) + (1 if virtual_homepage is not None else 0),
     )
     pack.validate()
     return pack
