@@ -568,6 +568,16 @@ class GuidedState:
             )
         return snapshot
 
+    @staticmethod
+    def _load_release_manifest(path: Path) -> dict[str, Any] | None:
+        try:
+            if not path.is_file():
+                return None
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError):
+            return None
+        return value if isinstance(value, dict) else None
+
     def select_project(self, project_id: str, *, restore: bool = False) -> None:
         project = self.store.get_project(project_id)
         if not Path(project.root).is_dir():
@@ -869,6 +879,27 @@ class GuidedState:
         plan, context, budget, graph = self._materialize_workflow(task)
         releases = self.store.list_task_releases(task.task_id)
         latest_release = releases[0] if releases else None
+        release_manifest = (
+            self._load_release_manifest(Path(latest_release.manifest_path))
+            if latest_release is not None
+            else None
+        )
+        restored_delta = (
+            latest_release is not None
+            and release_manifest is not None
+            and release_manifest.get("archive_mode") == "delta"
+        )
+        release_metadata: dict[str, Any] = release_manifest or {}
+        changed_files = (
+            tuple(str(item) for item in release_metadata.get("changed_files", []))
+            if restored_delta
+            else ()
+        )
+        deleted_files = (
+            tuple(str(item) for item in release_metadata.get("deleted_files", []))
+            if restored_delta
+            else ()
+        )
         restored_export = (
             ExportedProject(
                 project_root=self.detection.descriptor.root,
@@ -878,8 +909,21 @@ class GuidedState:
                 sha256=latest_release.sha256,
                 file_count=latest_release.file_count,
                 verified=latest_release.verified,
+                archive_mode="delta",
+                changed_files=changed_files,
+                deleted_files=deleted_files,
+                baseline_sha256=(
+                    str(release_metadata.get("baseline_snapshot_sha256"))
+                    if restored_delta and release_metadata.get("baseline_snapshot_sha256")
+                    else None
+                ),
+                extraction_root=(
+                    str(release_metadata.get("extraction_root"))
+                    if restored_delta and release_metadata.get("extraction_root")
+                    else self.detection.descriptor.root.name
+                ),
             )
-            if latest_release is not None
+            if latest_release is not None and restored_delta
             else None
         )
         with self.lock:
@@ -898,7 +942,13 @@ class GuidedState:
             self.node_states = {node.node_id: "waiting" for node in graph.nodes}
             self.phase = "plan"
             self.error = None
-            self.message = "تیکت قبلی بازیابی شد." if restore else "تیکت انتخاب شد."
+            self.message = (
+                "خروجی قدیمی کامل بود؛ برای جلوگیری از تحویل ناقص، ZIP تغییرات را دوباره تولید کنید."
+                if latest_release is not None and not restored_delta
+                else "تیکت قبلی بازیابی شد."
+                if restore
+                else "تیکت انتخاب شد."
+            )
         self.store.set_setting("active_task_id", task.task_id)
         self._restore_task_artifacts(task.task_id)
 

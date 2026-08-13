@@ -75,7 +75,10 @@ def test_guided_state_persists_project_and_follow_up_ticket(tmp_path: Path) -> N
     manifest = tmp_path / "release.manifest.json"
     checksum = tmp_path / "release.zip.sha256"
     archive.write_bytes(b"zip")
-    manifest.write_text("{}\n", encoding="utf-8")
+    manifest.write_text(
+        '{"archive_mode":"delta","changed_files":["README.md"],"deleted_files":[],"extraction_root":"source"}\n',
+        encoding="utf-8",
+    )
     checksum.write_text("abc  release.zip\n", encoding="utf-8")
     reopened.store.create_release(
         task_id=first_task_id,
@@ -93,6 +96,7 @@ def test_guided_state_persists_project_and_follow_up_ticket(tmp_path: Path) -> N
     assert restarted.export is not None
     assert restarted.export.archive_path == archive
     assert restarted.export.verified is True
+    assert restarted.export.changed_files == ("README.md",)
     assert restarted.public()["brain"]["source"] == "local_project_brain_index"
 
 

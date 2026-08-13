@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+## [0.1.39] - 2026-08-13
+
+### Rebuild legacy exports as deployment deltas
+
+- Do not restore older full-project release archives as current downloads.
+- Require a fresh change-only export when an existing workspace contains a
+  legacy release without delta metadata.
+
 ## [0.1.38] - 2026-08-13
 
 ### Deliver only verified project changes

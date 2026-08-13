@@ -47,6 +47,7 @@ function localizeMessage(value = "") {
     "درخواست توقف اجرا ثبت شد.": "The stop request was recorded.",
     "تصمیم روی تغییرات ثبت شد.": "The change decision was recorded.",
     "فایل ZIP فقط شامل فایل‌های تغییرکرده آماده شد.": "A verified change-only deployment ZIP is ready.",
+    "خروجی قدیمی کامل بود؛ برای جلوگیری از تحویل ناقص، ZIP تغییرات را دوباره تولید کنید.": "The previous archive was a full legacy export; create the change-only ZIP again before delivery.",
     "هیچ فایل تغییرکرده‌ای برای ساخت ZIP وجود ندارد؛ خروجی ناقص ساخته نشد.": "There are no changed project files for a delta ZIP; no incomplete archive was created.",
     "پروژه فایل حذف‌شده دارد؛ برای ساخت ZIP ابتدا فایل را برگردانید.": "The project has deleted files; restore them before creating a ZIP.",
     "نسخهٔ پایهٔ پروژه برای مقایسه پیدا نشد؛ پروژه را دوباره وارد کنید.": "The project's baseline snapshot is missing; re-import the project.",

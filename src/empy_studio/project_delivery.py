@@ -652,6 +652,7 @@ def export_project_zip(
             "archive_mode": "delta",
             "extraction_root": root.name,
             "baseline_snapshot_sha256": delta.baseline_sha256,
+            "changed_files": list(delta.changed_files),
             "deleted_files": list(delta.deleted_files),
         }
     )
