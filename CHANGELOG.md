@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+## [0.1.37] - 2026-08-13
+
+### Correct live release status and ZIP download action
+
+- Use the current release gate and review state after acceptance instead of
+  showing a stale pre-review blocked snapshot.
+- Make the ZIP download action visually match the adjacent actions.
+
 ## [0.1.36] - 2026-08-13
 
 ### Clarify empty project status

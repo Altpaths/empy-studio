@@ -213,17 +213,25 @@ function renderRunReport() {
   }).join("");
   const estimate = estimates.bounded_context_tokens === null || estimates.bounded_context_tokens === undefined ? "—" : Number(estimates.bounded_context_tokens).toLocaleString();
   const savings = estimates.savings_percentage === null || estimates.savings_percentage === undefined ? "—" : `${Number(estimates.savings_percentage).toLocaleString()}%`;
-  const verification = report.verification || {};
+  const verification = state.verification || report.verification || {};
   const diagnostics = (verification.diagnostics || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
   const failures = (verification.failures || []).map(item => `<article class="report-error"><strong>${escapeHtml(item.label || item.check_id || "Verification check")}</strong><small>${escapeHtml(item.category || "")}${item.returncode === undefined ? "" : ` · exit ${escapeHtml(item.returncode)}`}</small><p>${escapeHtml(item.detail || text().noDiagnostic)}</p></article>`).join("");
   const verificationDetails = `${diagnostics ? `<section class="verification-details"><h3>${text().verificationDiagnostics}</h3><ul>${diagnostics}</ul></section>` : ""}${failures ? `<section class="verification-details"><h3>${text().verificationFailures}</h3>${failures}</section>` : ""}`;
-  const review = report.review || {};
-  const exported = report.export || {};
+  const reviewState = state.review;
+  const review = reviewState
+    ? {pending: reviewState.pending_count || 0, accepted: reviewState.accepted_count || 0, reverted: reviewState.reverted_count || 0, ready: (reviewState.pending_count || 0) === 0}
+    : (report.review || {});
+  const exported = state.release_gate || report.export || {};
+  const exportState = state.export || null;
+  const exportVerified = exportState
+    ? Boolean(exportState.verified)
+    : Boolean(exported.exported || report.export?.verified);
+  const exportFileCount = exportState?.file_count ?? report.export?.file_count ?? exported.file_count ?? 0;
   const schedule = report.schedule || [];
   const scheduleText = schedule.length ? schedule.map(item => `${text().schedule} ${item.wave}: ${item.mode === "parallel" ? text().parallel : text().serial} · ${(item.node_ids || []).length}`).join(" · ") : text().notReported;
-  const exportStatus = exported.verified ? "✓" : exported.ready ? text().readyForExport : statusLabel(exported.status || "blocked");
-  const exportDetail = exported.verified
-    ? `${exported.file_count || 0} ${text().files}`
+  const exportStatus = exportVerified ? "✓" : exported.ready ? text().readyForExport : statusLabel(exported.status || "blocked");
+  const exportDetail = exportVerified
+    ? `${exportFileCount} ${text().files}`
     : (report.guidance?.summary || statusLabel(exported.status || "blocked"));
   const gateDetails = (exported.blockers || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
   return `<section class="report"><div class="row"><div><h2>${text().report}</h2><p class="muted">${escapeHtml(report.provider || "")} · ${escapeHtml(statusLabel(report.status))}</p></div><strong>${formatDuration(report.duration_seconds)}</strong></div><div class="report-stats"><div><small>${text().actual}</small><strong>${usage.available ? Number(usage.total_tokens || 0).toLocaleString() : "—"}</strong><span>${usage.available ? escapeHtml(usage.source || "provider") : text().notReported}</span></div><div><small>${text().estimate}</small><strong>${estimate}</strong><span>${text().bounded}</span></div><div><small>${text().saved}</small><strong>${savings}</strong><span>${text().benchmark}</span></div><div><small>${text().verification}</small><strong>${escapeHtml(statusLabel(verification.status))}</strong><span>${verification.passed_checks || 0}/${verification.total_checks || 0}</span></div><div><small>${text().review}</small><strong>${review.pending || 0}</strong><span>${text().pending}</span></div><div><small>${text().exportReady}</small><strong>${exportStatus}</strong><span>${escapeHtml(exportDetail)}</span></div></div><p class="muted report-schedule">${escapeHtml(scheduleText)}</p>${gateDetails ? `<section class="verification-details"><h3>${text().releaseGate}</h3><ul>${gateDetails}</ul></section>` : ""}${verificationDetails}<div class="report-node-list">${nodes || `<p class="muted">${text().noReport}</p>`}</div></section>`;
@@ -274,7 +282,7 @@ function renderSaved() {
   const archive = state.export || {};
   const archiveName = archive.archive_name || String(archive.archive_path || "project.zip").split(/[\\/]/).pop();
   const downloadUrl = `/api/export/download?token=${encodeURIComponent(token)}`;
-  return `<div class="card center"><h1>✓</h1><h2>${language === "fa" ? "خروجی آماده است" : "Export is ready"}</h2><p class="muted">${language === "fa" ? "فایل ZIP با موفقیت ساخته و بررسی شد:" : "The verified ZIP was created:"}<br><strong>${escapeHtml(archiveName || "project.zip")}</strong></p><div class="actions centered-actions"><a class="primary download-link" href="${downloadUrl}" download="${escapeHtml(archiveName || "project.zip")}">${text().download}</a><button type="button" class="secondary" data-action="reveal-export">${text().revealExport}</button><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div></div>`;
+  return `<div class="card center"><h1>✓</h1><h2>${language === "fa" ? "خروجی آماده است" : "Export is ready"}</h2><p class="muted">${language === "fa" ? "فایل ZIP با موفقیت ساخته و بررسی شد:" : "The verified ZIP was created:"}<br><strong>${escapeHtml(archiveName || "project.zip")}</strong></p><div class="actions centered-actions"><a class="secondary download-link" href="${downloadUrl}" download="${escapeHtml(archiveName || "project.zip")}">${text().download}</a><button type="button" class="secondary" data-action="reveal-export">${text().revealExport}</button><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div></div>`;
 }
 function render() {
   if (!state) return; language = state.language || language; banner(); let html = "";

@@ -28,6 +28,9 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert "enhanceReportUi" in app_js
     assert "technicalDetails" in app_js
     assert "run_report" in app_js
+    assert "state.release_gate || report.export" in app_js
+    assert "exportVerified" in app_js
+    assert 'class="secondary download-link"' in app_js
     assert "verificationReady" in app_js
     assert 'state.run_status === "completed"' in app_js
     assert 'data-action="choose-zip"' in app_js
@@ -63,3 +66,4 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert ".technical-details" in app_css
     assert ".import-report" in app_css
     assert ".message.warning" in app_css
+    assert ".download-link{display:inline-block;text-decoration:none;font:inherit" in app_css
