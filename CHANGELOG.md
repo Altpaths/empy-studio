@@ -1,5 +1,21 @@
 ## [Unreleased]
 
+## [0.1.29] - 2026-08-13
+
+### Real repair execution and clear user recovery
+
+- Give implementation Agents a bounded writable target when a requested PHP
+  homepage is missing, so a new `index.html` can be created instead of being
+  silently run as a read-only node.
+- Expand PHP homepage context to the real nested application root without
+  exposing `vendor/` or other protected dependency directories.
+- Add a one-click bilingual “automatically repair and rerun” action that uses
+  the confirmed verification finding, preserves the original project, and
+  never unlocks ZIP output from stale or failed evidence.
+- Replace long raw failure text with a direct user finding such as “the check
+  expects `public_html/index.html`, but the project has `index.php`,” while
+  keeping technical evidence available on demand.
+
 ## [0.1.28] - 2026-08-13
 
 ### Project input and verification contract

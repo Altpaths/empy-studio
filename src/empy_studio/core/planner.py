@@ -16,6 +16,41 @@ PlanStatus = Literal[
     "approved",
     "cancelled",
 ]
+
+IMPLEMENTATION_TERMS: tuple[str, ...] = (
+    "add",
+    "change",
+    "create",
+    "delete",
+    "fix",
+    "implement",
+    "modify",
+    "refactor",
+    "remove",
+    "update",
+    "write",
+    "link",
+    "button",
+    "page",
+    "افزود",
+    "تغییر",
+    "اصلاح",
+    "حذف",
+    "ساخت",
+    "پیاده",
+    "رفع",
+    "به‌روزرسان",
+    "بروزرسان",
+    "نوشتن",
+    "لینک",
+    "لینک‌دهی",
+    "ارتباط",
+    "همگام",
+    "هماهنگ",
+    "دکمه",
+    "بساز",
+    "ایجاد",
+)
 RiskLevel = Literal[
     "low",
     "medium",
@@ -233,11 +268,45 @@ def _likely_paths(
         paths.extend(("src/", "tests/"))
     elif project_type == "php":
         paths.extend(("src/", "app/", "public/", "routes/", "tests/"))
+        if any(
+            word in text
+            for word in (
+                "ui",
+                "homepage",
+                "page",
+                "link",
+                "button",
+                "layout",
+                "html",
+                "صفحه",
+                "ایندکس",
+                "لینک",
+                "دکمه",
+                "رابط",
+                "ظاهر",
+                "طراحی",
+                "همگام",
+                "هماهنگ",
+                "خانه",
+            )
+        ):
+            # The PHP detector may use a nested public root.  The explicit
+            # root scope lets the frontend writer see existing static pages
+            # and, when necessary, receive a virtual ownership target for a
+            # missing homepage without exposing the whole dependency tree.
+            paths.append("./")
     elif project_type == "go":
         paths.extend(("./",))
     else:
         paths.extend(("./",))
 
+    verification_root = project.effective_verification_root
+    try:
+        relative_root = verification_root.relative_to(project.descriptor.root).as_posix()
+    except ValueError:
+        relative_root = ""
+    if relative_root and relative_root != ".":
+        paths = [f"{relative_root}/{path.lstrip('./')}" for path in paths]
     return tuple(dict.fromkeys(paths))
 
 
@@ -366,6 +435,19 @@ def _roles(
             "layout",
             "css",
             "frontend",
+            "صفحه",
+            "ایندکس",
+            "لینک",
+            "دکمه",
+            "رابط",
+            "ظاهر",
+            "طراحی",
+            "سربرگ",
+            "رنگ",
+            "همگام",
+            "هماهنگ",
+            "سایت",
+            "خانه",
         )
     ):
         roles.append("frontend")
@@ -404,32 +486,9 @@ def _roles(
     # language to the backend writer as the generic code owner.  More
     # specific frontend/security/release roles above still win ownership by
     # their narrower patterns.
-    implementation_terms = (
-        "add",
-        "change",
-        "create",
-        "delete",
-        "fix",
-        "implement",
-        "modify",
-        "refactor",
-        "remove",
-        "update",
-        "write",
-        "افزود",
-        "تغییر",
-        "اصلاح",
-        "حذف",
-        "ساخت",
-        "پیاده",
-        "رفع",
-        "به‌روزرسان",
-        "بروزرسان",
-        "نوشتن",
-    )
     if not set(roles) & {"frontend", "backend", "security", "release"} and (
         task.kind in {"bug_fix", "feature", "ui_improvement"}
-        or _contains_any_term(text, implementation_terms)
+        or _contains_any_term(text, IMPLEMENTATION_TERMS)
     ):
         roles.append("backend")
 
@@ -604,6 +663,27 @@ def generate_execution_plan(
         include_discovery=include_discovery,
         include_quality=include_quality,
     )
+
+    # A PHP site can expose its public page as index.php while its visual
+    # surface lives in HTML/CSS assets. A Persian ticket that says
+    # "coordinate the page, links, and buttons" is an implementation request,
+    # not a read-only audit. Ensure the server-side entry point has an owner
+    # whenever the detected application actually has one.
+    task_text = " ".join((task.title, task.objective, *task.requirements))
+    implementation_requested = task.kind in {"bug_fix", "feature", "ui_improvement"} or _contains_any_term(
+        task_text.casefold(), IMPLEMENTATION_TERMS
+    )
+    if (
+        implementation_requested
+        and project.descriptor.project_type in {"php", "laravel"}
+        and "frontend" in roles
+        and "backend" not in roles
+        and (project.effective_verification_root / "index.php").is_file()
+    ):
+        roles_without_quality = tuple(role for role in roles if role != "quality")
+        roles = (*roles_without_quality, "backend")
+        if include_quality:
+            roles = (*roles, "quality")
 
     base_files = (
         len(task.requirements)

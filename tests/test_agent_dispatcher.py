@@ -285,6 +285,48 @@ def test_writing_plan_without_owned_files_is_blocked(tmp_path: Path) -> None:
         build_agent_run_graph(plan=plan, selection=selection, budget=budget)
 
 
+def test_missing_php_homepage_gets_virtual_frontend_ownership(tmp_path: Path) -> None:
+    public_html = tmp_path / "public_html"
+    public_html.mkdir()
+    (public_html / "composer.json").write_text(
+        '{"name":"demo/site","scripts":{"test":"php tests/site-audit.php"}}\n',
+        encoding="utf-8",
+    )
+    (public_html / "index.php").write_text("<?php echo 'home';\n", encoding="utf-8")
+    (public_html / "about").mkdir()
+    (public_html / "about" / "index.html").write_text(
+        "<main><h1>About</h1></main>\n",
+        encoding="utf-8",
+    )
+    (public_html / "tests").mkdir()
+    project = DefaultProjectService().detect(tmp_path)
+    task = ProductTask(
+        task_id="missing-php-homepage",
+        project_root=str(tmp_path.resolve()),
+        kind="custom",
+        title="صفحه ایندکس",
+        objective="لینک ها و دکمه ها را برای صفحه اول اصلاح کن",
+        requirements=("صفحه اول قابل استفاده باشد",),
+        constraints=(),
+        definition_of_done=("Verification موفق شود",),
+        status="ready_for_planning",
+    )
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+    selection = build_context_selection(task=task, project=project, plan=plan)
+    budget = lock_token_budget(build_token_budget(plan=plan, selection=selection))
+
+    graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+
+    frontend = next(node for node in graph.nodes if node.agent_role == "frontend")
+    assert "public_html/index.html" in frontend.owned_files
+    assert "public_html/index.html" in {
+        item.relative_path for item in graph.ownership if item.owner_node_id == frontend.node_id
+    }
+
+
 def test_explicit_test_update_is_owned_by_the_writer(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text(
         "[project]\nname = 'demo'\n",

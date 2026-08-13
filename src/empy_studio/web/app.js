@@ -12,7 +12,7 @@ const t = {
     importReview: "بررسی واردسازی پروژه", importedFiles: "فایل قابل‌استفاده", excludedItems: "مورد کنارگذاشته‌شده", importContinue: "فایل اصلی تغییر نکرده است؛ وابستگی‌های موجود برای Verification در کپی ایزوله حفظ شده‌اند و فقط از ZIP نهایی حذف می‌شوند.", importReady: "پروژه آماده‌ی ادامه است", importPartial: "برخی موارد از واردسازی کنار گذاشته شدند؛ دسته‌بندی زیر را بررسی کنید.", verificationReady: "Verification پیش از اجرای Agent آماده است", verificationNeedsAttention: "پیش‌نیاز Verification باید قبل از مصرف توکن رفع شود", verificationChecks: "بررسی‌های قابل اجرا", verificationDiagnostics: "علت توقف پیش از اجرا",
     plan: "تحلیل و ساخت برنامه", start: "شروع اجرا", accept: "تأیید تغییرات", revert: "بازگردانی تغییرات", export: "خروجی ZIP پروژه",
     newProject: "پروژه‌ی دیگر", noProject: "هنوز پروژه‌ای ثبت نشده است.", noTask: "هنوز تیکتی ثبت نشده است.", engine: "وضعیت Codex",
-    ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", cancel: "توقف اجرا", cancelled: "اجرا لغو شد", failed: "اجرا متوقف شد", backToTicket: "بازگشت به تیکت", continueTicket: "ادامه و اصلاح تیکت", result: "نتیجه و بررسی", resume: "ادامه تیکت",
+    ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", cancel: "توقف اجرا", cancelled: "اجرا لغو شد", failed: "اجرا متوقف شد", backToTicket: "بازگشت به تیکت", continueTicket: "ادامه و اصلاح تیکت", autoRepair: "اصلاح خودکار و اجرای دوباره", manualRepair: "نوشتن تیکت اصلاحی", result: "نتیجه و بررسی", resume: "ادامه تیکت",
     benchmark: "بنچمارک محلی", runBenchmark: "اجرای بنچمارک", full: "تخمین کامل", bounded: "تخمین محدود", saved: "صرفه‌جویی", brain: "Project Brain", report: "گزارش اجرای Agentها", agent: "Agent", duration: "زمان اجرا", summary: "خلاصه", usage: "مصرف Token", actual: "مصرف واقعی", fresh: "مصرف تازه", newTokens: "کار جدید", cached: "Cache", estimate: "تخمین محلی", notReported: "گزارش نشده", verification: "Verification", verificationDiagnostics: "تشخیص‌های Verification", verificationFailures: "خطاهای Verification", review: "Review", pending: "در انتظار تصمیم", evidence: "Evidence", filesChanged: "فایل تغییرکرده", exportReady: "آماده خروجی", readyForExport: "آماده تولید ZIP", releaseGate: "گیت انتشار", blocked: "مسدود", exported: "خروجی تولید شد", download: "دانلود ZIP", revealExport: "نمایش محل فایل", noReviewChanges: "تغییری برای تأیید یا بازگردانی وجود ندارد.", noReport: "گزارش اجرا هنوز موجود نیست", noDiagnostic: "جزئیات تشخیصی ثبت نشده است.", nextStep: "قدم بعدی", technicalDetails: "جزئیات فنی (اختیاری)", failureFinding: "یافتهٔ قطعی", requiredAction: "اقدام لازم", failureEvidence: "مسیر evidence", suggestedTicket: "تیکت اصلاحی پیشنهادی", refresh: "به‌روزرسانی وضعیت", openCodex: "بازکردن Codex", engineHelp: "برای اجرای واقعی، Codex باید نصب و احراز هویت شده باشد.", fieldRequired: "درخواست Ticket را وارد کنید.", schedule: "زمان‌بندی", parallel: "موازی", serial: "ترتیبی",
   },
   en: {
@@ -21,7 +21,7 @@ const t = {
     importReview: "Project import review", importedFiles: "usable files", excludedItems: "excluded items", importContinue: "The original project was not changed; dependencies already present are preserved for Verification in the isolated copy and excluded only from the final ZIP.", importReady: "Project is ready to continue", importPartial: "Some items were excluded from import; review the categories below.", verificationReady: "Verification is ready before the Agent run", verificationNeedsAttention: "Verification must be fixed before spending tokens", verificationChecks: "Runnable checks", verificationDiagnostics: "Pre-run blocker",
     plan: "Analyze and build plan", start: "Start run", accept: "Accept changes", revert: "Restore changes", export: "Export project ZIP",
     newProject: "Another project", noProject: "No projects have been registered.", noTask: "No tickets have been registered.", engine: "Codex status",
-    ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", cancel: "Stop run", cancelled: "Run cancelled", failed: "Run stopped", backToTicket: "Back to ticket", continueTicket: "Continue and fix ticket", result: "Result and review", resume: "Resume ticket",
+    ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", cancel: "Stop run", cancelled: "Run cancelled", failed: "Run stopped", backToTicket: "Back to ticket", continueTicket: "Continue and fix ticket", autoRepair: "Automatically repair and rerun", manualRepair: "Write a corrective ticket", result: "Result and review", resume: "Resume ticket",
     benchmark: "Local benchmark", runBenchmark: "Run benchmark", full: "Full estimate", bounded: "Bounded estimate", saved: "Saved", brain: "Project Brain", report: "Agent run report", agent: "Agent", duration: "Duration", summary: "Summary", usage: "Token usage", actual: "Actual usage", fresh: "Fresh input", newTokens: "New work", cached: "Cache", estimate: "Local estimate", notReported: "Not reported", verification: "Verification", verificationDiagnostics: "Verification diagnostics", verificationFailures: "Verification failures", review: "Review", pending: "Pending decisions", evidence: "Evidence", filesChanged: "Changed files", exportReady: "Export status", readyForExport: "Ready to create ZIP", releaseGate: "Release gate", blocked: "Blocked", exported: "Export created", download: "Download ZIP", revealExport: "Show file location", noReviewChanges: "There are no file changes to accept or restore.", noReport: "Run report is not available yet", noDiagnostic: "No diagnostic details were recorded.", nextStep: "Next step", technicalDetails: "Technical details (optional)", failureFinding: "Confirmed finding", requiredAction: "Required action", failureEvidence: "Evidence path", suggestedTicket: "Suggested corrective ticket", refresh: "Refresh status", openCodex: "Open Codex", engineHelp: "Codex must be installed and authenticated for a real run.", fieldRequired: "Enter a ticket request.", schedule: "Schedule", parallel: "Parallel", serial: "Serial",
   },
 };
@@ -146,7 +146,7 @@ function renderImportReport() {
 }
 function renderFailureContext(context, compact = false) {
   if (!context) return "";
-  const failures = (context.failures || []).map(item => `<article class="failure-item"><div class="row"><strong>${escapeHtml(item.label || text().verification)}</strong>${item.returncode === null || item.returncode === undefined ? "" : `<span class="status-pill failed">exit ${escapeHtml(item.returncode)}</span>`}</div><p class="failure-finding"><strong>${text().failureFinding}:</strong> ${escapeHtml(item.detail || text().noDiagnostic)}</p><p class="failure-action"><strong>${text().requiredAction}:</strong> ${escapeHtml(item.action || "")}</p></article>`).join("");
+  const failures = (context.failures || []).map(item => `<article class="failure-item"><div class="row"><strong>${escapeHtml(item.label || text().verification)}</strong>${item.returncode === null || item.returncode === undefined ? "" : `<span class="status-pill failed">exit ${escapeHtml(item.returncode)}</span>`}</div><p class="failure-finding"><strong>${text().failureFinding}:</strong> ${escapeHtml(item.user_finding || item.detail || text().noDiagnostic)}</p><p class="failure-action"><strong>${text().requiredAction}:</strong> ${escapeHtml(item.action || "")}</p></article>`).join("");
   const findings = (context.findings || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
   const evidence = context.evidence ? `<small class="evidence">${text().failureEvidence}: ${escapeHtml(context.evidence)}</small>` : "";
   return `<section class="failure-context ${compact ? "compact" : ""}" role="alert"><h2>${escapeHtml(context.title || "")}</h2><p>${escapeHtml(context.summary || "")}</p>${context.next_step ? `<p class="failure-next-step"><strong>${text().nextStep}:</strong> ${escapeHtml(context.next_step)}</p>` : ""}${failures ? `<div class="failure-list">${failures}</div>` : ""}${!failures && findings ? `<div class="failure-findings"><strong>${text().failureFinding}</strong><ul>${findings}</ul></div>` : ""}${evidence}${!compact && context.suggested_ticket ? `<p class="muted"><strong>${text().suggestedTicket}:</strong> ${escapeHtml(context.next_step || "")}</p>` : ""}</section>`;
@@ -220,10 +220,12 @@ function renderRun() {
   const nodes = state.plan?.nodes || [];
   const title = state.running ? text().run : state.run_status === "cancelled" ? text().cancelled : text().failed;
   const error = state.run_error ? `<p class="muted">${escapeHtml(state.run_error)}</p>` : "";
+  const repairAction = state.failure_context?.repair_available ? "auto-repair" : "resume-ticket";
+  const repairLabel = state.failure_context?.repair_available ? text().autoRepair : text().manualRepair;
   const action = state.running
     ? `<button type="button" class="danger" data-action="cancel-run">${text().cancel}</button>`
-    : `<button type="button" class="primary" data-action="resume-ticket">${text().continueTicket}</button>`;
-  return `<div class="card"><h1>${title}</h1>${error}<div class="node-list">${nodes.map(node => `<div class="node ${node.status}"><span>${escapeHtml(node.status)}</span><strong>${escapeHtml(node.title)}</strong></div>`).join("")}</div><pre class="log">${(state.logs || []).map(item => `[${escapeHtml(item.time)}] ${escapeHtml(item.text)}`).join("\n")}</pre><div class="actions">${action}</div></div>`;
+    : `<button type="button" class="primary" data-action="${repairAction}">${repairLabel}</button>`;
+  return `<div class="card"><h1>${title}</h1>${error}<div class="node-list">${nodes.map(node => `<div class="node ${node.status}"><span>${escapeHtml(statusLabel(node.status))}</span><strong>${escapeHtml(node.title)}</strong></div>`).join("")}</div><pre class="log">${(state.logs || []).map(item => `[${escapeHtml(item.time)}] ${escapeHtml(item.text)}`).join("\n")}</pre><div class="actions">${action}</div></div>`;
 }
 function enhanceImportUi() {
   if (state?.phase !== "task") return;
@@ -233,7 +235,9 @@ function enhanceImportUi() {
 }
 function renderResult() {
   const review = state.review || {files:[], pending_count:0}; const verification = state.verification || {}; const gate = state.release_gate || state.run_report?.export || {};
-  const continuation = verification.finalized_at ? "" : `<button type="button" class="primary" data-action="resume-ticket">${text().continueTicket}</button>`;
+  const repairAction = state.failure_context?.repair_available ? "auto-repair" : "resume-ticket";
+  const repairLabel = state.failure_context?.repair_available ? text().autoRepair : text().manualRepair;
+  const continuation = verification.finalized_at ? "" : `<button type="button" class="primary" data-action="${repairAction}">${repairLabel}</button>`;
   const verificationReady = verification.status === "pass" && Boolean(verification.finalized_at || verification.finalized);
   const gateReady = Boolean(gate.ready && verificationReady && state.run_status === "completed");
   if (!gateReady && gate.status !== "exported") gate.status = "blocked";
@@ -311,6 +315,7 @@ async function handleAction(action, target) {
     case "start-run": await runAction(() => api("/api/run", {})); break;
     case "cancel-run": await runAction(() => api("/api/cancel", {})); break;
     case "resume-ticket": await runAction(() => api("/api/resume-ticket", {})); break;
+    case "auto-repair": await runAction(() => api("/api/auto-repair", {})); break;
     case "decide": await runAction(() => api("/api/decision", {decision: target.dataset.decision})); break;
     case "export-project": await runAction(() => api("/api/export", {})); break;
     case "reveal-export": await runAction(() => api("/api/reveal-export", {})); break;

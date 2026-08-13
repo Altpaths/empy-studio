@@ -87,9 +87,11 @@ from empy_studio.verification_pipeline import (
 from empy_studio.workspace import SQLiteWorkspaceStore
 
 WEB_ROOT = Path(__file__).with_name("web")
+MAX_AUTOMATIC_REPAIR_ATTEMPTS = 1
 DEFAULT_CONSTRAINTS = (
     "Do not change unrelated features or business behavior.\n"
-    "Do not read or modify secrets, environment files, logs, vendor, node_modules, or Git history.\n"
+    "Do not read secrets or environment files, and do not modify logs, generated dependency directories (vendor or node_modules), or Git history.\n"
+    "Project verification may use dependencies already present in the isolated copy; do not include those dependency directories in Agent context or the final ZIP.\n"
     "Do not commit, push, merge, tag, publish, or alter remotes."
 )
 DEFAULT_DEFINITION_OF_DONE = (
@@ -180,6 +182,58 @@ def _add_entrypoint_hint(
     if hint not in detail:
         detail = f"{detail}\n{hint}"
     return detail, "verification_contract_mismatch"
+
+
+def _plain_failure_finding(
+    kind: str,
+    detail: str,
+    *,
+    language: str,
+) -> str:
+    """Give a nontechnical user the one fact that blocks delivery."""
+
+    normalized = detail.casefold()
+    if kind == "verification_contract_mismatch" and "index.html" in normalized:
+        expected_path = "index.html"
+        if "public_html/index.html" in normalized:
+            expected_path = "public_html/index.html"
+        elif "public/" in normalized and "public/index.html" in normalized:
+            expected_path = "public/index.html"
+        elif "www/index.html" in normalized:
+            expected_path = "www/index.html"
+        elif "web/index.html" in normalized:
+            expected_path = "web/index.html"
+        actual_path = expected_path.removesuffix("index.html") + "index.php"
+        if language == "fa":
+            return (
+                f"صفحهٔ اول ساخته نشد: تست دنبال «{expected_path}» است، "
+                f"اما فایل واقعی پروژه «{actual_path}» است."
+            )
+        return (
+            "The home page was not delivered: the check expects "
+            f"{expected_path}, but the project has {actual_path}."
+        )
+    if kind == "missing_dependency":
+        return (
+            "یک وابستگی لازم پیدا نشد؛ Empy باید آن را در کپی ایزوله تأمین کند."
+            if language == "fa"
+            else "A required dependency is missing; Empy must provide it in the isolated copy."
+        )
+    if kind == "permission":
+        return (
+            "دسترسی لازم برای خواندن یا نوشتن فایل وجود ندارد."
+            if language == "fa"
+            else "Empy does not have permission to read or write a required file."
+        )
+    if kind == "missing_verification_contract":
+        return (
+            "فایل یا دستور تست پروژه مشخص نیست؛ Empy نمی‌تواند نتیجهٔ واقعی را تأیید کند."
+            if language == "fa"
+            else "The project does not define a usable verification command."
+        )
+    if language == "fa":
+        return "بررسی نهایی پروژه موفق نشد؛ Empy هنوز ZIP قابل‌تحویل تولید نمی‌کند."
+    return "The final project check failed; Empy cannot create a deliverable ZIP yet."
 
 
 def _duration_seconds(started_at: str | None, finished_at: str | None) -> float | None:
@@ -282,6 +336,7 @@ class GuidedState:
     error: str | None = None
     continuation_context: str | None = None
     failure_context: dict[str, Any] | None = None
+    repair_attempts: int = 0
     imported: ImportedProject | None = None
     import_report: dict[str, Any] | None = None
     detection: ProjectDetection | None = None
@@ -387,6 +442,10 @@ class GuidedState:
     def _failure_context_setting_key(project_id: str) -> str:
         return f"failure-context:{project_id}"
 
+    @staticmethod
+    def _repair_attempts_setting_key(project_id: str) -> str:
+        return f"repair-attempts:{project_id}"
+
     def _load_import_report(self, project_id: str) -> dict[str, Any] | None:
         value = self.store.get_setting(self._import_report_setting_key(project_id))
         if not isinstance(value, dict):
@@ -488,6 +547,16 @@ class GuidedState:
                 import_report,
             )
         failure_context = self._load_failure_context(project.project_id)
+        saved_repair_attempts = self.store.get_setting(
+            self._repair_attempts_setting_key(project.project_id),
+            0,
+        )
+        repair_attempts = (
+            saved_repair_attempts
+            if isinstance(saved_repair_attempts, int)
+            and 0 <= saved_repair_attempts <= MAX_AUTOMATIC_REPAIR_ATTEMPTS
+            else 0
+        )
         with self.lock:
             self.active_project_id = project.project_id
             self.active_task_id = None
@@ -521,6 +590,7 @@ class GuidedState:
             self.error = None
             self.continuation_context = None
             self.failure_context = failure_context
+            self.repair_attempts = repair_attempts
             self.message = "پروژه بازیابی شد." if restore else "پروژه انتخاب شد."
         self.store.set_setting("active_project_id", project.project_id)
         if not restore:
@@ -559,6 +629,7 @@ class GuidedState:
                 "verification_readiness": verification_readiness,
             }
             self.import_report = import_report
+            self.repair_attempts = 0
             needs_attention = verification_readiness["status"] != "ready"
             readiness_diagnostics = cast(
                 list[str],
@@ -596,6 +667,7 @@ class GuidedState:
             self._import_report_setting_key(saved.project_id),
             import_report,
         )
+        self.store.set_setting(self._repair_attempts_setting_key(saved.project_id), 0)
 
     def import_path(self, path: str) -> None:
         selected = Path(path).expanduser().resolve()
@@ -783,6 +855,7 @@ class GuidedState:
             self.verification = None
             self.review = None
             self.export = restored_export
+            self.repair_attempts = 0
             self.node_states = {node.node_id: "waiting" for node in graph.nodes}
             self.phase = "plan"
             self.error = None
@@ -1013,8 +1086,10 @@ class GuidedState:
         with self.lock:
             self.failure_context = None
             project_id = self.active_project_id
+            self.repair_attempts = 0
         if project_id is not None:
             self.store.set_setting(self._failure_context_setting_key(project_id), None)
+            self.store.set_setting(self._repair_attempts_setting_key(project_id), 0)
 
     def _localized_failure_context(self) -> dict[str, Any] | None:
         raw = self.failure_context
@@ -1028,16 +1103,16 @@ class GuidedState:
             return None
         failures = raw.get("failures", [])
         diagnostics = raw.get("diagnostics", [])
+        first_kind = str(failures[0].get("kind", "")) if failures else ""
         if self.language == "en":
             title = "Why the previous run stopped"
             summary = (
                 "Empy found a concrete problem in the project or its verification contract. "
-                "Changing the ticket alone is not a fix; the finding below must be resolved "
-                "in the isolated project and Verification must be run again."
+                "The original project is safe; the isolated copy needs one repair pass."
             )
             next_step = (
-                "The corrective ticket is prefilled below. Review it, keep the exact finding, "
-                "then choose Analyze and build plan."
+                "Choose automatic repair. Empy will change only the isolated copy, rerun the checks, "
+                "and keep ZIP disabled until the result is real."
             )
             suggested_prefix = "Resolve the previous failure at its root, not by changing the ticket text."
             action_map = {
@@ -1050,15 +1125,14 @@ class GuidedState:
                 "check_failed": "Fix the exact issue reported by this check in the isolated project, then rerun Verification.",
             }
         else:
-            title = "علت دقیق توقف اجرای قبلی"
+            title = "علت واضح توقف کار"
             summary = (
-                "Empy در پروژه یا قرارداد بررسی آن یک مشکل مشخص پیدا کرده است. "
-                "عوض‌کردن متن تیکت به‌تنهایی اصلاح نیست؛ یافتهٔ زیر باید در کپی ایزوله برطرف شود "
-                "و Verification دوباره اجرا شود."
+                "Empy یک مشکل واقعی پیدا کرده است. فایل اصلی شما تغییر نکرده؛ "
+                "اصلاح باید فقط در کپی ایزوله انجام شود."
             )
             next_step = (
-                "تیکت اصلاحی بر اساس همین خطا در کادر زیر آماده شده است؛ آن را مرور کنید، "
-                "یافتهٔ دقیق را نگه دارید و «تحلیل و ساخت برنامه» را بزنید."
+                "روی «اصلاح خودکار» بزنید؛ Empy خودش فایل مناسب را اصلاح می‌کند، "
+                "دوباره تست می‌گیرد و فقط در صورت موفقیت ZIP می‌سازد."
             )
             suggested_prefix = "علت خطای قبلی را ریشه‌ای اصلاح کن، نه اینکه فقط متن تیکت را عوض کنی."
             action_map = {
@@ -1084,6 +1158,11 @@ class GuidedState:
                     "kind": item_kind,
                     "returncode": item.get("returncode"),
                     "detail": detail,
+                    "user_finding": _plain_failure_finding(
+                        item_kind,
+                        detail,
+                        language=self.language,
+                    ),
                     "action": action_map.get(item_kind, action_map["check_failed"]),
                 }
             )
@@ -1099,13 +1178,29 @@ class GuidedState:
         )
         return {
             "kind": raw.get("kind", "check_failed"),
-            "title": title,
-            "summary": summary,
+            "title": (
+                "صفحهٔ اول ساخته نشد؛ نام فایل با تست یکی نیست"
+                if self.language == "fa" and first_kind == "verification_contract_mismatch"
+                else "The home page was not delivered because the file name does not match the check"
+                if self.language == "en" and first_kind == "verification_contract_mismatch"
+                else title
+            ),
+            "summary": (
+                _plain_failure_finding(
+                    first_kind,
+                    str(failures[0].get("detail", "")),
+                    language=self.language,
+                )
+                if failures and first_kind == "verification_contract_mismatch"
+                else summary
+            ),
             "next_step": next_step,
             "findings": list(dict.fromkeys(findings))[:12],
             "failures": rendered_failures,
             "evidence": raw.get("evidence", ""),
             "suggested_ticket": "\n".join(ticket_lines)[:4000],
+            "repair_available": self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS,
+            "repair_attempts": self.repair_attempts,
         }
 
     def _build_continuation_context(self) -> str:
@@ -1161,6 +1256,47 @@ class GuidedState:
             self.message = "یافته‌های شکست قبلی حفظ شد؛ تیکت اصلاحی را وارد کنید."
         self.store.set_setting("active_task_id", None)
 
+    def auto_repair(self) -> None:
+        """Create and run one bounded corrective ticket from the real failure."""
+
+        if self.detection is None or self.active_project_id is None:
+            raise RuntimeError("Choose a project first.")
+        if self.running:
+            raise RuntimeError("Stop the active run before starting automatic repair.")
+        if self.repair_attempts >= MAX_AUTOMATIC_REPAIR_ATTEMPTS:
+            raise RuntimeError(
+                "Automatic repair was already attempted once. Review the exact finding "
+                "or start a new ticket with the required project decision."
+            )
+        context = self._build_continuation_context()
+        original = self.task
+        original_request = (
+            original.objective
+            if original is not None
+            else "Complete the requested project work."
+        )
+        repair_request = (
+            "ریشه‌ای اصلاح کن و نتیجهٔ واقعی تحویل بده.\n"
+            f"درخواست اصلی: {original_request}\n"
+            "این اصلاح را فقط در کپی ایزولهٔ پروژه انجام بده؛ فایل اصلی کاربر را تغییر نده.\n"
+            "علت قطعی شکست قبلی:\n"
+            f"{context}\n"
+            "فایل یا قرارداد درست پروژه را تشخیص بده، تغییر واقعی را اعمال کن، "
+            "و همان Verification را دوباره اجرا کن. فایل صوری فقط برای سبزکردن تست نساز."
+        )
+        with self.lock:
+            self.continuation_context = context
+            self.repair_attempts += 1
+            repair_attempts = self.repair_attempts
+            project_id = self.active_project_id
+        self.store.set_setting(
+            self._repair_attempts_setting_key(project_id),
+            repair_attempts,
+        )
+        self.create_plan(repair_request)
+        self.add_log("Automatic repair started from the confirmed verification failure.")
+        self.start_run()
+
     def create_plan(self, raw_tasks: str, task_id: str | None = None) -> None:
         if self.detection is None or self.active_project_id is None:
             raise RuntimeError("Choose a project first.")
@@ -1171,6 +1307,13 @@ class GuidedState:
         if not requirements:
             raise ValueError("Enter at least one actionable task.")
         continuation_context = self.continuation_context
+        if continuation_context is None:
+            with self.lock:
+                self.repair_attempts = 0
+            self.store.set_setting(
+                self._repair_attempts_setting_key(self.active_project_id),
+                0,
+            )
         objective_requirements = list(requirements)
         if continuation_context:
             objective_requirements.append(continuation_context)
@@ -1689,6 +1832,7 @@ class GuidedState:
             self.error = None
             self.continuation_context = None
             self.failure_context = None
+            self.repair_attempts = 0
             self.message = ""
             self.logs.clear()
         self.store.set_setting("active_project_id", None)
@@ -1838,12 +1982,67 @@ class GuidedState:
                 "action": "resume-ticket",
             }
 
+        contract_mismatch = next(
+            (
+                item
+                for item in failures
+                if str(item.get("kind", "")) == "verification_contract_mismatch"
+            ),
+            None,
+        )
+        if contract_mismatch is not None:
+            finding = str(
+                contract_mismatch.get("user_finding")
+                or _plain_failure_finding(
+                    "verification_contract_mismatch",
+                    str(contract_mismatch.get("detail", "")),
+                    language=self.language,
+                )
+            )
+            repair_available = self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS
+            if self.language == "en":
+                return {
+                    "kind": "verification_contract_mismatch",
+                    "title": "The home page was not delivered",
+                    "summary": finding,
+                    "steps": (
+                        [
+                            "Choose Automatically repair and rerun. Empy will update only the isolated copy.",
+                            "Empy will run the same Verification again; the ZIP stays blocked until it really passes.",
+                        ]
+                        if repair_available
+                        else [
+                            "Automatic repair has already been tried once. Review the project decision and run the exact corrective ticket again.",
+                        ]
+                    ),
+                    "action": "auto-repair" if repair_available else "resume-ticket",
+                    "repair_available": repair_available,
+                }
+            return {
+                "kind": "verification_contract_mismatch",
+                "title": "صفحهٔ اول ساخته نشد",
+                "summary": finding,
+                "steps": (
+                    [
+                        "روی «اصلاح خودکار و اجرای دوباره» بزنید؛ Empy فقط کپی ایزوله را تغییر می‌دهد.",
+                        "Empy همان Verification را دوباره اجرا می‌کند؛ ZIP تا موفقیت واقعی ساخته نمی‌شود.",
+                    ]
+                    if repair_available
+                    else [
+                        "اصلاح خودکار یک‌بار انجام شده است؛ برای تصمیم بعدی، تیکت اصلاحی دقیق را دوباره اجرا کنید.",
+                    ]
+                ),
+                "action": "auto-repair" if repair_available else "resume-ticket",
+                "repair_available": repair_available,
+            }
+
         verification_failed = self.verification is not None and (
             self.verification.status != "pass"
             or not self.verification.finalize_allowed
             or self.verification.finalized_at is None
         )
         if failures or verification_failed:
+            repair_available = self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS
             if self.language == "en":
                 return {
                     "kind": "verification_failed",
@@ -1852,22 +2051,22 @@ class GuidedState:
                         "Empy found a problem in the project checks, so it has blocked the ZIP."
                     ),
                     "steps": [
-                        "Open the optional technical details only if you need the exact check output.",
-                        "Choose Continue and fix ticket so Empy can prepare a correction in the isolated copy.",
-                        "Run Verification again after the correction; the ZIP will unlock only after it passes.",
+                        "Choose Automatically repair and rerun; Empy will use the confirmed finding in the isolated copy.",
+                        "The ZIP will unlock only after the same Verification really passes.",
                     ],
-                    "action": "resume-ticket",
+                    "action": "auto-repair" if repair_available else "resume-ticket",
+                    "repair_available": repair_available,
                 }
             return {
                 "kind": "verification_failed",
                 "title": "یک بررسی پروژه موفق نشد",
                 "summary": "Empy در بررسی پروژه مشکل پیدا کرد؛ برای جلوگیری از ZIP ناقص، خروجی مسدود شد.",
                 "steps": [
-                    "جزئیات فنی فقط در صورت نیاز، داخل بخش «جزئیات فنی (اختیاری)» قرار دارد.",
-                    "روی «ادامه و اصلاح تیکت» بزنید تا Empy اصلاح را در کپی ایزوله‌ی پروژه آماده کند.",
-                    "بعد از اصلاح، Verification دوباره اجرا می‌شود و فقط در صورت موفقیت ZIP فعال خواهد شد.",
+                    "روی «اصلاح خودکار و اجرای دوباره» بزنید؛ Empy از همین یافته برای اصلاح کپی ایزوله استفاده می‌کند.",
+                    "ZIP فقط بعد از موفقیت واقعی همان Verification فعال می‌شود.",
                 ],
-                "action": "resume-ticket",
+                "action": "auto-repair" if repair_available else "resume-ticket",
+                "repair_available": repair_available,
             }
 
         if self.run is not None and self.run.status != "completed":
@@ -1966,23 +2165,35 @@ class GuidedState:
         passed_checks = sum(item.status == "pass" for item in verification_results)
         failed_checks = sum(item.status != "pass" for item in verification_results)
         verification_diagnostics = list(self.verification.diagnostics) if self.verification is not None else []
-        verification_failures = [
-            {
-                "check_id": item.check.check_id,
-                "label": item.check.label,
-                "category": item.check.category,
-                "returncode": item.returncode,
-                "detail": _safe_verification_detail(
-                    item.stderr or item.stdout,
-                    (
-                        self.detection.descriptor.root if self.detection is not None else self.workspace_root,
-                        self.workspace_root,
+        verification_failures: list[dict[str, Any]] = []
+        verification_roots = (
+            self.detection.descriptor.root if self.detection is not None else self.workspace_root,
+            self.workspace_root,
+        )
+        for item in verification_results:
+            if item.status != "fail":
+                continue
+            detail = _safe_verification_detail(
+                item.stderr or item.stdout,
+                verification_roots,
+            )
+            detail, inferred_kind = _add_entrypoint_hint(detail, self.detection)
+            kind = inferred_kind or _failure_kind(detail)
+            verification_failures.append(
+                {
+                    "check_id": item.check.check_id,
+                    "label": item.check.label,
+                    "category": item.check.category,
+                    "returncode": item.returncode,
+                    "detail": detail,
+                    "kind": kind,
+                    "user_finding": _plain_failure_finding(
+                        kind,
+                        detail,
+                        language=self.language,
                     ),
-                ),
-            }
-            for item in verification_results
-            if item.status == "fail"
-        ]
+                }
+            )
         guidance = self._user_guidance(
             diagnostics=verification_diagnostics,
             failures=verification_failures,
@@ -2264,6 +2475,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             state.cancel_run()
         elif path == "/api/resume-ticket":
             state.resume_ticket()
+        elif path == "/api/auto-repair":
+            state.auto_repair()
         elif path == "/api/decision":
             state.decide_all(str(body.get("decision", "")))
         elif path == "/api/export":
