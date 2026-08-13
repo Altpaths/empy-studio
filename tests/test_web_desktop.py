@@ -156,11 +156,44 @@ def test_browser_folder_upload_isolated_and_security_filtered(tmp_path: Path) ->
         "copied_files": 1,
         "skipped_files": 1,
         "categories": {"access_or_copy": 1},
+        "verification_readiness": {
+            "status": "needs_attention",
+            "checks": [],
+            "diagnostics": [
+                (
+                    "No safe verification checks were detected for this project. "
+                    "Configure .empy/verification.json or add a supported test, "
+                    "build, or lint entry point before export."
+                ),
+            ],
+        },
     }
 
     reopened = GuidedState(tmp_path / "empy-workspace")
     assert reopened.public()["message_level"] == "warning"
     assert reopened.public()["import_report"] == public["import_report"]
+
+
+def test_import_reports_missing_composer_dependency_before_ticket_planning(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "composer.json").write_text(
+        '{"name":"demo/php-app","scripts":{"test":"php tests/run.php"}}\n',
+        encoding="utf-8",
+    )
+    (source / "composer.lock").write_text("{}\n", encoding="utf-8")
+    (source / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
+
+    state = GuidedState(tmp_path / "empy-workspace")
+    state.import_path(str(source))
+
+    readiness = state.public()["import_report"]["verification_readiness"]
+    assert readiness["status"] == "needs_attention"
+    assert any("vendor/autoload.php" in item for item in readiness["diagnostics"])
+    assert state.public()["message_level"] == "warning"
+    assert "vendor/autoload.php" in state.public()["message"]
 
 
 def test_export_registers_release_history(tmp_path: Path) -> None:
@@ -668,6 +701,57 @@ def test_failed_verification_is_visible_and_can_seed_a_follow_up_ticket(tmp_path
     reopened = GuidedState(tmp_path / "workspace")
     assert reopened.public()["failure_context"] is not None
     assert "public_html/index.html" in reopened.public()["failure_context"]["suggested_ticket"]
+
+
+def test_failure_context_identifies_entrypoint_contract_mismatch(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "public_html").mkdir(parents=True)
+    (source / "public_html" / "composer.json").write_text(
+        '{"name":"demo/site","scripts":{"test":"php tests/site-audit.php"}}\n',
+        encoding="utf-8",
+    )
+    (source / "public_html" / "index.php").write_text(
+        "<?php echo 'ok';\n",
+        encoding="utf-8",
+    )
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+    state.create_plan("Verify the homepage")
+    assert state.detection is not None
+    root = state.detection.descriptor.root
+    state.verification = VerificationReport(
+        schema_version=1,
+        verification_id="verification-contract-mismatch",
+        project_root=str(root),
+        project_type="php",
+        status="fail",
+        started_at="now",
+        finished_at="now",
+        results=(
+            VerificationResult(
+                check=VerificationCheck(
+                    check_id="site-audit",
+                    label="Site audit",
+                    category="tests",
+                    command=("composer", "run-script", "test"),
+                ),
+                status="fail",
+                returncode=1,
+                stdout="missing public_html/index.html\n",
+                stderr="",
+                started_at="now",
+                finished_at="now",
+            ),
+        ),
+        evidence_path=str(tmp_path / "evidence"),
+    )
+
+    context = state.public()["failure_context"]
+
+    assert context is not None
+    assert context["failures"][0]["kind"] == "verification_contract_mismatch"
+    assert "detected application entry point is index.php" in context["failures"][0]["detail"]
+    assert "قرارداد Verification" in context["failures"][0]["action"]
 
 
 def test_diagnostic_only_failure_has_required_action(tmp_path: Path) -> None:

@@ -9,7 +9,7 @@ const t = {
   fa: {
     subtitle: "توسعه‌ی پروژه با ایجنت‌های هماهنگ", project: "پروژه‌ها", import: "مسیر پوشه یا ZIP پروژه",
     importButton: "واردکردن پروژه", folder: "انتخاب پوشه", zip: "انتخاب ZIP", tasks: "تیکت جدید", taskHint: "درخواست را مثل توضیح به یک همکار بنویسید…",
-    importReview: "بررسی واردسازی پروژه", importedFiles: "فایل قابل‌استفاده", excludedItems: "مورد کنارگذاشته‌شده", importContinue: "فایل اصلی تغییر نکرده است؛ می‌توانید با فایل‌های قابل‌استفاده ادامه دهید.", importReady: "پروژه آماده‌ی ادامه است", importPartial: "برخی موارد از واردسازی کنار گذاشته شدند؛ دسته‌بندی زیر را بررسی کنید.",
+    importReview: "بررسی واردسازی پروژه", importedFiles: "فایل قابل‌استفاده", excludedItems: "مورد کنارگذاشته‌شده", importContinue: "فایل اصلی تغییر نکرده است؛ وابستگی‌های موجود برای Verification در کپی ایزوله حفظ شده‌اند و فقط از ZIP نهایی حذف می‌شوند.", importReady: "پروژه آماده‌ی ادامه است", importPartial: "برخی موارد از واردسازی کنار گذاشته شدند؛ دسته‌بندی زیر را بررسی کنید.", verificationReady: "Verification پیش از اجرای Agent آماده است", verificationNeedsAttention: "پیش‌نیاز Verification باید قبل از مصرف توکن رفع شود", verificationChecks: "بررسی‌های قابل اجرا", verificationDiagnostics: "علت توقف پیش از اجرا",
     plan: "تحلیل و ساخت برنامه", start: "شروع اجرا", accept: "تأیید تغییرات", revert: "بازگردانی تغییرات", export: "خروجی ZIP پروژه",
     newProject: "پروژه‌ی دیگر", noProject: "هنوز پروژه‌ای ثبت نشده است.", noTask: "هنوز تیکتی ثبت نشده است.", engine: "وضعیت Codex",
     ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", cancel: "توقف اجرا", cancelled: "اجرا لغو شد", failed: "اجرا متوقف شد", backToTicket: "بازگشت به تیکت", continueTicket: "ادامه و اصلاح تیکت", result: "نتیجه و بررسی", resume: "ادامه تیکت",
@@ -18,7 +18,7 @@ const t = {
   en: {
     subtitle: "Coordinated project development with bounded agents", project: "Projects", import: "Project folder or ZIP path",
     importButton: "Import project", folder: "Choose folder", zip: "Choose ZIP", tasks: "New ticket", taskHint: "Describe the work as you would to a teammate…",
-    importReview: "Project import review", importedFiles: "usable files", excludedItems: "excluded items", importContinue: "The original project was not changed; you can continue with the usable files.", importReady: "Project is ready to continue", importPartial: "Some items were excluded from import; review the categories below.",
+    importReview: "Project import review", importedFiles: "usable files", excludedItems: "excluded items", importContinue: "The original project was not changed; dependencies already present are preserved for Verification in the isolated copy and excluded only from the final ZIP.", importReady: "Project is ready to continue", importPartial: "Some items were excluded from import; review the categories below.", verificationReady: "Verification is ready before the Agent run", verificationNeedsAttention: "Verification must be fixed before spending tokens", verificationChecks: "Runnable checks", verificationDiagnostics: "Pre-run blocker",
     plan: "Analyze and build plan", start: "Start run", accept: "Accept changes", revert: "Restore changes", export: "Export project ZIP",
     newProject: "Another project", noProject: "No projects have been registered.", noTask: "No tickets have been registered.", engine: "Codex status",
     ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", cancel: "Stop run", cancelled: "Run cancelled", failed: "Run stopped", backToTicket: "Back to ticket", continueTicket: "Continue and fix ticket", result: "Result and review", resume: "Resume ticket",
@@ -49,7 +49,15 @@ function localizeMessage(value = "") {
   return messages[value] || value;
 }
 function importStatusMessage(report) {
-  if (!report || !report.skipped_files) return "";
+  if (!report) return "";
+  const readiness = report.verification_readiness || {};
+  const diagnostics = readiness.diagnostics || [];
+  if (readiness.status === "needs_attention" && diagnostics.length) {
+    return language === "fa"
+      ? "واردسازی کامل شد، اما قبل از اجرای Agent یک پیش‌نیاز Verification باید رفع شود: " + diagnostics[0]
+      : "Import completed, but Verification needs attention before an Agent run: " + diagnostics[0];
+  }
+  if (!report.skipped_files) return "";
   if (language === "fa") return `پروژه در یک کپی ایزوله وارد شد؛ ${Number(report.copied_files || 0).toLocaleString()} فایل قابل‌استفاده کپی شد و ${Number(report.skipped_files || 0).toLocaleString()} مورد کنارگذاشته‌شده در بررسی واردسازی توضیح داده شده است.`;
   return `Project imported into an isolated copy. ${Number(report.copied_files || 0).toLocaleString()} usable file(s) copied; ${Number(report.skipped_files || 0).toLocaleString()} excluded item(s) are explained below.`;
 }
@@ -107,17 +115,18 @@ function renderProject() {
 }
 function renderImportReport() {
   const report = state.import_report;
-  if (!report || !report.skipped_files) return "";
+  const readiness = report?.verification_readiness || {};
+  if (!report || (!report.skipped_files && readiness.status !== "needs_attention")) return "";
   const labels = language === "fa" ? {
     macos_metadata: "فایل‌های جانبی macOS",
-    dependencies: "وابستگی‌ها مثل vendor و node_modules",
+    dependencies: "فایل یا لینک وابستگی که قابل کپی نبوده است",
     git_metadata: "تاریخچه و متادیتای Git",
     sensitive_or_runtime: "فایل‌های حساس یا گزارش‌های اجرایی",
     unsafe_path: "مسیرهای ناامن",
     access_or_copy: "فایل‌های غیرقابل‌خواندن یا کپی‌نشده",
   } : {
     macos_metadata: "macOS metadata",
-    dependencies: "Dependencies such as vendor and node_modules",
+    dependencies: "Dependency files or links that could not be copied",
     git_metadata: "Git history and metadata",
     sensitive_or_runtime: "Sensitive or runtime files",
     unsafe_path: "Unsafe paths",
@@ -127,7 +136,13 @@ function renderImportReport() {
   const status = report.status === "partial"
     ? text().importPartial
     : text().importReady;
-  return '<section class="import-report warning"><h2>' + text().importReview + '</h2><p>' + escapeHtml(status) + '</p><div class="import-stats"><div><small>' + text().importedFiles + '</small><strong>' + Number(report.copied_files || 0).toLocaleString() + '</strong></div><div><small>' + text().excludedItems + '</small><strong>' + Number(report.skipped_files || 0).toLocaleString() + '</strong></div></div><p class="muted">' + text().importContinue + '</p><ul>' + rows + '</ul></section>';
+  const readinessClass = readiness.status === "needs_attention" ? "needs-attention" : "ready";
+  const readinessTitle = readiness.status === "needs_attention" ? text().verificationNeedsAttention : text().verificationReady;
+  const readinessDetails = readiness.status === "needs_attention"
+    ? "<strong>" + text().verificationDiagnostics + "</strong><ul>" + (readiness.diagnostics || []).map(item => "<li><span>" + escapeHtml(item) + "</span></li>").join("") + "</ul>"
+    : "<strong>" + text().verificationChecks + "</strong><ul>" + (readiness.checks || []).map(item => "<li><span>" + escapeHtml(item) + "</span></li>").join("") + "</ul>";
+  const categoryBlock = report.skipped_files ? "<ul>" + rows + "</ul>" : "";
+  return '<section class="import-report warning"><h2>' + text().importReview + '</h2><p>' + escapeHtml(status) + '</p><div class="import-stats"><div><small>' + text().importedFiles + '</small><strong>' + Number(report.copied_files || 0).toLocaleString() + '</strong></div><div><small>' + text().excludedItems + '</small><strong>' + Number(report.skipped_files || 0).toLocaleString() + '</strong></div></div><p class="muted">' + text().importContinue + '</p>' + categoryBlock + '<div class="import-readiness ' + readinessClass + '"><h3>' + readinessTitle + '</h3>' + readinessDetails + '</div></section>';
 }
 function renderFailureContext(context, compact = false) {
   if (!context) return "";

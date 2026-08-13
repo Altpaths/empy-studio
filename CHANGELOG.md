@@ -1,5 +1,28 @@
 ## [Unreleased]
 
+## [0.1.28] - 2026-08-13
+
+### Project input and verification contract
+
+- Preserve existing vendor/ and node_modules/ in Empy's isolated execution
+  copy so valid project checks do not fail because Empy removed their runtime
+  dependencies during import.
+- Keep dependency directories excluded from the final delivery ZIP and from
+  bounded Agent context; execution availability and context selection are now
+  separate policies.
+- Show Verification readiness and missing prerequisites immediately after
+  import, before a ticket spends provider tokens.
+- Detect the common index.html versus index.php entry-point contract mismatch
+  and explain that the verification contract needs repair instead of
+  suggesting a placeholder file.
+
+### macOS distribution status
+
+The macOS app archives remain ad-hoc signed and are not Developer ID signed
+or notarized. macOS Gatekeeper may show a warning on first launch. This is an
+intentional distribution limitation and does not affect Python, Linux, or
+Windows use.
+
 ## [0.1.27] - 2026-08-13
 
 ### Actionable verification recovery

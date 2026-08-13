@@ -162,6 +162,25 @@ class VerificationReport:
         }
 
 
+@dataclass(frozen=True)
+class VerificationPreflight:
+    """Static readiness result shown before an Agent run starts."""
+
+    checks: tuple[VerificationCheck, ...]
+    diagnostics: tuple[str, ...]
+
+    @property
+    def ready(self) -> bool:
+        return bool(self.checks) and not self.diagnostics
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "status": "ready" if self.ready else "needs_attention",
+            "checks": [item.label for item in self.checks],
+            "diagnostics": list(self.diagnostics),
+        }
+
+
 def _node_scripts(root: Path) -> dict[str, object]:
     package = root / "package.json"
     if not package.is_file():
@@ -366,6 +385,37 @@ def _verification_diagnostics(detection: ProjectDetection) -> tuple[str, ...]:
     return tuple(diagnostics)
 
 
+def verification_preflight(detection: ProjectDetection) -> VerificationPreflight:
+    """Inspect the verification contract without running project commands.
+
+    Importing a project must surface missing runtime prerequisites before an
+    Agent spends tokens on a ticket. This function is deliberately static: it
+    does not install dependencies, execute project code, or modify the source
+    copy.
+    """
+
+    diagnostics: list[str] = []
+    try:
+        checks = map_project_verification(detection)
+    except (OSError, TypeError, ValueError) as exc:
+        checks = ()
+        diagnostics.append(f"Verification contract could not be read: {exc}")
+    try:
+        diagnostics.extend(_verification_diagnostics(detection))
+    except (OSError, TypeError, ValueError) as exc:
+        diagnostics.append(f"Verification prerequisites could not be read: {exc}")
+    if not checks:
+        diagnostics.append(
+            "No safe verification checks were detected for this project. "
+            "Configure .empy/verification.json or add a supported test, "
+            "build, or lint entry point before export."
+        )
+    return VerificationPreflight(
+        checks=tuple(checks),
+        diagnostics=tuple(dict.fromkeys(diagnostics)),
+    )
+
+
 def verification_contract_signature(
     detection: ProjectDetection,
     checks: tuple[VerificationCheck, ...] | None = None,
@@ -417,23 +467,16 @@ class VerificationRuntime:
     ) -> VerificationReport:
         if timeout_seconds < 1:
             raise ValueError("verification timeout must be at least one second")
-        checks = map_project_verification(detection)
+        preflight = verification_preflight(detection)
+        checks = preflight.checks
         contract_signature = verification_contract_signature(detection, checks)
         verification_id = uuid.uuid4().hex
         run_root = evidence_root / verification_id
         run_root.mkdir(parents=True, exist_ok=False)
         started_at = _now()
         results: list[VerificationResult] = []
-        diagnostics = _verification_diagnostics(detection)
+        diagnostics = preflight.diagnostics
         if not checks:
-            diagnostics = (
-                *diagnostics,
-                (
-                    "No safe verification checks were detected for this project. "
-                    "Configure .empy/verification.json or add a supported test, "
-                    "build, or lint entry point before export."
-                ),
-            )
             if on_event is not None:
                 on_event(
                     VerificationEvent(
@@ -441,7 +484,7 @@ class VerificationRuntime:
                         "configuration",
                         "tests",
                         "system",
-                        diagnostics[0],
+                        diagnostics[-1],
                     )
                 )
         else:

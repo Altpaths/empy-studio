@@ -20,7 +20,7 @@ MAX_ARCHIVE_TOTAL_BYTES = 512 * 1024 * 1024
 MAX_UPLOAD_FILE_BYTES = MAX_ARCHIVE_FILE_BYTES
 MAX_UPLOAD_TOTAL_BYTES = MAX_ARCHIVE_TOTAL_BYTES
 
-EXCLUDED_NAMES = frozenset(
+IMPORT_EXCLUDED_NAMES = frozenset(
     {
         ".DS_Store",
         ".env",
@@ -33,16 +33,24 @@ EXCLUDED_NAMES = frozenset(
         ".venv",
         "__MACOSX",
         "__pycache__",
+        "outputs",
+        "private",
+        "releases",
+        "venv",
+        "work",
+    }
+)
+# Dependencies are part of the isolated execution workspace when the source
+# already contains them. They are excluded only from the final delivery ZIP;
+# otherwise importing a valid Composer or Node project silently makes its own
+# verification impossible.
+DELIVERY_EXCLUDED_NAMES = IMPORT_EXCLUDED_NAMES | frozenset(
+    {
         "build",
         "coverage",
         "dist",
         "node_modules",
-        "outputs",
-        "private",
-        "releases",
         "vendor",
-        "venv",
-        "work",
     }
 )
 EXCLUDED_SUFFIXES = (
@@ -103,23 +111,33 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _excluded(relative: PurePosixPath) -> bool:
+def _excluded(
+    relative: PurePosixPath,
+    excluded_names: frozenset[str] = IMPORT_EXCLUDED_NAMES,
+) -> bool:
     if is_sensitive_relative_path(relative):
         return True
     return any(
-        part in EXCLUDED_NAMES
+        part in excluded_names
         or part.startswith(".env.")
         or part.lower().endswith(EXCLUDED_SUFFIXES)
         for part in relative.parts
     )
 
 
-def _safe_member_name(name: str) -> PurePosixPath | None:
+def _safe_member_name(
+    name: str,
+    excluded_names: frozenset[str] = IMPORT_EXCLUDED_NAMES,
+) -> PurePosixPath | None:
     normalized = name.replace("\\", "/").strip("/")
     if not normalized:
         return None
     relative = PurePosixPath(normalized)
-    if relative.is_absolute() or ".." in relative.parts or _excluded(relative):
+    if (
+        relative.is_absolute()
+        or ".." in relative.parts
+        or _excluded(relative, excluded_names)
+    ):
         return None
     return relative
 
@@ -200,8 +218,12 @@ def _validate_import_source(root: Path) -> None:
         raise OSError(exc.errno, "The selected project path cannot be inspected.") from exc
 
 
-def _walk_files(root: Path) -> tuple[tuple[tuple[Path, str], ...], tuple[str, ...]]:
-    """Walk a project without aborting the whole import on one unreadable path."""
+def _walk_files(
+    root: Path,
+    *,
+    excluded_names: frozenset[str] = IMPORT_EXCLUDED_NAMES,
+) -> tuple[tuple[tuple[Path, str], ...], tuple[str, ...]]:
+    """Walk a project without aborting on one unreadable or excluded path."""
     members: list[tuple[Path, str]] = []
     skipped: list[str] = []
 
@@ -223,7 +245,7 @@ def _walk_files(root: Path) -> tuple[tuple[tuple[Path, str], ...], tuple[str, ..
         for directory in sorted(directories):
             relative = current_relative / directory
             candidate = current_path / directory
-            if _excluded(relative) or candidate.is_symlink():
+            if _excluded(relative, excluded_names) or candidate.is_symlink():
                 skipped.append(relative.as_posix())
                 if (
                     is_sensitive_relative_path(relative)
@@ -251,7 +273,7 @@ def _walk_files(root: Path) -> tuple[tuple[tuple[Path, str], ...], tuple[str, ..
         for filename in sorted(filenames):
             relative = current_relative / filename
             candidate = current_path / filename
-            if _excluded(relative) or candidate.is_symlink():
+            if _excluded(relative, excluded_names) or candidate.is_symlink():
                 skipped.append(relative.as_posix())
                 continue
             try:
@@ -264,11 +286,21 @@ def _walk_files(root: Path) -> tuple[tuple[tuple[Path, str], ...], tuple[str, ..
     return tuple(members), tuple(skipped)
 
 
-def _safe_files(root: Path) -> tuple[tuple[Path, str], ...]:
+def _safe_files(
+    root: Path,
+    *,
+    for_delivery: bool = False,
+) -> tuple[tuple[Path, str], ...]:
+    """Return safe files for import or final delivery, depending on the mode."""
     root = root.expanduser().resolve()
     if not root.is_dir():
         raise NotADirectoryError(root)
-    members, _skipped = _walk_files(root)
+    members, _skipped = _walk_files(
+        root,
+        excluded_names=(
+            DELIVERY_EXCLUDED_NAMES if for_delivery else IMPORT_EXCLUDED_NAMES
+        ),
+    )
     return members
 
 
@@ -454,7 +486,7 @@ def export_project_zip(
     destination: str | Path,
 ) -> ExportedProject:
     root = Path(project_root).expanduser().resolve()
-    members = _safe_files(root)
+    members = _safe_files(root, for_delivery=True)
     if not members:
         raise ValueError("cannot export a project with no safe files")
     target = Path(destination).expanduser().resolve()

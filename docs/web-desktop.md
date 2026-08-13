@@ -37,6 +37,16 @@ provider usage only when the driver receives structured usage events. Project
 Brain reuse and context selection are persisted per imported project so a
 follow-up ticket does not repeat the full discovery pass.
 
+Import and delivery use different safety policies. Existing runtime
+dependencies such as vendor/ and node_modules/ are preserved in Empy's
+isolated execution copy so the project's own checks can run; they remain
+excluded from Agent context and from the final delivery ZIP. A static
+Verification preflight is shown immediately after import, so missing
+dependencies or an invalid verification contract are visible before an Agent
+run consumes tokens. When a check expects a different entry point than the
+project provides, Empy reports the contract mismatch and does not recommend a
+placeholder file.
+
 The SQLite workspace records project and ticket history. Resetting the current
 screen clears the active selection but does not delete an imported project or
 its evidence.

@@ -17,6 +17,7 @@ from empy_studio.verification_pipeline import (
     finalize_verification,
     map_project_verification,
     verification_contract_signature,
+    verification_preflight,
     verification_staleness_reason,
 )
 
@@ -43,6 +44,22 @@ def test_plain_php_composer_mapping_is_dependency_aware(tmp_path: Path) -> None:
     assert detection.descriptor.project_type == "php"
     assert [item.check_id for item in checks] == ["build"]
     assert checks[0].command == ("composer", "validate", "--no-check-publish")
+
+
+def test_verification_preflight_surfaces_missing_composer_dependencies_before_run(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "composer.json").write_text(
+        '{"name":"demo/php-app","scripts":{"test":"php tests/run.php"}}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "composer.lock").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
+
+    preflight = verification_preflight(DefaultProjectService().detect(tmp_path))
+
+    assert preflight.ready is False
+    assert preflight.checks
 
 
 def test_nested_composer_project_maps_real_test_script(tmp_path: Path) -> None:

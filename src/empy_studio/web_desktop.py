@@ -81,6 +81,7 @@ from empy_studio.verification_pipeline import (
     VerificationTimedOut,
     finalize_verification,
     verification_contract_signature,
+    verification_preflight,
     verification_staleness_reason,
 )
 from empy_studio.workspace import SQLiteWorkspaceStore
@@ -154,9 +155,31 @@ def _failure_kind(detail: str) -> str:
         return "permission"
     if any(marker in normalized for marker in ("timed out", "timeout", "time limit")):
         return "timeout"
+    if "verification contract" in normalized or "check expects" in normalized:
+        return "verification_contract_mismatch"
     if any(marker in normalized for marker in ("missing", "not found", "does not exist", "no such file")):
         return "missing_file_or_route"
     return "check_failed"
+
+
+def _add_entrypoint_hint(
+    detail: str,
+    detection: ProjectDetection | None,
+) -> tuple[str, str | None]:
+    """Explain a common HTML/PHP contract mismatch without changing the project."""
+
+    if detection is None or "index.html" not in detail.casefold():
+        return detail, None
+    root = detection.effective_verification_root
+    if (root / "index.html").is_file() or not (root / "index.php").is_file():
+        return detail, None
+    hint = (
+        "Root-cause hint: the verification check expects index.html, but "
+        "the detected application entry point is index.php."
+    )
+    if hint not in detail:
+        detail = f"{detail}\n{hint}"
+    return detail, "verification_contract_mismatch"
 
 
 def _duration_seconds(started_at: str | None, finished_at: str | None) -> float | None:
@@ -388,11 +411,33 @@ class GuidedState:
             normalized_categories[key] = count
         if sum(normalized_categories.values()) != skipped_files:
             return None
+        raw_readiness = value.get("verification_readiness")
+        verification_readiness: dict[str, Any] | None = None
+        if raw_readiness is not None:
+            if not isinstance(raw_readiness, dict):
+                return None
+            readiness_status = raw_readiness.get("status")
+            readiness_checks = raw_readiness.get("checks")
+            readiness_diagnostics = raw_readiness.get("diagnostics")
+            if (
+                readiness_status not in {"ready", "needs_attention"}
+                or not isinstance(readiness_checks, list)
+                or not all(isinstance(item, str) for item in readiness_checks)
+                or not isinstance(readiness_diagnostics, list)
+                or not all(isinstance(item, str) for item in readiness_diagnostics)
+            ):
+                return None
+            verification_readiness = {
+                "status": readiness_status,
+                "checks": [str(item) for item in readiness_checks[:32]],
+                "diagnostics": [str(item) for item in readiness_diagnostics[:8]],
+            }
         return {
             "status": status,
             "copied_files": copied_files,
             "skipped_files": skipped_files,
             "categories": normalized_categories,
+            "verification_readiness": verification_readiness,
         }
 
     def _load_failure_context(self, project_id: str) -> dict[str, Any] | None:
@@ -433,6 +478,15 @@ class GuidedState:
         project = self.store.get_project(project_id)
         detection = self.project_service.detect(project.root)
         import_report = self._load_import_report(project.project_id)
+        if import_report is not None:
+            import_report = {
+                **import_report,
+                "verification_readiness": verification_preflight(detection).to_dict(),
+            }
+            self.store.set_setting(
+                self._import_report_setting_key(project.project_id),
+                import_report,
+            )
         failure_context = self._load_failure_context(project.project_id)
         with self.lock:
             self.active_project_id = project.project_id
@@ -475,6 +529,7 @@ class GuidedState:
 
     def _register_import(self, imported: ImportedProject) -> None:
         detection = self.project_service.detect(imported.project_root)
+        verification_readiness = verification_preflight(detection).to_dict()
         saved = self.store.save_project(detection.descriptor)
         vault_root = self.workspace_root / "vaults" / saved.project_id
         if not (vault_root / "vault.json").exists():
@@ -501,26 +556,42 @@ class GuidedState:
                 "copied_files": imported.copied_members,
                 "skipped_files": skipped,
                 "categories": categories,
+                "verification_readiness": verification_readiness,
             }
             self.import_report = import_report
-            self.message_level = "success" if not skipped else "warning"
-            self.message = (
-                (
-                    "Project imported into an isolated copy. "
-                    f"{imported.copied_members} usable file(s) copied; "
-                    f"{skipped} excluded item(s) are explained below."
-                    if self.language == "en"
-                    else "پروژه در یک کپی ایزوله وارد شد؛ "
-                    f"{imported.copied_members} فایل قابل‌استفاده کپی شد و "
-                    f"{skipped} مورد کنارگذاشته‌شده در بررسی واردسازی توضیح داده شده است."
-                )
-                if skipped
-                else (
-                    "Project saved in an isolated copy."
-                    if self.language == "en"
-                    else "پروژه در یک کپی ایزوله ذخیره شد."
-                )
+            needs_attention = verification_readiness["status"] != "ready"
+            readiness_diagnostics = cast(
+                list[str],
+                verification_readiness["diagnostics"],
             )
+            if needs_attention and readiness_diagnostics:
+                self.message_level = "warning"
+                self.message = (
+                    "Import completed, but Verification needs attention before "
+                    f"an Agent run: {readiness_diagnostics[0]}"
+                    if self.language == "en"
+                    else "واردسازی کامل شد، اما قبل از اجرای Agent یک پیش‌نیاز "
+                    f"Verification باید رفع شود: {readiness_diagnostics[0]}"
+                )
+            else:
+                self.message_level = "success" if not skipped else "warning"
+                self.message = (
+                    (
+                        "Project imported into an isolated copy. "
+                        f"{imported.copied_members} usable file(s) copied; "
+                        f"{skipped} excluded item(s) are explained below."
+                        if self.language == "en"
+                        else "پروژه در یک کپی ایزوله وارد شد؛ "
+                        f"{imported.copied_members} فایل قابل‌استفاده کپی شد و "
+                        f"{skipped} مورد کنارگذاشته‌شده در بررسی واردسازی توضیح داده شده است."
+                    )
+                    if skipped
+                    else (
+                        "Project saved in an isolated copy."
+                        if self.language == "en"
+                        else "پروژه در یک کپی ایزوله ذخیره شد."
+                    )
+                )
         self.store.set_setting(
             self._import_report_setting_key(saved.project_id),
             import_report,
@@ -854,13 +925,14 @@ class GuidedState:
                     result.stderr.strip() or result.stdout.strip(),
                     roots,
                 )
+                detail, inferred_kind = _add_entrypoint_hint(detail, self.detection)
                 failures.append(
                     {
                         "label": result.check.label,
                         "category": result.check.category,
                         "returncode": result.returncode,
                         "detail": detail,
-                        "kind": _failure_kind(detail),
+                        "kind": inferred_kind or _failure_kind(detail),
                     }
                 )
             existing_details = {str(item.get("detail", "")) for item in failures}
@@ -972,6 +1044,7 @@ class GuidedState:
                 "missing_dependency": "Install the missing project dependency in the isolated copy, or add an explicit safe verification manifest. Do not silently skip the required check.",
                 "missing_verification_contract": "Add or repair the project's explicit .empy/verification.json contract, or provide a supported test/build/lint entry point.",
                 "missing_file_or_route": "Inspect whether the reported file or route is truly required. If the check is inconsistent with the project's real entry point, fix the check contract; do not create a placeholder only to make it pass.",
+                "verification_contract_mismatch": "The check expects a different entry point or layout than the detected project. Repair the verification/site-audit contract or the approved product requirement; do not create a placeholder file only to make the check green.",
                 "permission": "Choose an accessible project copy or repair the isolated workspace permissions, then rerun the same check.",
                 "timeout": "Reduce the check scope or repair the hanging command, then rerun it with bounded output.",
                 "check_failed": "Fix the exact issue reported by this check in the isolated project, then rerun Verification.",
@@ -992,6 +1065,7 @@ class GuidedState:
                 "missing_dependency": "وابستگی گمشده را در کپی ایزوله نصب/تأمین کن یا یک قرارداد بررسی امن در .empy/verification.json تعریف کن؛ تست لازم نباید بی‌صدا رد شود.",
                 "missing_verification_contract": "قرارداد .empy/verification.json یا ورودی تست/build/lint پشتیبانی‌شده را اصلاح کن تا Verification دقیقاً بداند چه چیزی را باید اجرا کند.",
                 "missing_file_or_route": "بررسی کن فایل یا مسیر گزارش‌شده واقعاً برای پروژه لازم است یا تست با ورودی واقعی پروژه ناسازگار است. قرارداد تست را اصلاح کن؛ فقط برای سبزکردن تست فایل صوری نساز.",
+                "verification_contract_mismatch": "تست با ورودی یا ساختار واقعی پروژه سازگار نیست؛ قرارداد Verification/site-audit یا نیازمندی محصول را اصلاح کن و فقط برای سبزشدن تست فایل جعلی نساز.",
                 "permission": "کپی ایزولهٔ قابل‌دسترسی را انتخاب یا دسترسی همان workspace را اصلاح کن و همان بررسی را دوباره اجرا کن.",
                 "timeout": "فرمان متوقف‌شده را محدود یا اصلاح کن و Verification را دوباره با خروجی کنترل‌شده اجرا کن.",
                 "check_failed": "ایراد دقیق گزارش‌شده توسط همین بررسی را در پروژهٔ ایزوله اصلاح کن و سپس Verification را دوباره اجرا کن.",
@@ -1007,6 +1081,7 @@ class GuidedState:
                 {
                     "label": label,
                     "category": str(item.get("category", "")),
+                    "kind": item_kind,
                     "returncode": item.get("returncode"),
                     "detail": detail,
                     "action": action_map.get(item_kind, action_map["check_failed"]),

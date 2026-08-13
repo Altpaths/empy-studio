@@ -51,6 +51,45 @@ def test_summarize_import_skips_explains_expected_exclusions() -> None:
     }
 
 
+def test_import_preserves_runtime_dependencies_but_delivery_excludes_them(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "composer.json").write_text(
+        '{"require":{"php":"^8.2"}}\n',
+        encoding="utf-8",
+    )
+    (source / "vendor" / "composer").mkdir(parents=True)
+    (source / "vendor" / "autoload.php").write_text(
+        "<?php // generated dependency loader\n",
+        encoding="utf-8",
+    )
+    (source / "vendor" / "composer" / "installed.php").write_text(
+        "<?php return [];\n",
+        encoding="utf-8",
+    )
+    (source / "node_modules" / "demo").mkdir(parents=True)
+    (source / "node_modules" / "demo" / "index.js").write_text(
+        "module.exports = true;\n",
+        encoding="utf-8",
+    )
+
+    imported = import_project_folder(source, tmp_path / "workspace")
+
+    assert (imported.project_root / "vendor" / "autoload.php").is_file()
+    assert (imported.project_root / "node_modules" / "demo" / "index.js").is_file()
+    assert not any("vendor" in item for item in imported.skipped_members)
+    assert not any("node_modules" in item for item in imported.skipped_members)
+
+    exported = export_project_zip(imported.project_root, tmp_path / "out")
+
+    with zipfile.ZipFile(exported.archive_path) as archive:
+        names = archive.namelist()
+    assert not any("/vendor/" in name for name in names)
+    assert not any("/node_modules/" in name for name in names)
+
+
 def test_import_and_export_keep_runtime_config_and_logs_out_of_delivery(
     tmp_path: Path,
 ) -> None:
