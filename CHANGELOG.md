@@ -1,5 +1,15 @@
 ## [Unreleased]
 
+## [0.1.33] - 2026-08-13
+
+### Correct project start layout
+
+- Put the green start card on the right in the Persian right-to-left layout.
+- Keep the projects card on the left with existing projects and a clear
+  project-selection action.
+- Remove the import-project path field and button from the start card while
+  retaining folder and ZIP selection in the projects card.
+
 ## [0.1.32] - 2026-08-13
 
 ### Simpler project start screen

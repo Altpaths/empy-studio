@@ -33,6 +33,10 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert 'data-action="choose-zip"' in app_js
     assert "startHere" in app_js
     assert "projectStartHint" in app_js
+    assert "chooseProject" in app_js
+    assert "start-card" in app_js
+    assert "project-card" in app_js
+    assert "import-path" not in app_js.split("function renderProject()", 1)[1].split("function renderImportReport", 1)[0]
     assert "projectUnavailable" in app_js
     assert 'data-action="refresh-engine"' in app_js
     assert "let taskDraft = \"\"" in app_js
