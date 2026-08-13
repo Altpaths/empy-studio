@@ -34,7 +34,7 @@ class ProjectDetection:
         """Return the directory that owns the executable project contract.
 
         Imported archives often contain a deployment wrapper around the real
-        application, for example ``holda.ir/public_html``.  The descriptor
+        application, for example ``site/public_html``.  The descriptor
         must continue to point at the wrapper so exports preserve the archive
         layout, while verification must run from the directory containing the
         manifest and its scripts.

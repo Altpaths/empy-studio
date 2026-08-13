@@ -7,7 +7,7 @@ Baseline: `141ea60`
 ## FACT
 
 - The implementation was performed in an isolated worktree. The canonical
-  Empy baseline and the Holda fixture were not edited.
+  Empy baseline and repository sample fixture were not edited.
 - The driver retains bounded `read-only`/`workspace-write` sandbox selection,
   explicit `danger-full-access` override behavior, JSONL event evidence,
   usage aggregation, timeout, cancellation, and Git/file-scope auditing.

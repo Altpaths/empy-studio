@@ -91,6 +91,29 @@ remains available for local automation. See
 [`docs/web-desktop.md`](docs/web-desktop.md) for the product flow and API
 boundary.
 
+### Try the included sample project
+
+The repository includes a small, real PHP sample at
+`examples/fixtures/php-site`. It is independent from any user's project and
+is included so the complete import, ticket, verification, review, and ZIP
+flow can be tried safely. With the installed product, copy it to a visible
+folder with:
+
+```bash
+empy sample --destination ~/empy-sample-project
+```
+
+Then open that folder in Empy Studio and submit a ticket. When working from
+the source archive, choose `examples/fixtures/php-site` directly. The sample's
+deterministic check is:
+
+```bash
+php examples/fixtures/php-site/tests/site-audit.php
+```
+
+Empy copies the sample into an isolated workspace for tests and demonstrations;
+the repository copy is not modified.
+
 Inspect the CLI:
 
 ```bash

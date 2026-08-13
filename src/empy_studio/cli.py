@@ -42,6 +42,7 @@ from .release_cli import (
     release_validate_command,
 )
 from .runtime_cli import run_manifest
+from .sample_project import copy_sample_project
 from .security_cli import security_audit_command
 from .vault import initialize_vault, vault_status
 from .verifier import verify
@@ -138,6 +139,17 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument("--project-root", default=".")
     validate_parser.add_argument("--fix", action="store_true")
     validate_parser.add_argument("--output")
+
+    sample_parser = sub.add_parser(
+        "sample",
+        help="Copy the included independent sample project to a new folder",
+    )
+    sample_parser.add_argument(
+        "--destination",
+        required=True,
+        help="New folder where the sample project will be copied",
+    )
+    sample_parser.add_argument("--output")
 
     done_parser = sub.add_parser("done", help="Evaluate the Definition of Done")
     done_parser.add_argument("--project-root", default=".")
@@ -620,6 +632,8 @@ def main() -> None:
         )
     elif args.command == "validate":
         emit(validate(args.project_root, args.fix), args.output)
+    elif args.command == "sample":
+        emit(copy_sample_project(args.destination), args.output)
     elif args.command == "vault" and args.vault_command == "init":
         emit(
             initialize_vault(

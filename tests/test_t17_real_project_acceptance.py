@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import os
 import shutil
 import subprocess
 import time
@@ -302,22 +301,6 @@ def test_t17_two_ticket_flow_and_project_isolation(
     _run_two_ticket_flow(
         source,
         tmp_path / "empy-workspace",
-        tmp_path,
-        monkeypatch,
-    )
-
-
-def test_t17_holda_witness_runs_through_empy_without_source_mutation(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    configured = os.environ.get("EMPY_HOLDA_FIXTURE")
-    if not configured:
-        pytest.skip("set EMPY_HOLDA_FIXTURE for the real Holda witness run")
-    source = Path(configured).expanduser().resolve()
-    _run_two_ticket_flow(
-        source,
-        tmp_path / "empy-holda-workspace",
         tmp_path,
         monkeypatch,
     )

@@ -58,5 +58,5 @@ Without those Apple credentials and checks, the workflow cannot publish a
 public release. This is deliberate: unsigned or unnotarized artifacts remain
 release candidates and are never called final v1.
 
-No secrets, `.empy` state, virtual environments, caches, or Holda files belong
-in release artifacts.
+No secrets, `.empy` state, virtual environments, caches, or user project files
+belong in release artifacts.

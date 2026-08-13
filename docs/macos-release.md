@@ -41,4 +41,5 @@ notarization gate passes.
 - A tag push cannot publish by itself; publication requires notarization
   evidence for both `arm64` and `x86_64` app archives.
 
-The app build does not access, copy, or modify the Holda witness.
+The app build does not access, copy, or modify a user's project. The shipped
+sample fixture is repository data, not application state.

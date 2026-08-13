@@ -1,11 +1,12 @@
-## [0.1.40] - 2026-08-13
+## [0.1.41] - 2026-08-13
 
-### Bound the saved-project list and replace the Holda test dependency
+### Separate the product from external projects and ship an independent sample
 
 - Show only the five newest saved projects in the UI/API while retaining the
   complete local history for recovery.
-- Add an independent repository-owned PHP fixture for acceptance tests; Holda
-  remains an external read-only witness and is never bundled.
+- Keep the repository-owned PHP fixture as the only acceptance project and
+  user-facing sample; package it with the wheel and expose `empy sample` so
+  users can materialize it without an external project dependency.
 
 ## [0.1.39] - 2026-08-13
 
@@ -478,7 +479,8 @@ Python, Linux, or Windows use.
 ### Ticket 17 — Real-project acceptance and terminal run safety
 
 - Added a deterministic PHP acceptance harness covering isolated import, two sequential tickets, reopen, Review accept/revert, verified ZIP export, and second-project isolation.
-- Exercised the same flow against the read-only Holda witness; the original witness digest remained unchanged.
+- Exercised the same flow against an isolated external project copy; the
+  original project digest remained unchanged.
 - Added durable Codex, Verification, and Review evidence links so terminal results can be reopened with the ticket.
 - Added an authenticated bilingual Stop run action with bounded cancellation for Provider and project verification processes.
 - Fixed early-cancellation races, verification hangs, stale terminal UI states, and misleading skipped-node status rendering.
@@ -500,7 +502,7 @@ Python, Linux, or Windows use.
   `--ask-for-approval` flag and adding an explicit trust-check bypass only for
   selected non-Git projects.
 - Verified the real adapter with a read-only provider smoke on an isolated
-  fixture; no project or Holda files were changed.
+  fixture; no source project files were changed.
 - Kept bounded sandbox selection and explicit `danger-full-access` behavior
   unchanged; no automatic safety downgrade is performed.
 

@@ -5,7 +5,7 @@
 - Base commit: `a029a8e` (Ticket 8 compatibility fix already integrated on
   canonical `main`).
 - Branch: `agent/t16-security-20260810`.
-- Worktree: isolated from canonical `main` and the Holda fixture.
+- Worktree: isolated from canonical `main` and the repository sample fixture.
 - No GitHub push, release, or change to the canonical `main` checkout was
   performed by this ticket.
 

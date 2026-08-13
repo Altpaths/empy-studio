@@ -1,59 +1,48 @@
-# Ticket 17 — Real-project acceptance evidence
+# Ticket 17 — Independent sample-project acceptance evidence
 
-Date: 2026-08-10
-Branch: `agent/t17-real-acceptance-20260810`
-Baseline: `1e42d0d` (`Implement Ticket 16 security hardening`)
+Date: 2026-08-13
 
 ## Scope
 
-Ticket 17 validates the product path through Empy Studio itself. The Holda source directory is a read-only witness. Empy imports it into a separate workspace copy; all plan, agent, review, verification, and export operations target that imported copy.
+Ticket 17 validates the complete product path through Empy Studio itself. The
+repository-owned PHP fixture at `examples/fixtures/php-site` is the normal
+acceptance input and the user-facing sample. No external production project
+is required by the test suite or bundled into the product.
 
-## Implemented corrections
+## Acceptance scenario
 
-- The Web Desktop now exposes an authenticated `Stop run` action in Persian and English.
-- Provider cancellation now covers the short interval before the worker enters the graph runtime.
-- Verification commands run with a bounded polling loop, process-group termination, cancellation, and timeout cleanup. A blocked test command cannot leave the UI in `running` indefinitely.
-- Terminal Codex, Verification, and Review evidence is persisted and linked to the workspace run. Reopening a ticket restores the run result, node statuses, verification report, and review decisions.
-- Skipped graph nodes retain `skipped` status instead of being displayed as failed.
-- Reset is rejected while a run is active so a user cannot discard the active cancellation handle.
-
-## Acceptance evidence
-
-The repository-owned deterministic PHP fixture at
-`examples/fixtures/php-site` is the normal acceptance input. It is copied into
-the temporary Empy workspace before execution; the fixture in Git is never
-edited.
-
-The deterministic PHP scenario passed:
+The fixture is copied into a temporary Empy workspace before execution. The
+fixture in Git is never edited. The deterministic scenario covers:
 
 1. Import a PHP project through Empy into an isolated copy.
-2. Build a bounded plan and run the provider-neutral local token benchmark.
-3. Execute the first ticket, inspect the change, revert it, and export a verified single-root ZIP.
-4. Reopen the workspace and confirm run, verification, review, and export evidence are available.
-5. Add a second ticket, execute it, accept the change, and export a second verified ZIP.
+2. Build a bounded plan and run the local token benchmark.
+3. Execute a ticket, inspect the change, accept it, and export a verified
+   change-only ZIP.
+4. Reopen the workspace and confirm run, verification, review, and export
+   evidence are available.
+5. Add a second ticket, execute it, accept the change, and export a second
+   verified ZIP.
 6. Import a second project and confirm its project/task history is separate.
-7. Compare the source witness digest before and after the full flow.
+7. Compare the fixture digest before and after the full flow.
 
-The same test may also be run as an optional one-off with the external Holda
-witness at:
+The live local UI smoke also covers starting a real graph, cancelling it, and
+confirming that the terminal state is shown without leaving the page in
+`running`.
 
-`/Users/azadehsharifi/Documents/Codex/2026-08-09/lk/work/empy-holda-acceptance/holda-fixture`
+## Fixture use
 
-Result: passed. The original Holda witness was not edited.
+Users can download the repository source archive, open
+`examples/fixtures/php-site` in Empy Studio, and submit a normal ticket. The
+fixture check is also available directly:
 
-The live local UI smoke also passed: start a real Codex graph, click `توقف اجرا`, and observe the terminal `اجرا لغو شد` state without leaving the page in `running`.
-
-## Validation commands
-
-```text
-pytest -q                         538 passed, 1 skipped
-ruff check src tests              passed
-mypy src                          Success: no issues found in 116 source files
-python -m compileall -q src tests passed
+```sh
+php examples/fixtures/php-site/tests/site-audit.php
 ```
 
-The one skipped test is the optional real Holda witness test when `EMPY_HOLDA_FIXTURE` is not supplied; it was explicitly executed and passed in this acceptance run.
+The fixture is copied before execution and is never modified in place. A
+user's imported project remains a separate workspace record.
 
 ## Boundary
 
-No changes were made to the Holda witness. No `.empy/` orchestration state is part of the intended product commit. This branch has not been merged into `main` and has not been pushed by this run.
+No external user project is part of the repository, test suite, or release
+runtime. No `.empy/` orchestration state is included in the product commit.
