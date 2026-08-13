@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+## [0.1.36] - 2026-08-13
+
+### Clarify empty project status
+
+- Say that no project has been saved in the workspace when the saved-project
+  list is empty.
+
 ## [0.1.35] - 2026-08-13
 
 ### Restore project guidance and manual path entry

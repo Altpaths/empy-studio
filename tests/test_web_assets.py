@@ -34,6 +34,7 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert "startHere" in app_js
     assert "projectStartHint" in app_js
     assert "chooseProject" in app_js
+    assert "ذخیره نشده است" in app_js
     assert "start-card" in app_js
     assert "project-card" in app_js
     render_project = app_js.split("function renderProject()", 1)[1].split("function renderImportReport", 1)[0]
