@@ -20,8 +20,9 @@ opens it in the default browser. API requests without the token are rejected.
    files, selected context, and token cap.
 4. Run Codex through the bounded driver, then inspect verification and review
    evidence.
-5. Accept or revert the changes, export a direct single-root project ZIP, and
-   download it from the verified result screen.
+5. Accept or revert the changes, export a verified change-only deployment ZIP,
+   and download it from the result screen. The ZIP keeps the project's
+   relative root paths and contains no unchanged project files.
 
 The guided Web Desktop is the canonical product path used by every platform
 package. Folder and ZIP selection use browser file inputs and upload into the
@@ -37,10 +38,13 @@ provider usage only when the driver receives structured usage events. Project
 Brain reuse and context selection are persisted per imported project so a
 follow-up ticket does not repeat the full discovery pass.
 
-Import and delivery use different safety policies. Existing runtime
+Import, testing, and delivery use different safety policies. Existing runtime
 dependencies such as vendor/ and node_modules/ are preserved in Empy's
 isolated execution copy so the project's own checks can run; they remain
-excluded from Agent context and from the final delivery ZIP. A static
+excluded from Agent context and from the deployment ZIP. Empy also keeps an
+immutable baseline snapshot in the Project Vault; it is used to calculate the
+delta and can be materialized into a separate full test copy without touching
+the working project. A static
 Verification preflight is shown immediately after import, so missing
 dependencies or an invalid verification contract are visible before an Agent
 run consumes tokens. When a check expects a different entry point than the
@@ -51,7 +55,9 @@ The SQLite workspace records project and ticket history. Resetting the current
 screen clears the active selection but does not delete an imported project or
 its evidence.
 
-The result screen exposes an authenticated local `Download ZIP` action. Empy
+The result screen exposes an authenticated local `Download ZIP` action. The
+download is a deployment patch: upload it to the project's root in DirectAdmin
+and extract it there so its relative paths overlay the matching files. Empy
 streams only the current verified archive, confirms that it remains inside the
 workspace, and rechecks its recorded SHA-256 before sending it to the browser.
 If the archive is missing or has changed, the download is rejected and a new

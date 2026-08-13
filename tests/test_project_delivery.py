@@ -6,12 +6,26 @@ from pathlib import Path
 import pytest
 
 from empy_studio.project_delivery import (
+    ImportedProject,
     export_project_zip,
     import_project_archive,
     import_project_folder,
+    materialize_baseline_copy,
     safe_upload_relative_path,
     summarize_import_skips,
 )
+from empy_studio.vault import initialize_vault
+
+
+def _baseline_snapshot(imported: ImportedProject, root: Path) -> Path:
+    vault = root / "vault"
+    initialize_vault(
+        project_root=imported.project_root,
+        vault_root=vault,
+        project_id="demo-project",
+        project_name="demo",
+    )
+    return vault / "baseline" / "source.zip"
 
 
 def test_folder_import_creates_isolated_clean_git_baseline(tmp_path: Path) -> None:
@@ -23,7 +37,6 @@ def test_folder_import_creates_isolated_clean_git_baseline(tmp_path: Path) -> No
     (source / "src" / "main.py").write_text("print('ok')\n", encoding="utf-8")
 
     imported = import_project_folder(source, tmp_path / "workspace")
-
     assert imported.project_root != source
     assert (imported.project_root / "README.md").is_file()
     assert not (imported.project_root / ".env").exists()
@@ -76,13 +89,23 @@ def test_import_preserves_runtime_dependencies_but_delivery_excludes_them(
     )
 
     imported = import_project_folder(source, tmp_path / "workspace")
+    snapshot = _baseline_snapshot(imported, tmp_path)
 
     assert (imported.project_root / "vendor" / "autoload.php").is_file()
     assert (imported.project_root / "node_modules" / "demo" / "index.js").is_file()
     assert not any("vendor" in item for item in imported.skipped_members)
     assert not any("node_modules" in item for item in imported.skipped_members)
 
-    exported = export_project_zip(imported.project_root, tmp_path / "out")
+    (imported.project_root / "src").mkdir()
+    (imported.project_root / "src" / "changed.php").write_text(
+        "<?php echo 'changed';\n",
+        encoding="utf-8",
+    )
+    exported = export_project_zip(
+        imported.project_root,
+        tmp_path / "out",
+        baseline_snapshot=snapshot,
+    )
 
     with zipfile.ZipFile(exported.archive_path) as archive:
         names = archive.namelist()
@@ -116,7 +139,16 @@ def test_import_and_export_keep_runtime_config_and_logs_out_of_delivery(
     (source / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
 
     imported = import_project_folder(source, tmp_path / "workspace")
-    exported = export_project_zip(imported.project_root, tmp_path / "out")
+    snapshot = _baseline_snapshot(imported, tmp_path)
+    (imported.project_root / "index.php").write_text(
+        "<?php echo 'changed';\n",
+        encoding="utf-8",
+    )
+    exported = export_project_zip(
+        imported.project_root,
+        tmp_path / "out",
+        baseline_snapshot=snapshot,
+    )
 
     assert "config/config.php" in imported.skipped_members
     assert "storage/logs/app.log" in imported.skipped_members
@@ -131,7 +163,7 @@ def test_import_and_export_keep_runtime_config_and_logs_out_of_delivery(
         names = archive.namelist()
     assert f"{imported.project_root.name}/config/config.php" not in names
     assert f"{imported.project_root.name}/storage/logs/app.log" not in names
-    assert f"{imported.project_root.name}/config/config.example.php" in names
+    assert f"{imported.project_root.name}/config/config.example.php" not in names
 
 
 def test_archive_import_rejects_traversal_and_export_is_single_root(tmp_path: Path) -> None:
@@ -142,7 +174,16 @@ def test_archive_import_rejects_traversal_and_export_is_single_root(tmp_path: Pa
         archive.writestr("../outside.txt", "must not escape\n")
 
     imported = import_project_archive(source_archive, tmp_path / "workspace")
-    exported = export_project_zip(imported.project_root, tmp_path / "out")
+    snapshot = _baseline_snapshot(imported, tmp_path)
+    (imported.project_root / "README.md").write_text(
+        "changed\n",
+        encoding="utf-8",
+    )
+    exported = export_project_zip(
+        imported.project_root,
+        tmp_path / "out",
+        baseline_snapshot=snapshot,
+    )
 
     assert exported.verified is True
     assert exported.file_count == 1
@@ -152,6 +193,77 @@ def test_archive_import_rejects_traversal_and_export_is_single_root(tmp_path: Pa
     assert "../outside.txt" in imported.skipped_members
     assert imported.copied_members == 1
     assert not (tmp_path / "outside.txt").exists()
+
+
+def test_delta_export_contains_only_changed_files_and_baseline_can_be_rebuilt(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("baseline\n", encoding="utf-8")
+    (source / "public_html").mkdir()
+    (source / "public_html" / "index.php").write_text(
+        "<?php echo 'baseline';\n",
+        encoding="utf-8",
+    )
+    imported = import_project_folder(source, tmp_path / "workspace")
+    snapshot = _baseline_snapshot(imported, tmp_path)
+    (imported.project_root / "public_html" / "index.php").write_text(
+        "<?php echo 'updated';\n",
+        encoding="utf-8",
+    )
+
+    exported = export_project_zip(
+        imported.project_root,
+        tmp_path / "out" / "deployment.zip",
+        baseline_snapshot=snapshot,
+    )
+
+    with zipfile.ZipFile(exported.archive_path) as archive:
+        assert archive.namelist() == [
+            f"{imported.project_root.name}/public_html/index.php"
+        ]
+        deployment_root = tmp_path / "deployment"
+        archive.extractall(deployment_root)
+    assert (
+        deployment_root
+        / imported.project_root.name
+        / "public_html"
+        / "index.php"
+    ).read_text(encoding="utf-8") == "<?php echo 'updated';\n"
+    manifest = exported.manifest_path.read_text(encoding="utf-8")
+    assert '"archive_mode": "delta"' in manifest
+    assert '"file_count": 1' in manifest
+
+    restored = tmp_path / "baseline-copy"
+    assert materialize_baseline_copy(snapshot, restored) == 2
+    assert (restored / "README.md").read_text(encoding="utf-8") == "baseline\n"
+    assert (restored / "public_html" / "index.php").read_text(encoding="utf-8") == (
+        "<?php echo 'baseline';\n"
+    )
+
+
+def test_delta_export_refuses_empty_or_deleted_delivery(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
+    imported = import_project_folder(source, tmp_path / "workspace")
+    snapshot = _baseline_snapshot(imported, tmp_path)
+
+    with pytest.raises(ValueError, match="No changed project files"):
+        export_project_zip(
+            imported.project_root,
+            tmp_path / "out" / "empty.zip",
+            baseline_snapshot=snapshot,
+        )
+
+    (imported.project_root / "index.php").unlink()
+    with pytest.raises(ValueError, match="deleted file"):
+        export_project_zip(
+            imported.project_root,
+            tmp_path / "out" / "deleted.zip",
+            baseline_snapshot=snapshot,
+        )
 
 
 def test_import_rejects_broad_system_roots(tmp_path: Path) -> None:

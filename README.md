@@ -42,7 +42,8 @@ Empy Studio addresses these failures with a small set of enforceable contracts.
 - **Quality gates** — design, security, QA, synchronization, and release checks.
 - **Runtime verification** — command, artifact, and external-check status tracking.
 - **Validated learning** — reusable patterns are promoted only after evidence.
-- **Complete delivery** — one synchronized release package by default.
+- **Delta delivery** — a verified ZIP containing only files changed since the
+  imported baseline, with the full isolated copy retained for testing.
 - **Incremental Project Brain** — unchanged project records are reused and
   bounded Context Packs avoid repeating repository-wide discovery on each
   ticket.
@@ -145,7 +146,7 @@ Place Empy Studio's operating files in the project root or provide them to the p
 5. collect handoffs;
 6. run verification;
 7. synchronize the project;
-8. deliver one complete release.
+8. deliver one verified change-only deployment release.
 
 The host executes model-driven work; Empy Studio controls scope, evidence, continuity, and release discipline.
 

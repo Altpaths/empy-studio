@@ -79,6 +79,31 @@ def safe_user_error(error: BaseException, *, language: str = "fa") -> str:
                 if language == "fa"
                 else "The saved project path is no longer available; re-import its folder or ZIP."
             ),
+            "Empy baseline snapshot is missing; re-import the project.": (
+                "نسخهٔ پایهٔ پروژه برای مقایسه پیدا نشد؛ پروژه را دوباره وارد کنید."
+                if language == "fa"
+                else "The project's baseline snapshot is missing; re-import the project."
+            ),
+            "A baseline snapshot is required for a change-only ZIP.": (
+                "برای ساخت ZIP فقط شامل تغییرات، نسخهٔ پایهٔ پروژه لازم است؛ پروژه را دوباره وارد کنید."
+                if language == "fa"
+                else "A baseline snapshot is required to create a change-only ZIP; re-import the project."
+            ),
+            "No changed project files are available for a delta ZIP.": (
+                "هیچ فایل تغییرکرده‌ای برای ساخت ZIP وجود ندارد؛ خروجی ناقص ساخته نشد."
+                if language == "fa"
+                else "There are no changed project files for a delta ZIP; no incomplete archive was created."
+            ),
+            "The project has deleted file(s); a ZIP extraction cannot delete them automatically. Restore the file or use an explicit deletion step.": (
+                "پروژه فایل حذف‌شده دارد؛ استخراج معمولی ZIP نمی‌تواند فایل مقصد را خودکار حذف کند. فایل را برگردانید یا مرحلهٔ حذف صریح اجرا کنید."
+                if language == "fa"
+                else "The project has deleted files; normal ZIP extraction cannot remove destination files automatically. Restore them or use an explicit deletion step."
+            ),
+            "The project has deleted file(s); restore them before creating a ZIP.": (
+                "پروژه فایل حذف‌شده دارد؛ برای ساخت ZIP ابتدا فایل را برگردانید."
+                if language == "fa"
+                else "The project has deleted files; restore them before creating a ZIP."
+            ),
         }
         if message in known:
             return known[message]

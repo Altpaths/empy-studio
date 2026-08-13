@@ -1,5 +1,18 @@
 ## [Unreleased]
 
+## [0.1.38] - 2026-08-13
+
+### Deliver only verified project changes
+
+- Export only files whose content differs from the immutable imported baseline.
+- Keep the complete isolated project and baseline snapshot available for
+  verification and recovery copies; never use a partial full-project ZIP as a
+  deployment artifact.
+- Block empty delta archives and explain that ordinary ZIP extraction cannot
+  apply file deletions automatically.
+- Show DirectAdmin extraction guidance and the changed-file count on the result
+  screen.
+
 ## [0.1.37] - 2026-08-13
 
 ### Correct live release status and ZIP download action

@@ -224,6 +224,7 @@ def test_export_registers_release_history(tmp_path: Path) -> None:
     state.import_path(str(source))
     state.create_plan("Package the project")
     root = state.detection.descriptor.root
+    (root / "README.md").write_text("changed\n", encoding="utf-8")
     state.review = ReviewReport(
         schema_version=1,
         review_id="review-test",
@@ -321,9 +322,9 @@ def test_release_gate_explains_explicit_export_after_zero_file_review(tmp_path: 
     public = state.public()
 
     assert public["release_gate"] == {
-        "status": "ready_for_export",
-        "ready": True,
-        "blockers": [],
+        "status": "blocked",
+        "ready": False,
+        "blockers": ["No changed project files are available for a delta ZIP."],
         "exported": False,
     }
 

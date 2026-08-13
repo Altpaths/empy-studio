@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import uuid
 import zipfile
 from collections import Counter
@@ -91,12 +92,30 @@ class ExportedProject:
     sha256: str
     file_count: int
     verified: bool
+    archive_mode: str = "delta"
+    changed_files: tuple[str, ...] = ()
+    deleted_files: tuple[str, ...] = ()
+    baseline_sha256: str | None = None
+    extraction_root: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         value = asdict(self)
         for key in ("project_root", "archive_path", "manifest_path", "checksum_path"):
             value[key] = str(value[key])
         return value
+
+
+@dataclass(frozen=True)
+class ProjectDelta:
+    """Safe, project-relative difference from the imported baseline snapshot."""
+
+    changed_members: tuple[tuple[Path, str], ...]
+    deleted_files: tuple[str, ...]
+    baseline_sha256: str
+
+    @property
+    def changed_files(self) -> tuple[str, ...]:
+        return tuple(relative for _source, relative in self.changed_members)
 
 
 def _sha256_bytes(value: bytes) -> str:
@@ -461,6 +480,121 @@ def _expected_manifest(root: Path, members: tuple[tuple[Path, str], ...]) -> dic
     }
 
 
+def _baseline_hashes(snapshot: str | Path) -> tuple[dict[str, str], str]:
+    """Read and validate the immutable source snapshot used for delta export."""
+
+    snapshot_path = Path(snapshot).expanduser().resolve()
+    if not snapshot_path.is_file() or snapshot_path.suffix.casefold() != ".zip":
+        raise FileNotFoundError("Empy baseline snapshot is missing; re-import the project.")
+    hashes: dict[str, str] = {}
+    total_bytes = 0
+    try:
+        with zipfile.ZipFile(snapshot_path) as archive:
+            bad_member = archive.testzip()
+            if bad_member is not None:
+                raise ValueError("Empy baseline snapshot is corrupt; re-import the project.")
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                relative = _safe_member_name(info.filename)
+                if relative is None or _is_zip_symlink(info):
+                    raise ValueError("Empy baseline snapshot contains an unsafe path.")
+                if relative.as_posix() in hashes:
+                    raise ValueError("Empy baseline snapshot contains duplicate files.")
+                if info.file_size > MAX_ARCHIVE_FILE_BYTES:
+                    raise ValueError("Empy baseline snapshot contains an oversized file.")
+                total_bytes += info.file_size
+                if total_bytes > MAX_ARCHIVE_TOTAL_BYTES:
+                    raise ValueError("Empy baseline snapshot exceeds the safe size limit.")
+                if _excluded(relative, DELIVERY_EXCLUDED_NAMES):
+                    continue
+                with archive.open(info) as stream:
+                    hashes[relative.as_posix()] = _sha256_bytes(stream.read())
+    except zipfile.BadZipFile as exc:
+        raise ValueError("Empy baseline snapshot is corrupt; re-import the project.") from exc
+    return hashes, _sha256_file(snapshot_path)
+
+
+def inspect_project_delta(
+    project_root: str | Path,
+    baseline_snapshot: str | Path,
+) -> ProjectDelta:
+    """Compare the current isolated project with its immutable import snapshot."""
+
+    root = Path(project_root).expanduser().resolve()
+    current_members = _safe_files(root, for_delivery=True)
+    current_hashes = {
+        relative: _sha256_file(source) for source, relative in current_members
+    }
+    baseline_hashes, baseline_sha256 = _baseline_hashes(baseline_snapshot)
+    changed_members = tuple(
+        (source, relative)
+        for source, relative in current_members
+        if baseline_hashes.get(relative) != current_hashes[relative]
+    )
+    deleted_files = tuple(sorted(set(baseline_hashes) - set(current_hashes)))
+    return ProjectDelta(
+        changed_members=changed_members,
+        deleted_files=deleted_files,
+        baseline_sha256=baseline_sha256,
+    )
+
+
+def materialize_baseline_copy(
+    baseline_snapshot: str | Path,
+    destination: str | Path,
+) -> int:
+    """Create a safe full test copy from the immutable baseline snapshot.
+
+    The destination must not already contain files. This deliberately creates a
+    separate copy so verification or recovery inspection cannot mutate the
+    working project.
+    """
+
+    snapshot_path = Path(baseline_snapshot).expanduser().resolve()
+    target = Path(destination).expanduser().resolve()
+    if target.exists() and (not target.is_dir() or any(target.iterdir())):
+        raise FileExistsError(target)
+    if target.is_dir():
+        target.rmdir()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix=f".{target.name}-", dir=target.parent))
+    extracted = 0
+    total_bytes = 0
+    try:
+        with zipfile.ZipFile(snapshot_path) as archive:
+            bad_member = archive.testzip()
+            if bad_member is not None:
+                raise ValueError("Empy baseline snapshot is corrupt; re-import the project.")
+            seen: set[str] = set()
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                relative = _safe_member_name(info.filename)
+                if relative is None or _is_zip_symlink(info):
+                    raise ValueError("Empy baseline snapshot contains an unsafe path.")
+                relative_name = relative.as_posix()
+                if relative_name in seen:
+                    raise ValueError("Empy baseline snapshot contains duplicate files.")
+                seen.add(relative_name)
+                if info.file_size > MAX_ARCHIVE_FILE_BYTES:
+                    raise ValueError("Empy baseline snapshot contains an oversized file.")
+                total_bytes += info.file_size
+                if total_bytes > MAX_ARCHIVE_TOTAL_BYTES:
+                    raise ValueError("Empy baseline snapshot exceeds the safe size limit.")
+                output = temporary / Path(relative_name)
+                output.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(info) as source, output.open("wb") as destination_stream:
+                    shutil.copyfileobj(source, destination_stream, length=1024 * 1024)
+                extracted += 1
+        if not extracted:
+            raise ValueError("Empy baseline snapshot contains no safe files.")
+        temporary.replace(target)
+    finally:
+        shutil.rmtree(temporary, ignore_errors=True)
+    return extracted
+
+
 def verify_project_archive(archive_path: str | Path, manifest: dict[str, Any]) -> None:
     archive = Path(archive_path).expanduser().resolve()
     expected_root = str(manifest["project_name"])
@@ -484,17 +618,43 @@ def verify_project_archive(archive_path: str | Path, manifest: dict[str, Any]) -
 def export_project_zip(
     project_root: str | Path,
     destination: str | Path,
+    *,
+    baseline_snapshot: str | Path | None = None,
 ) -> ExportedProject:
+    """Create a verified ZIP containing only files changed since import.
+
+    A baseline snapshot is mandatory by design. Falling back to a full-project
+    archive would make a deployment ZIP misleading and could overwrite files
+    that Empy never changed.
+    """
+
+    if baseline_snapshot is None:
+        raise ValueError("A baseline snapshot is required for a change-only ZIP.")
     root = Path(project_root).expanduser().resolve()
-    members = _safe_files(root, for_delivery=True)
+    delta = inspect_project_delta(root, baseline_snapshot)
+    if delta.deleted_files:
+        raise ValueError(
+            "The project has deleted file(s); a ZIP extraction cannot delete them "
+            "automatically. Restore the file or use an explicit deletion step."
+        )
+    members = delta.changed_members
     if not members:
-        raise ValueError("cannot export a project with no safe files")
+        raise ValueError("No changed project files are available for a delta ZIP.")
     target = Path(destination).expanduser().resolve()
     if target.suffix.lower() != ".zip":
         target = target / f"{root.name}-release.zip"
     if target.exists():
         raise FileExistsError(target)
     manifest = _expected_manifest(root, members)
+    manifest.update(
+        {
+            "schema_version": 2,
+            "archive_mode": "delta",
+            "extraction_root": root.name,
+            "baseline_snapshot_sha256": delta.baseline_sha256,
+            "deleted_files": list(delta.deleted_files),
+        }
+    )
     _deterministic_zip(target, root.name, members)
     verify_project_archive(target, manifest)
     manifest_path = target.with_suffix(".manifest.json")
@@ -502,4 +662,17 @@ def export_project_zip(
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     checksum = _sha256_file(target)
     checksum_path.write_text(f"{checksum}  {target.name}\n", encoding="utf-8")
-    return ExportedProject(root, target, manifest_path, checksum_path, checksum, len(members), True)
+    return ExportedProject(
+        project_root=root,
+        archive_path=target,
+        manifest_path=manifest_path,
+        checksum_path=checksum_path,
+        sha256=checksum,
+        file_count=len(members),
+        verified=True,
+        archive_mode="delta",
+        changed_files=delta.changed_files,
+        deleted_files=delta.deleted_files,
+        baseline_sha256=delta.baseline_sha256,
+        extraction_root=root.name,
+    )

@@ -30,6 +30,8 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert "run_report" in app_js
     assert "state.release_gate || report.export" in app_js
     assert "exportVerified" in app_js
+    assert "deltaDownloadHint" in app_js
+    assert "localizeMessage(item)" in app_js
     assert 'class="secondary download-link"' in app_js
     assert "verificationReady" in app_js
     assert 'state.run_status === "completed"' in app_js

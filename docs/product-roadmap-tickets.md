@@ -23,9 +23,11 @@ in the delivery evidence.
   and are enabled only after passing the same acceptance gates.
 - The application workspace remembers projects, tickets, runs, decisions,
   baselines, and releases across restarts.
-- A generated project delivery is a single-root ZIP that can be extracted into
-  the destination project location. Reports and checksums are delivered beside
-  the project artifact or in an explicitly documented metadata directory; a
+- A generated project delivery is a verified change-only ZIP that preserves
+  project-relative paths and can be extracted into the destination project
+  location. The complete isolated copy and immutable baseline remain available
+  for testing and recovery. Reports and checksums are delivered beside the
+  project artifact or in an explicitly documented metadata directory; a
   project ZIP must never hide the project inside another ZIP.
 - No provider, agent, or release operation may silently commit, push, merge,
   publish, or expose secrets.
@@ -48,7 +50,7 @@ in the delivery evidence.
 | T11 | Planner and bounded Agent Graph | Roles and waves are selected from project evidence; every write file has one owner and a zero-writable task cannot run. | T07, T09, T10 | P0 |
 | T12 | Execution, handoff, resume, and reports | Agent waves produce durable structured reports, handoffs, logs, retry state, and a resumable run history. | T08, T11 | P0 |
 | T13 | Verification and review | Tests/build/lint, changed-file review, accept/revert, conflict detection, and verification evidence are available in the product flow. | T06, T12 | P0 |
-| T14 | Direct project exporter | Export produces a safe single-root project ZIP, excludes secrets and temporary files, writes a manifest/checksum, and passes extract/re-import tests. | T06, T13 | P0 |
+| T14 | Direct project exporter | Export produces a safe, verified change-only ZIP relative to the imported baseline, excludes secrets and temporary files, writes a manifest/checksum, and passes extraction tests. | T06, T13 | P0 |
 | T15 | Bilingual product UI | Persian and English cover project selection, ticket intake, plan, run, report, review, history, settings, and errors. | T03, T05, T12, T13, T14 | P0 |
 | T16 | Security and privacy hardening | Path validation, secret scanning, symlink policy, provider permission boundaries, installer verification, and audit logs are tested. | T08, T14, T15 | P0 |
 | T17 | Real-project acceptance | A non-developer completes two sequential tickets on one project, a new project flow, reopen, review, revert, and export without terminal commands. | T04–T16 | P0 |
@@ -68,8 +70,8 @@ machine and on a real project:
    owned files, context, and token budget.
 4. Run the approved graph, inspect agent handoffs and verification evidence,
    then accept or revert individual changes.
-5. Export a single-root project ZIP and verify its checksum, extraction, and
-   re-import.
+5. Export a verified change-only ZIP and verify its checksum, extraction, and
+   project-relative paths.
 6. Close and reopen Empy Studio; the project, Ticket 1, run, and release remain
    available.
 7. Add Ticket 2 to the same accepted project. Only relevant incremental

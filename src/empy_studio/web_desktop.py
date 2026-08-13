@@ -65,6 +65,7 @@ from empy_studio.project_delivery import (
     export_project_zip,
     import_project_archive,
     import_project_folder,
+    inspect_project_delta,
     safe_upload_relative_path,
     summarize_import_skips,
 )
@@ -98,7 +99,7 @@ DEFAULT_DEFINITION_OF_DONE = (
     "Every requested task is implemented.\n"
     "Only files required by the approved work are changed.\n"
     "Relevant tests, build, and lint checks pass when available.\n"
-    "A readable review and complete project archive are produced."
+    "A readable review and a verified change-only deployment archive are produced."
 )
 
 
@@ -548,6 +549,24 @@ class GuidedState:
         with self.lock:
             self.brain_index = index
         return index
+
+    def _baseline_snapshot_path(self) -> Path:
+        """Return the immutable full copy used for tests and delta export."""
+
+        if self.active_project_id is None:
+            raise RuntimeError("Choose a project first.")
+        snapshot = (
+            self.workspace_root
+            / "vaults"
+            / self.active_project_id
+            / "baseline"
+            / "source.zip"
+        )
+        if not snapshot.is_file():
+            raise RuntimeError(
+                "Empy baseline snapshot is missing; re-import the project."
+            )
+        return snapshot
 
     def select_project(self, project_id: str, *, restore: bool = False) -> None:
         project = self.store.get_project(project_id)
@@ -1762,6 +1781,22 @@ class GuidedState:
             )
         elif self.review.status != "complete":
             blockers.append("Review has not completed.")
+        elif self.detection is not None:
+            try:
+                delta = inspect_project_delta(
+                    self.detection.descriptor.root,
+                    self._baseline_snapshot_path(),
+                )
+                if delta.deleted_files:
+                    blockers.append(
+                        "The project has deleted file(s); restore them before creating a ZIP."
+                    )
+                elif not delta.changed_members:
+                    blockers.append(
+                        "No changed project files are available for a delta ZIP."
+                    )
+            except (OSError, RuntimeError, ValueError) as exc:
+                blockers.append(str(exc))
 
         if self.export is not None and self.export.verified:
             status = "exported"
@@ -1808,7 +1843,11 @@ class GuidedState:
         target = Path(destination).expanduser() if destination else (
             self.workspace_root / "releases" / f"{self.detection.descriptor.display_name}-{uuid.uuid4().hex[:8]}.zip"
         )
-        exported = export_project_zip(self.detection.descriptor.root, target)
+        exported = export_project_zip(
+            self.detection.descriptor.root,
+            target,
+            baseline_snapshot=self._baseline_snapshot_path(),
+        )
         self.export = exported
         if self.active_project_id is not None and self.active_task_id is not None:
             self.store.create_release(
@@ -1821,7 +1860,7 @@ class GuidedState:
                 file_count=exported.file_count,
                 verified=exported.verified,
             )
-        self.message = "فایل ZIP تک‌ریشه و قابل استخراج آماده شد."
+        self.message = "فایل ZIP فقط شامل فایل‌های تغییرکرده آماده شد."
         if self.active_task_id is not None:
             self.store.update_task(self.active_task_id, status="released")
 
@@ -2268,6 +2307,10 @@ class GuidedState:
                 "available": self.export is not None,
                 "verified": bool(self.export and self.export.verified),
                 "file_count": self.export.file_count if self.export is not None else None,
+                "archive_mode": self.export.archive_mode if self.export is not None else None,
+                "changed_files": list(self.export.changed_files) if self.export is not None else [],
+                "deleted_files": list(self.export.deleted_files) if self.export is not None else [],
+                "extraction_root": self.export.extraction_root if self.export is not None else None,
                 "guidance": guidance,
             },
         }
