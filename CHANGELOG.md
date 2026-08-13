@@ -1,5 +1,17 @@
 ## [Unreleased]
 
+## [0.1.30] - 2026-08-13
+
+### Complete command installation
+
+- Publish the `empy`, `empy-web`, and `empy-desktop` commands into the user's
+  supported command directory on macOS, Linux, and Windows.
+- Make installer smoke tests invoke the public `empy-web` wrapper after the
+  version directory has moved, preventing a successful install with no usable
+  UI command.
+- Keep exact-version reinstall idempotent while repairing missing public
+  wrappers.
+
 ## [0.1.29] - 2026-08-13
 
 ### Real repair execution and clear user recovery

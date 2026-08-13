@@ -103,6 +103,10 @@ def render_windows_installer(
     spec.validate()
     minimum_major, minimum_minor = spec.minimum_python.split(".")
     entrypoint_module = _ENTRYPOINT_MODULES[spec.entrypoint]
+    entrypoint_map_lines = "\n".join(
+        f"    {_ps_quote(name)} = {_ps_quote(module)}"
+        for name, module in _ENTRYPOINT_MODULES.items()
+    )
 
     return f'''#requires -Version 5.1
 $ErrorActionPreference = "Stop"
@@ -121,6 +125,9 @@ $Entrypoint = {_ps_quote(spec.entrypoint)}
 $EntrypointModule = {_ps_quote(entrypoint_module)}
 $InstallRoot = {_ps_quote(spec.install_root)}
 $BinDir = {_ps_quote(spec.bin_dir)}
+$PublicEntrypoints = @{{
+{entrypoint_map_lines}
+}}
 
 function Expand-EnvironmentPath {{
     param([string]$Value)
@@ -254,6 +261,34 @@ function Write-JsonAtomic {{
     Move-Item -LiteralPath $temporary -Destination $Path -Force
 }}
 
+function Write-Wrapper {{
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+        [Parameter(Mandatory=$true)]
+        [string]$Module
+    )
+
+    $wrapperPath = Join-Path $BinDir "$Name.cmd"
+    $wrapperTemporary = "$wrapperPath.tmp"
+    $wrapper = "@echo off`r`n`"$VersionRoot\\venv\\Scripts\\python.exe`" -m $Module %*`r`n"
+    Set-Content `
+        -LiteralPath $wrapperTemporary `
+        -Value $wrapper `
+        -Encoding ASCII
+
+    Move-Item `
+        -LiteralPath $wrapperTemporary `
+        -Destination $wrapperPath `
+        -Force
+}}
+
+function Install-Wrappers {{
+    foreach ($entrypoint in $PublicEntrypoints.GetEnumerator()) {{
+        Write-Wrapper -Name $entrypoint.Key -Module ([string]$entrypoint.Value)
+    }}
+}}
+
 function Install-Package {{
     $python = Get-SupportedPython
 
@@ -276,6 +311,7 @@ function Install-Package {{
         }}
         $existingPython = Join-Path $VersionRoot "venv\\Scripts\\python.exe"
         if ($null -ne $existingState -and $existingState.package_sha256 -eq $PackageSha256 -and (Test-Path -LiteralPath $existingPython -PathType Leaf)) {{
+            Install-Wrappers
             Write-Host "$Product $Version is already installed and verified."
             Write-Host "Command: $WrapperPath"
             return
@@ -322,12 +358,14 @@ function Install-Package {{
             --upgrade `
             $packagePath
 
-        & $venvPython `
-            -c `
-            "import importlib,sys; importlib.import_module(sys.argv[1])" `
-            $EntrypointModule
-        if ($LASTEXITCODE -ne 0) {{
-            Fail "Installed package did not provide entrypoint module: $EntrypointModule"
+        foreach ($entrypoint in $PublicEntrypoints.GetEnumerator()) {{
+            & $venvPython `
+                -c `
+                "import importlib,sys; importlib.import_module(sys.argv[1])" `
+                $entrypoint.Value
+            if ($LASTEXITCODE -ne 0) {{
+                Fail "Installed package did not provide entrypoint module: $($entrypoint.Value)"
+            }}
         }}
 
         $entrypointExe = Join-Path `
@@ -354,17 +392,7 @@ function Install-Package {{
                 version_root = $VersionRoot
             }}
 
-        $wrapperTemporary = "$WrapperPath.tmp"
-        $wrapper = "@echo off`r`n`"$VersionRoot\\venv\\Scripts\\python.exe`" -m $EntrypointModule %*`r`n"
-        Set-Content `
-            -LiteralPath $wrapperTemporary `
-            -Value $wrapper `
-            -Encoding ASCII
-
-        Move-Item `
-            -LiteralPath $wrapperTemporary `
-            -Destination $WrapperPath `
-            -Force
+        Install-Wrappers
 
         Write-JsonAtomic `
             -Path $StateFile `
@@ -380,6 +408,7 @@ function Install-Package {{
 
         Write-Host "$Product $Version installed successfully."
         Write-Host "Command: $WrapperPath"
+        Write-Host "Web UI command: $(Join-Path $BinDir 'empy-web.cmd')"
 
         if (($env:PATH -split ";") -notcontains $BinDir) {{
             Write-Host "Add $BinDir to PATH to run $Entrypoint directly."

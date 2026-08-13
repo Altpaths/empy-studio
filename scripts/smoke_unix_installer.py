@@ -111,28 +111,42 @@ def smoke_installer(
                 f"stdout:\n{wrapper_result.stdout}\n"
                 f"stderr:\n{wrapper_result.stderr}"
             )
-        relocated_web = (
-            home
-            / ".local"
-            / "share"
-            / "empy-studio"
-            / "current"
-            / "venv"
-            / "bin"
-            / "empy-web"
-        )
-        web_result = subprocess.run(
-            [str(relocated_web), "--help"],
+        for command_name, arguments in (
+            ("empy-web", ("--help",)),
+            ("empy-desktop", ()),
+        ):
+            public_wrapper = home / ".local" / "bin" / command_name
+            if not public_wrapper.is_file() or not os.access(public_wrapper, os.X_OK):
+                raise RuntimeError(
+                    f"Installer did not create the public {command_name} wrapper"
+                )
+            if command_name == "empy-desktop":
+                continue
+            web_result = subprocess.run(
+                [str(public_wrapper), *arguments],
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if web_result.returncode != 0:
+                raise RuntimeError(
+                    f"Relocated {command_name} entrypoint failed:\n"
+                    f"stdout:\n{web_result.stdout}\n"
+                    f"stderr:\n{web_result.stderr}"
+                )
+        rerun = subprocess.run(
+            [str(smoke_installer_path)],
             env=environment,
             text=True,
             capture_output=True,
             check=False,
         )
-        if web_result.returncode != 0:
+        if rerun.returncode != 0:
             raise RuntimeError(
-                "Relocated empy-web entrypoint failed:\n"
-                f"stdout:\n{web_result.stdout}\n"
-                f"stderr:\n{web_result.stderr}"
+                "Re-running an already verified installer failed:\n"
+                f"stdout:\n{rerun.stdout}\n"
+                f"stderr:\n{rerun.stderr}"
             )
         return {
             "target": target,

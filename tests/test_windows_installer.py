@@ -80,6 +80,9 @@ def test_installer_records_state_and_wrapper() -> None:
     assert "install-state.json" in script
     assert "current.json" in script
     assert "$Entrypoint.cmd" in script
+    assert "Install-Wrappers" in script
+    assert "'empy-web' = 'empy_studio.web_desktop'" in script
+    assert "'empy-desktop' = 'empy_studio.desktop.shell'" in script
     assert "schema_version = 1" in script
 
 
@@ -98,7 +101,7 @@ def test_installer_uses_powerShell_safe_boolean_conditions() -> None:
 def test_wrapper_uses_relocatable_python_module() -> None:
     script = render_windows_installer(spec())
     assert "$EntrypointModule = 'empy_studio.cli'" in script
-    assert "venv\\Scripts\\python.exe`\" -m $EntrypointModule" in script
+    assert "venv\\Scripts\\python.exe`\" -m $Module" in script
 
 
 def test_writes_deterministic_installer(

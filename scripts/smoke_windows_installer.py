@@ -125,8 +125,16 @@ def smoke_installer(
         state_path = install_root / "install-state.json"
         current_path = install_root / "current.json"
         version_root = install_root / "versions" / version
-        if not wrapper.is_file():
-            raise RuntimeError("Installer did not create the empy.cmd wrapper")
+        public_wrappers = {
+            "empy": wrapper,
+            "empy-web": local_app_data / "Microsoft" / "WindowsApps" / "empy-web.cmd",
+            "empy-desktop": local_app_data / "Microsoft" / "WindowsApps" / "empy-desktop.cmd",
+        }
+        for command_name, public_wrapper in public_wrappers.items():
+            if not public_wrapper.is_file():
+                raise RuntimeError(
+                    f"Installer did not create the {command_name}.cmd wrapper"
+                )
         if not state_path.is_file() or not current_path.is_file():
             raise RuntimeError("Installer did not create installation state")
 
@@ -157,6 +165,24 @@ def smoke_installer(
                 "Relocated Windows wrapper failed:\n"
                 f"stdout:\n{wrapper_result.stdout}\n"
                 f"stderr:\n{wrapper_result.stderr}"
+            )
+
+        web_wrapper_command = subprocess.list2cmdline(
+            [str(public_wrappers["empy-web"]), "--help"]
+        )
+        web_wrapper_result = subprocess.run(
+            web_wrapper_command,
+            shell=True,
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if web_wrapper_result.returncode != 0:
+            raise RuntimeError(
+                "Relocated Windows empy-web wrapper failed:\n"
+                f"stdout:\n{web_wrapper_result.stdout}\n"
+                f"stderr:\n{web_wrapper_result.stderr}"
             )
 
         return {

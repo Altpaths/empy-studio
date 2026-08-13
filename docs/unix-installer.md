@@ -23,7 +23,7 @@ Detect OS and architecture
   → Install package with pip
   → Atomically publish version directory
   → Update current-version link
-  → Create ~/.local/bin/empy wrapper
+  → Create ~/.local/bin/empy, empy-web, and empy-desktop wrappers
   → Persist install-state.json
 ```
 

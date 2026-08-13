@@ -106,8 +106,11 @@ def test_script_records_install_state() -> None:
 def test_wrapper_uses_relocatable_python_module() -> None:
     script = render_unix_installer(spec())
     assert "ENTRYPOINT_MODULE=empy_studio.cli" in script
-    assert 'venv/bin/python" -m "$ENTRYPOINT_MODULE"' in script
+    assert 'venv/bin/python" -m "$wrapper_module"' in script
     assert 'venv/bin/$ENTRYPOINT"' not in script
+    assert "write_wrapper empy-web empy_studio.web_desktop" in script
+    assert "write_wrapper empy-desktop empy_studio.desktop.shell" in script
+    assert 'Web UI command: %s/empy-web' in script
 
 
 def test_current_link_replacement_does_not_follow_old_version_symlink() -> None:

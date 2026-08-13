@@ -111,6 +111,14 @@ def render_unix_installer(
     spec.validate()
     minimum_major, minimum_minor = spec.minimum_python.split(".")
     entrypoint_module = _ENTRYPOINT_MODULES[spec.entrypoint]
+    module_imports = "\n".join(
+        f"importlib.import_module({module!r})"
+        for module in _ENTRYPOINT_MODULES.values()
+    )
+    wrapper_install_commands = "\n".join(
+        f"        write_wrapper {_shell(name)} {_shell(module)}"
+        for name, module in _ENTRYPOINT_MODULES.items()
+    )
 
     return f'''#!/bin/sh
 set -eu
@@ -295,6 +303,23 @@ os.replace(temporary, path)
 PY
 }}
 
+write_wrapper() {{
+    wrapper_entrypoint="$1"
+    wrapper_module="$2"
+    wrapper_path="$BIN_DIR/$wrapper_entrypoint"
+    temporary_wrapper="$BIN_DIR/.$wrapper_entrypoint-$VERSION"
+    cat > "$temporary_wrapper" <<WRAPPER
+#!/bin/sh
+exec "$CURRENT_LINK/venv/bin/python" -m "$wrapper_module" "\\$@"
+WRAPPER
+    chmod 0755 "$temporary_wrapper"
+    mv -f "$temporary_wrapper" "$wrapper_path"
+}}
+
+install_wrappers() {{
+{wrapper_install_commands}
+}}
+
 install_package() {{
     umask 077
     mkdir -p "$INSTALL_ROOT/versions" "$BIN_DIR"
@@ -320,6 +345,7 @@ print(digest)
 PY
             )" || recorded_sha256=""
             if [ "$recorded_sha256" = "$PACKAGE_SHA256" ]; then
+                install_wrappers
                 printf '%s %s is already installed and verified.\n' "$PRODUCT" "$VERSION"
                 printf 'Command: %s\n' "$WRAPPER_PATH"
                 return
@@ -347,10 +373,9 @@ PY
         --upgrade \
         "$package_path"
 
-    "$staged_root/venv/bin/python" - "$ENTRYPOINT_MODULE" <<'PY'
+    "$staged_root/venv/bin/python" - <<'PY'
 import importlib
-import sys
-importlib.import_module(sys.argv[1])
+{module_imports}
 PY
 
     mv "$staged_root" "$VERSION_ROOT"
@@ -384,13 +409,7 @@ if os.path.lexists(target) and not target.is_symlink():
 os.replace(source, target)
 PY
 
-    temporary_wrapper="$BIN_DIR/.${{ENTRYPOINT}}-$VERSION"
-    cat > "$temporary_wrapper" <<WRAPPER
-#!/bin/sh
-exec "$CURRENT_LINK/venv/bin/python" -m "$ENTRYPOINT_MODULE" "\\$@"
-WRAPPER
-    chmod 0755 "$temporary_wrapper"
-    mv -f "$temporary_wrapper" "$WRAPPER_PATH"
+    install_wrappers
 
     write_state
 
@@ -399,6 +418,7 @@ WRAPPER
 
     printf '%s %s installed successfully.\\n' "$PRODUCT" "$VERSION"
     printf 'Command: %s\\n' "$WRAPPER_PATH"
+    printf 'Web UI command: %s/empy-web\\n' "$BIN_DIR"
 
     case ":${{PATH}}:" in
         *":${{BIN_DIR}}:"*) ;;
