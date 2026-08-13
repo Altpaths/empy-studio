@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+## [0.1.34] - 2026-08-13
+
+### Restore the intended project controls
+
+- Keep the Codex status panel with the projects card on the left.
+- Restore folder and ZIP selection controls to the right-hand start card.
+- Use a dark heading and a distinct muted-green hint box for the start card.
+
 ## [0.1.33] - 2026-08-13
 
 ### Correct project start layout
