@@ -22,6 +22,7 @@ def build_macos_app(
     source_root: Path,
     output: Path,
     architecture: str = "auto",
+    clean_workspace: bool = False,
 ) -> Path:
     if sys.platform != "darwin":
         raise RuntimeError("macOS app bundles can only be built on macOS")
@@ -71,7 +72,12 @@ def build_macos_app(
     ]
     if architecture != "auto":
         command.extend(["--target-architecture", architecture])
-    command.append(str(source_root / "scripts" / "macos_app_entrypoint.py"))
+    entrypoint = (
+        "macos_clean_app_entrypoint.py"
+        if clean_workspace
+        else "macos_app_entrypoint.py"
+    )
+    command.append(str(source_root / "scripts" / entrypoint))
     try:
         environment = os.environ.copy()
         environment["PYINSTALLER_CONFIG_DIR"] = str(work / "config")
@@ -107,11 +113,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         choices=("auto", "arm64", "x86_64", "universal2"),
         default="auto",
     )
+    parser.add_argument(
+        "--clean-workspace",
+        action="store_true",
+        help="Make the Finder app start a new empty workspace on every launch",
+    )
     args = parser.parse_args(argv)
     app = build_macos_app(
         source_root=args.source_root,
         output=args.output,
         architecture=args.architecture,
+        clean_workspace=args.clean_workspace,
     )
     print(app)
     return 0

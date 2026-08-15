@@ -1,3 +1,15 @@
+## [0.1.42] - 2026-08-15
+
+### Add a no-terminal clean macOS trial app
+
+- Add a Finder-launchable macOS app build that starts a new empty workspace on
+  every launch, so a user can test the latest product without old projects or
+  stored tickets.
+- Add `empy-web --clean` for the same isolated behavior when a scripted launch
+  is needed.
+- Document the unsigned candidate flow: extract the app, choose Open, and use
+  macOS Privacy & Security → Open Anyway if Gatekeeper blocks it.
+
 ## [0.1.41] - 2026-08-13
 
 ### Separate the product from external projects and ship an independent sample

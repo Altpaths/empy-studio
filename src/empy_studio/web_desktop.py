@@ -104,6 +104,17 @@ DEFAULT_DEFINITION_OF_DONE = (
 )
 
 
+def clean_workspace_root() -> Path:
+    """Create a new per-launch workspace for a clean product trial."""
+
+    normal_root = default_workspace_root()
+    clean_root = normal_root.parent / f"{normal_root.name} Clean"
+    clean_root.mkdir(parents=True, exist_ok=True)
+    session_root = clean_root / f"session-{uuid.uuid4().hex}"
+    session_root.mkdir()
+    return session_root
+
+
 def _content_type_for_asset(target: Path) -> str:
     stable_types = {
         ".css": "text/css",
@@ -2637,8 +2648,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--token", default=None)
     parser.add_argument("--no-open", action="store_true")
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Start a new empty workspace for this session",
+    )
     args = parser.parse_args(argv)
-    workspace = args.workspace or default_workspace_root()
+    workspace = (
+        clean_workspace_root()
+        if args.clean
+        else args.workspace or default_workspace_root()
+    )
     server = create_server(workspace=workspace, token=args.token, port=args.port)
     address = cast(tuple[str, int], server.server_address)
     host, actual_port = address

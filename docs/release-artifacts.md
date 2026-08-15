@@ -24,6 +24,22 @@ installer assets against the distribution manifest. The installer smoke test
 uses a local wheel in a temporary HOME and executes the final relocated
 wrapper.
 
+On macOS, the Finder app candidate is built separately and can be added to the
+same release manifest:
+
+```bash
+python scripts/build_macos_app.py \
+  --output "build/app/Empy Studio.app" \
+  --architecture arm64 \
+  --clean-workspace
+ditto -c -k --norsrc --noextattr --noqtn --keepParent \
+  "build/app/Empy Studio.app" build/app/empy-studio-macos-arm64.zip
+```
+
+This candidate is not called notarized until the Apple signing workflow has
+accepted it. Users can still approve an unsigned local candidate through
+Privacy & Security → Open Anyway.
+
 ## Build the macOS app
 
 The Finder-launchable app is built only on macOS with the release extra:

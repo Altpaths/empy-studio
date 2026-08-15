@@ -245,8 +245,11 @@ def build_release_assets(
                 "--sdist",
                 "--outdir",
                 str(packages),
+                str(source_root),
             ),
-            cwd=source_root,
+            # Run outside the project root.  A local ``build/`` output
+            # directory would otherwise shadow the PyPA ``build`` module.
+            cwd=source_root.parent,
         )
         wheel = _require_single(sorted(packages.glob("*.whl")), "wheel")
         sdist = _require_single(sorted(packages.glob("*.tar.gz")), "source distribution")

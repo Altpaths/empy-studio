@@ -91,6 +91,16 @@ remains available for local automation. See
 [`docs/web-desktop.md`](docs/web-desktop.md) for the product flow and API
 boundary.
 
+### macOS without Terminal
+
+The release also provides a Finder-launchable macOS app trial. Download the
+`empy-studio-macos-arm64.zip` asset for Apple Silicon (or the x86_64 asset for
+Intel), double-click the ZIP to extract it, then right-click `Empy Studio.app`
+and choose **Open**. If macOS blocks it, open System Settings → Privacy &
+Security and choose **Open Anyway** for Empy Studio. This clean trial app
+starts with an empty workspace on every launch; it does not reuse the normal
+Empy Studio history.
+
 ### Try the included sample project
 
 The repository includes a small, real PHP sample at
@@ -288,9 +298,9 @@ See `docs/plugin-package-manager-v1.md` for the complete architecture.
 
 ## Status
 
-**v0.1.0 — Developer Preview**
+**v0.1.42 — Developer Preview**
 
-The current release provides a working CLI, task-graph generation, ownership-conflict detection, evidence-backed learning, and runtime-aware verification. Public interfaces may evolve before v1.0.
+The current release provides a working CLI, task-graph generation, ownership-conflict detection, evidence-backed learning, runtime-aware verification, and a Finder-launchable clean macOS trial app. Public interfaces may evolve before v1.0.
 
 ## Principles and documentation
 
