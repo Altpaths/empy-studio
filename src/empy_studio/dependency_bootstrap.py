@@ -204,20 +204,7 @@ def dependency_bootstrap_plan(
         and composer_needed
         and not (root / "vendor" / "autoload.php").is_file()
     ):
-        composer = _which("composer", environment)
         reason = "Composer verification dependencies are missing from the isolated copy."
-        if composer is None:
-            return _unavailable_plan(
-                "composer",
-                root,
-                lockfile=composer_lock if composer_lock.is_file() else None,
-                generated_scope="vendor/",
-                reason=reason,
-                unavailable_reason=(
-                    "Composer is not installed or is not visible to Empy. "
-                    "Install Composer once, then retry; Empy will not change the original project."
-                ),
-            )
         if not composer_lock.is_file():
             return _unavailable_plan(
                 "composer",
@@ -228,6 +215,19 @@ def dependency_bootstrap_plan(
                 unavailable_reason=(
                     "composer.lock is missing. Empy will not resolve unpinned dependencies "
                     "silently; add and review composer.lock, then retry."
+                ),
+            )
+        composer = _which("composer", environment)
+        if composer is None:
+            return _unavailable_plan(
+                "composer",
+                root,
+                lockfile=composer_lock,
+                generated_scope="vendor/",
+                reason=reason,
+                unavailable_reason=(
+                    "Composer is not installed or is not visible to Empy. "
+                    "Install Composer once, then retry; Empy will not change the original project."
                 ),
             )
         return DependencyBootstrapPlan(
@@ -253,20 +253,7 @@ def dependency_bootstrap_plan(
     node_modules = root / "node_modules"
     if package_json.is_file() and node_needed and not node_modules.is_dir():
         package_lock = root / "package-lock.json"
-        npm = _which("npm", environment)
         reason = "Node verification dependencies are missing from the isolated copy."
-        if npm is None:
-            return _unavailable_plan(
-                "npm",
-                root,
-                lockfile=package_lock if package_lock.is_file() else None,
-                generated_scope="node_modules/",
-                reason=reason,
-                unavailable_reason=(
-                    "npm is not installed or is not visible to Empy. "
-                    "Install Node.js once, then retry."
-                ),
-            )
         if not package_lock.is_file():
             return _unavailable_plan(
                 "npm",
@@ -277,6 +264,19 @@ def dependency_bootstrap_plan(
                 unavailable_reason=(
                     "package-lock.json is missing. Empy will not resolve unpinned Node "
                     "dependencies silently; add and review the lockfile, then retry."
+                ),
+            )
+        npm = _which("npm", environment)
+        if npm is None:
+            return _unavailable_plan(
+                "npm",
+                root,
+                lockfile=package_lock,
+                generated_scope="node_modules/",
+                reason=reason,
+                unavailable_reason=(
+                    "npm is not installed or is not visible to Empy. "
+                    "Install Node.js once, then retry."
                 ),
             )
         return DependencyBootstrapPlan(

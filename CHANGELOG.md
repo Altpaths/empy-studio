@@ -1,3 +1,11 @@
+## [0.1.44] - 2026-08-18
+
+### Make dependency blockers deterministic across environments
+
+- Check for the required Composer or npm lockfile before checking whether the
+  package manager is installed, so missing project contracts always produce a
+  precise user-facing blocker instead of an environment-dependent message.
+
 ## [0.1.43] - 2026-08-18
 
 ### Make the verified product path explicit and recoverable
