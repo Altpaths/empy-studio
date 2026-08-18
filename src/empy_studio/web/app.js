@@ -12,7 +12,7 @@ const t = {
     importReview: "بررسی واردسازی پروژه", importedFiles: "فایل قابل‌استفاده", excludedItems: "مورد کنارگذاشته‌شده", importContinue: "فایل اصلی تغییر نکرده است؛ وابستگی‌های موجود برای Verification در کپی ایزوله حفظ شده‌اند و فقط از ZIP نهایی حذف می‌شوند.", importReady: "پروژه آماده‌ی ادامه است", importPartial: "برخی موارد از واردسازی کنار گذاشته شدند؛ دسته‌بندی زیر را بررسی کنید.", verificationReady: "Verification پیش از اجرای Agent آماده است", verificationNeedsAttention: "Empy وابستگی واقعی را قبل از اجرا در کپی ایزوله آماده می‌کند", verificationChecks: "بررسی‌های قابل اجرا", verificationDiagnostics: "علت توقف پیش از اجرا",
     plan: "تحلیل و ساخت برنامه", start: "شروع اجرا", accept: "تأیید تغییرات", revert: "بازگردانی تغییرات", export: "خروجی ZIP پروژه",
     newProject: "پروژه‌ی دیگر", startHere: "از اینجا شروع کنید", projectStartHint: "برای شروع یک پروژه انتخاب کنید یا فایل جدید وارد کنید.", chooseProject: "انتخاب پروژه", reimportProject: "ورود دوبارهٔ پروژه", projectUnavailable: "مسیر این پروژه دیگر وجود ندارد؛ پوشه یا ZIP را دوباره وارد کنید.", noProject: "هنوز پروژه‌ای در این workspace ذخیره نشده است.", noTask: "هنوز تیکتی ثبت نشده است.", engine: "وضعیت Codex",
-    ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", cancel: "توقف اجرا", cancelled: "اجرا لغو شد", failed: "اجرا متوقف شد", retryDependency: "تلاش دوباره برای آماده‌سازی وابستگی", dependencyPreparing: "Empy وابستگی‌های واقعی را در کپی ایزوله آماده می‌کند؛ این پوشه وارد ZIP نمی‌شود.", backToTicket: "بازگشت به تیکت", continueTicket: "ادامه و اصلاح تیکت", autoRepair: "اصلاح خودکار و اجرای دوباره", manualRepair: "نوشتن تیکت اصلاحی", result: "نتیجه و بررسی", resume: "ادامه تیکت",
+    ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", cancel: "توقف اجرا", cancelled: "اجرا لغو شد", failed: "اجرا متوقف شد", retryDependency: "تلاش دوباره برای آماده‌سازی وابستگی", dependencyPreparing: "Empy وابستگی‌های واقعی را در کپی ایزوله آماده می‌کند؛ این پوشه وارد ZIP نمی‌شود.", backToTicket: "بازگشت به تیکت", continueTicket: "ادامه و اصلاح تیکت", autoRepair: "اصلاح خودکار و اجرای دوباره", recoverAndContinue: "پاک‌سازی امن و ادامه", manualRepair: "نوشتن تیکت اصلاحی", result: "نتیجه و بررسی", resume: "ادامه تیکت",
     benchmark: "بنچمارک محلی", runBenchmark: "اجرای بنچمارک", full: "تخمین کامل", bounded: "تخمین محدود", saved: "صرفه‌جویی", brain: "Project Brain", report: "گزارش اجرای Agentها", agent: "Agent", duration: "زمان اجرا", summary: "خلاصه", usage: "مصرف Token", actual: "مصرف واقعی", fresh: "مصرف تازه", newTokens: "کار جدید", cached: "Cache", estimate: "تخمین محلی", notReported: "گزارش نشده", verification: "Verification", verificationDiagnostics: "تشخیص‌های Verification", verificationFailures: "خطاهای Verification", review: "Review", pending: "در انتظار تصمیم", evidence: "Evidence", filesChanged: "فایل تغییرکرده", exportReady: "آماده خروجی", readyForExport: "آماده تولید ZIP", releaseGate: "گیت انتشار", blocked: "مسدود", exported: "خروجی تولید شد", reviewPending: "در انتظار تأیید تغییرات", reviewPendingAction: "بررسی‌ها موفق شد؛ فقط تغییرات زیر منتظر تأیید شماست. برای ادامه روی «تأیید تغییرات» بزنید. بعد از تأیید، دکمهٔ «خروجی ZIP پروژه» فعال می‌شود.", verificationBlocked: "Verification ناموفق است", gateReason: "علت توقف", download: "دانلود ZIP", exportManifest: "دانلود فهرست فایل‌ها", exportChecksum: "دانلود checksum", sha256: "SHA-256", changedFilesList: "فایل‌های داخل ZIP", extractionRoot: "ریشهٔ استخراج", revealExport: "نمایش محل فایل", deltaDownloadHint: "این ZIP فقط وصلهٔ فایل‌های تغییرکرده است، نه کل پروژه. آن را در پوشه‌ای که پوشهٔ پروژه (مثلاً holda.ir) داخل آن است Extract کنید؛ داخل public_html استخراج نکنید.", noReviewChanges: "تغییری برای تأیید یا بازگردانی وجود ندارد.", noReport: "گزارش اجرا هنوز موجود نیست", noDiagnostic: "جزئیات تشخیصی ثبت نشده است.", nextStep: "قدم بعدی", technicalDetails: "جزئیات فنی (اختیاری)", failureFinding: "یافتهٔ قطعی", requiredAction: "اقدام لازم", failureEvidence: "مسیر evidence", suggestedTicket: "تیکت اصلاحی پیشنهادی", refresh: "به‌روزرسانی وضعیت", openCodex: "بازکردن Codex", engineHelp: "برای اجرای واقعی، Codex باید نصب و احراز هویت شده باشد.", fieldRequired: "درخواست Ticket را وارد کنید.", schedule: "زمان‌بندی", parallel: "موازی", serial: "ترتیبی",
   },
   en: {
@@ -21,13 +21,26 @@ const t = {
     importReview: "Project import review", importedFiles: "usable files", excludedItems: "excluded items", importContinue: "The original project was not changed; dependencies already present are preserved for Verification in the isolated copy and excluded only from the final ZIP.", importReady: "Project is ready to continue", importPartial: "Some items were excluded from import; review the categories below.", verificationReady: "Verification is ready before the Agent run", verificationNeedsAttention: "Empy will prepare real dependencies in the isolated copy before running", verificationChecks: "Runnable checks", verificationDiagnostics: "Pre-run blocker",
     plan: "Analyze and build plan", start: "Start run", accept: "Accept changes", revert: "Restore changes", export: "Export project ZIP",
     newProject: "Another project", startHere: "Start here", projectStartHint: "Choose a project or import a new file to get started.", chooseProject: "Choose project", reimportProject: "Re-import project", projectUnavailable: "This project's path is no longer available; choose its folder or ZIP again.", noProject: "No project has been saved in this workspace yet.", noTask: "No tickets have been registered.", engine: "Codex status",
-    ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", cancel: "Stop run", cancelled: "Run cancelled", failed: "Run stopped", retryDependency: "Retry dependency preparation", dependencyPreparing: "Empy prepares real dependencies in the isolated copy; that folder is excluded from the ZIP.", backToTicket: "Back to ticket", continueTicket: "Continue and fix ticket", autoRepair: "Automatically repair and rerun", manualRepair: "Write a corrective ticket", result: "Result and review", resume: "Resume ticket",
+    ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", cancel: "Stop run", cancelled: "Run cancelled", failed: "Run stopped", retryDependency: "Retry dependency preparation", dependencyPreparing: "Empy prepares real dependencies in the isolated copy; that folder is excluded from the ZIP.", backToTicket: "Back to ticket", continueTicket: "Continue and fix ticket", autoRepair: "Automatically repair and rerun", recoverAndContinue: "Safely reset and continue", manualRepair: "Write a corrective ticket", result: "Result and review", resume: "Resume ticket",
     benchmark: "Local benchmark", runBenchmark: "Run benchmark", full: "Full estimate", bounded: "Bounded estimate", saved: "Saved", brain: "Project Brain", report: "Agent run report", agent: "Agent", duration: "Duration", summary: "Summary", usage: "Token usage", actual: "Actual usage", fresh: "Fresh input", newTokens: "New work", cached: "Cache", estimate: "Local estimate", notReported: "Not reported", verification: "Verification", verificationDiagnostics: "Verification diagnostics", verificationFailures: "Verification failures", review: "Review", pending: "Pending decisions", evidence: "Evidence", filesChanged: "Changed files", exportReady: "Export status", readyForExport: "Ready to create ZIP", releaseGate: "Release gate", blocked: "Blocked", exported: "Export created", reviewPending: "Waiting for change approval", reviewPendingAction: "Verification passed. The listed changes are waiting for your approval. Select Approve changes to continue; the project ZIP becomes available afterwards.", verificationBlocked: "Verification failed", gateReason: "Why export stopped", download: "Download ZIP", exportManifest: "Download file manifest", exportChecksum: "Download checksum", sha256: "SHA-256", changedFilesList: "Files in the ZIP", extractionRoot: "Extraction root", revealExport: "Show file location", deltaDownloadHint: "This ZIP is a patch containing only changed files, not the whole project. Extract it in the folder that contains the project folder (for example, holda.ir); do not extract it inside public_html.", noReviewChanges: "There are no file changes to accept or restore.", noReport: "Run report is not available yet", noDiagnostic: "No diagnostic details were recorded.", nextStep: "Next step", technicalDetails: "Technical details (optional)", failureFinding: "Confirmed finding", requiredAction: "Required action", failureEvidence: "Evidence path", suggestedTicket: "Suggested corrective ticket", refresh: "Refresh status", openCodex: "Open Codex", engineHelp: "Codex must be installed and authenticated for a real run.", fieldRequired: "Enter a ticket request.", schedule: "Schedule", parallel: "Parallel", serial: "Serial",
   },
 };
 function text() { return t[language]; }
 function escapeHtml(value = "") { return String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c])); }
 function localizeMessage(value = "") {
+  if (value.includes("Codex execution requires a clean Git worktree") || value.includes("Commit or restore these paths first")) {
+    const marker = "Commit or restore these paths first:";
+    const paths = value.includes(marker) ? value.slice(value.indexOf(marker) + marker.length).trim() : "";
+    if (language === "fa") {
+      return `اجرای مرحلهٔ بعدی متوقف شد چون تلاش قبلی در کپی ایزوله تغییر تأییدنشده دارد${paths ? ` (${paths})` : ""}. فایل اصلی شما تغییر نکرده است؛ Empy می‌تواند این تلاش را امن نگه دارد، کپی ایزوله را به آخرین مبنای تأییدشده برگرداند و ادامه دهد.`;
+    }
+    return `The next step was paused because the previous attempt left unreviewed changes in the isolated copy${paths ? ` (${paths})` : ""}. Your original project is unchanged; Empy can preserve that attempt, reset only the isolated copy to the last accepted baseline, and continue.`;
+  }
+  if (value.includes("could not safely preserve the previous isolated changes") || value.includes("isolated workspace is still not clean")) {
+    return language === "fa"
+      ? "Empy نتوانست تغییرات تلاش قبلی را امن نگه دارد؛ اجرای جدید شروع نشد و فایل اصلی شما تغییر نکرده است. پروژه را دوباره وارد کنید تا یک کپی ایزولهٔ تمیز ساخته شود."
+      : "Empy could not safely preserve the previous isolated changes, so it did not start another run and did not change your original project. Re-import the project to create a clean isolated copy.";
+  }
   if (value.startsWith("Local link validation failed:")) {
     return language === "fa"
       ? "یک لینک داخلی در فایل تغییرکرده معتبر نیست: " + value.slice("Local link validation failed:".length).trim()
@@ -199,7 +212,17 @@ function renderFailureContext(context, compact = false) {
   const failures = (context.failures || []).map(item => `<article class="failure-item"><div class="row"><strong>${escapeHtml(item.label || text().verification)}</strong>${item.returncode === null || item.returncode === undefined ? "" : `<span class="status-pill failed">exit ${escapeHtml(item.returncode)}</span>`}</div><p class="failure-finding"><strong>${text().failureFinding}:</strong> ${escapeHtml(item.user_finding || item.detail || text().noDiagnostic)}</p><p class="failure-action"><strong>${text().requiredAction}:</strong> ${escapeHtml(item.action || "")}</p></article>`).join("");
   const findings = (context.findings || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
   const evidence = context.evidence ? `<small class="evidence">${text().failureEvidence}: ${escapeHtml(context.evidence)}</small>` : "";
-  return `<section class="failure-context ${compact ? "compact" : ""}" role="alert"><h2>${escapeHtml(context.title || "")}</h2><p>${escapeHtml(context.summary || "")}</p>${context.next_step ? `<p class="failure-next-step"><strong>${text().nextStep}:</strong> ${escapeHtml(context.next_step)}</p>` : ""}${failures ? `<div class="failure-list">${failures}</div>` : ""}${!failures && findings ? `<div class="failure-findings"><strong>${text().failureFinding}</strong><ul>${findings}</ul></div>` : ""}${evidence}${!compact && context.suggested_ticket ? `<p class="muted"><strong>${text().suggestedTicket}:</strong> ${escapeHtml(context.next_step || "")}</p>` : ""}</section>`;
+  const suggested = !compact && context.suggested_ticket
+    ? `<details class="suggested-ticket"><summary>${text().suggestedTicket}</summary><pre>${escapeHtml(context.suggested_ticket)}</pre></details>`
+    : "";
+  return `<section class="failure-context ${compact ? "compact" : ""}" role="alert"><h2>${escapeHtml(context.title || "")}</h2><p>${escapeHtml(context.summary || "")}</p>${context.next_step ? `<p class="failure-next-step"><strong>${text().nextStep}:</strong> ${escapeHtml(context.next_step)}</p>` : ""}${failures ? `<div class="failure-list">${failures}</div>` : ""}${!failures && findings ? `<div class="failure-findings"><strong>${text().failureFinding}</strong><ul>${findings}</ul></div>` : ""}${evidence}${suggested}</section>`;
+}
+function renderRecoveryActions(context) {
+  if (!context) return "";
+  const primaryAction = context.repair_available ? "auto-repair" : "resume-ticket";
+  const primaryLabel = context.kind === "dirty_worktree" && context.repair_available ? text().recoverAndContinue : context.repair_available ? text().autoRepair : text().continueTicket;
+  const secondary = primaryAction === "resume-ticket" ? "" : `<button type="button" class="secondary" data-action="resume-ticket">${text().continueTicket}</button>`;
+  return `<button type="button" class="primary" data-action="${primaryAction}">${primaryLabel}</button>${secondary}`;
 }
 function renderTask() {
   const tasks = state.tasks || [];
@@ -301,15 +324,13 @@ function renderRun() {
   const dependencyInfo = dependency?.message
     ? `<section class="dependency-status ${dependency.successful ? "ready" : "blocked"}"><strong>${escapeHtml(dependency.manager || "Dependency")}</strong><p>${escapeHtml(localizeMessage(dependency.message))}</p>${dependency.generated_scope ? `<small>${escapeHtml(dependency.generated_scope)}</small>` : ""}</section>`
     : "";
-  const repairAction = state.failure_context?.repair_available ? "auto-repair" : "resume-ticket";
-  const repairLabel = state.failure_context?.repair_available ? text().autoRepair : text().manualRepair;
   const dependencyRetry = dependency?.retryable && !state.running
     ? `<button type="button" class="primary" data-action="start-run">${text().retryDependency}</button>`
     : "";
   const action = state.running
     ? `<button type="button" class="danger" data-action="cancel-run">${text().cancel}</button>`
-    : `${dependencyRetry}<button type="button" class="${dependencyRetry ? "secondary" : "primary"}" data-action="${repairAction}">${repairLabel}</button>`;
-  return `<div class="card"><h1>${title}</h1>${error}${dependencyInfo}<div class="node-list">${nodes.map(node => `<div class="node ${node.status}"><span>${escapeHtml(statusLabel(node.status))}</span><strong>${escapeHtml(node.title)}</strong></div>`).join("")}</div><pre class="log">${(state.logs || []).map(item => `[${escapeHtml(item.time)}] ${escapeHtml(item.text)}`).join("\n")}</pre><div class="actions">${action}</div></div>`;
+    : `${dependencyRetry}${state.failure_context ? renderRecoveryActions(state.failure_context) : `<button type="button" class="${dependencyRetry ? "secondary" : "primary"}" data-action="resume-ticket">${text().continueTicket}</button>`}`;
+  return `<div class="card"><h1>${title}</h1>${error}${state.failure_context ? renderFailureContext(state.failure_context) : ""}${dependencyInfo}<div class="node-list">${nodes.map(node => `<div class="node ${node.status}"><span>${escapeHtml(statusLabel(node.status))}</span><strong>${escapeHtml(node.title)}</strong></div>`).join("")}</div><pre class="log">${(state.logs || []).map(item => `[${escapeHtml(item.time)}] ${escapeHtml(item.text)}`).join("\n")}</pre><div class="actions">${action}</div></div>`;
 }
 function enhanceImportUi() {
   if (state?.phase !== "task") return;
@@ -319,9 +340,9 @@ function enhanceImportUi() {
 }
 function renderResult() {
   const review = state.review || {files:[], pending_count:0}; const verification = state.verification || {}; const gate = state.release_gate || state.run_report?.export || {};
-  const repairAction = state.failure_context?.repair_available ? "auto-repair" : "resume-ticket";
-  const repairLabel = state.failure_context?.repair_available ? text().autoRepair : text().manualRepair;
-  const continuation = verification.finalized_at ? "" : `<button type="button" class="primary" data-action="${repairAction}">${repairLabel}</button>`;
+  const continuation = state.failure_context
+    ? renderRecoveryActions(state.failure_context)
+    : verification.finalized_at ? "" : `<button type="button" class="primary" data-action="resume-ticket">${text().continueTicket}</button>`;
   const verificationReady = verification.status === "pass" && Boolean(verification.finalized_at || verification.finalized);
   const gateReady = Boolean(gate.ready && verificationReady && state.run_status === "completed");
   const gateStatus = releaseGateLabel(gate, verification, review);

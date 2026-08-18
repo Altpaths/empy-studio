@@ -1,3 +1,20 @@
+## [0.1.45] - 2026-08-18
+
+### Make failed runs understandable and recoverable
+
+- Show the actual reason a Codex run stopped inside the run screen in Persian
+  and English instead of exposing only the raw worktree error.
+- Add clear recovery actions: safely reset and continue, or return to the
+  corrective ticket; keep the suggested corrective ticket available as an
+  optional detail instead of making it the only path forward.
+- Preserve unfinished changes inside Empy's isolated Git workspace and retry
+  from the last accepted checkpoint without touching the original project.
+- Start the same bounded repair flow when the Agent/runtime fails before
+  Verification, so a provider or worktree failure does not abandon the ticket
+  at a corrective-ticket-only screen.
+- Add regression coverage for dirty worktree recovery, bilingual guidance, and
+  the run-screen action path.
+
 ## [0.1.44] - 2026-08-18
 
 ### Make dependency blockers deterministic across environments
