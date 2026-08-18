@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import shutil
+import subprocess
 import threading
 import urllib.error
 import urllib.request
@@ -811,6 +812,112 @@ def test_token_budget_failure_is_classified_as_a_retryable_execution_problem() -
     assert _failure_kind(
         "Codex exceeded Empy's fresh-token limit of 35758 tokens; the node was stopped before it could pass."
     ) == "token_budget"
+
+
+def test_dirty_worktree_failure_has_a_bilingual_recovery_path(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("before\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+    state.create_plan("Update the README")
+
+    assert state.graph is not None
+    assert state.task is not None
+    state.run = CodexGraphExecution(
+        schema_version=1,
+        run_id="dirty-run",
+        graph_id=state.graph.graph_id,
+        task_id=state.task.task_id,
+        project_root=str(state.detection.descriptor.root),
+        provider="codex",
+        status="failed",
+        started_at="now",
+        finished_at="now",
+        installation=CodexInstallation(
+            availability="available",
+            executable="codex",
+            version="test",
+            authenticated=True,
+            message="ready",
+        ),
+        node_results=(),
+        events=(),
+        usage=None,
+        schedule=(),
+        error_code="dirty_worktree",
+        error_message=(
+            "Codex execution requires a clean Git worktree so Empy can audit file ownership. "
+            "Commit or restore these paths first: README.md"
+        ),
+    )
+
+    fa = state.public()["failure_context"]
+    assert fa is not None
+    assert fa["kind"] == "dirty_worktree"
+    assert fa["title"] == "تلاش قبلی نیاز به ادامهٔ امن دارد"
+    assert fa["repair_available"] is True
+    assert "فایل اصلی" in fa["summary"]
+    assert state.public()["run_report"]["guidance"]["action"] == "auto-repair"
+
+    state.language = "en"
+    en = state.public()["failure_context"]
+    assert en is not None
+    assert en["kind"] == "dirty_worktree"
+    assert en["title"] == "The previous attempt needs a safe retry"
+    assert "original project is unchanged" in en["summary"]
+
+
+def test_runtime_failure_has_an_automatic_continuation_hook(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("before\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+    state.create_plan("Update the README")
+    calls: list[str] = []
+
+    def fake_auto_repair() -> None:
+        calls.append("auto-repair")
+
+    state.auto_repair = fake_auto_repair  # type: ignore[method-assign]
+    state._maybe_start_automatic_repair(reason="runtime failure")
+
+    assert calls == ["auto-repair"]
+
+
+def test_retry_preserves_and_cleans_dirty_isolated_worktree(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("before\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+    state.create_plan("Update the README")
+
+    assert state.detection is not None
+    isolated_root = state.detection.descriptor.root
+    (isolated_root / "README.md").write_text("unfinished attempt\n", encoding="utf-8")
+
+    recovered = state._prepare_clean_worktree_for_run()
+
+    assert recovered == ("README.md",)
+    assert (isolated_root / "README.md").read_text(encoding="utf-8") == "before\n"
+    assert not subprocess.run(
+        ("git", "status", "--porcelain"),
+        cwd=isolated_root,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+    stash = subprocess.run(
+        ("git", "stash", "list"),
+        cwd=isolated_root,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout
+    assert "Empy recovery" in stash
+    assert (source / "README.md").read_text(encoding="utf-8") == "before\n"
 
 
 def test_token_budget_run_has_clear_guidance_and_no_false_verification_failure(tmp_path: Path) -> None:

@@ -171,6 +171,18 @@ def _failure_kind(detail: str) -> str:
     if any(
         marker in normalized
         for marker in (
+            "dirty_worktree",
+            "clean git worktree",
+            "file ownership",
+            "commit or restore these paths first",
+            "could not safely preserve the previous isolated changes",
+            "isolated workspace is still not clean",
+        )
+    ):
+        return "dirty_worktree"
+    if any(
+        marker in normalized
+        for marker in (
             "budget_exceeded",
             "fresh-token limit",
             "token budget",
@@ -255,6 +267,12 @@ def _plain_failure_finding(
             "یک وابستگی لازم پیدا نشد؛ Empy باید آن را در کپی ایزوله تأمین کند."
             if language == "fa"
             else "A required dependency is missing; Empy must provide it in the isolated copy."
+        )
+    if kind == "dirty_worktree":
+        return (
+            "تلاش قبلی در کپی ایزوله تغییر ذخیره‌نشده دارد؛ Empy باید آن تلاش را امن کنار بگذارد و از آخرین مبنای تأییدشده ادامه دهد."
+            if language == "fa"
+            else "The previous attempt left unreviewed changes in the isolated copy; Empy must preserve that attempt and continue from the last accepted baseline."
         )
     if kind == "permission":
         return (
@@ -1185,29 +1203,35 @@ class GuidedState:
             )
             if message not in diagnostics:
                 diagnostics.append(message)
+            failure_kind = _failure_kind(message)
+            if self.run.error_code == "dirty_worktree":
+                failure_kind = "dirty_worktree"
+            elif self.run.error_code == "budget_exceeded":
+                failure_kind = "token_budget"
             failures.append(
                 {
                     "label": "Agent execution",
                     "category": "execution",
                     "returncode": None,
                     "detail": message,
-                    "kind": _failure_kind(message),
+                    "kind": failure_kind,
                 }
             )
-            kind = "run_failed"
+            kind = "dirty_worktree" if failure_kind == "dirty_worktree" else "run_failed"
         if not diagnostics and not failures and self.error:
             message = _safe_verification_detail(self.error, roots)
             diagnostics.append(message)
+            failure_kind = _failure_kind(message)
             failures.append(
                 {
                     "label": "Empy execution",
                     "category": "execution",
                     "returncode": None,
                     "detail": message,
-                    "kind": _failure_kind(message),
+                    "kind": failure_kind,
                 }
             )
-            kind = "run_failed"
+            kind = failure_kind if failure_kind in {"dirty_worktree", "token_budget"} else "run_failed"
         if not diagnostics and not failures:
             return None
         unique_diagnostics = list(dict.fromkeys(diagnostics))[:8]
@@ -1276,6 +1300,7 @@ class GuidedState:
                 "missing_file_or_route": "Inspect whether the reported file or route is truly required. If the check is inconsistent with the project's real entry point, fix the check contract; do not create a placeholder only to make it pass.",
                 "verification_contract_mismatch": "The check expects a different entry point or layout than the detected project. Repair the verification/site-audit contract or the approved product requirement; do not create a placeholder file only to make the check green.",
                 "permission": "Choose an accessible project copy or repair the isolated workspace permissions, then rerun the same check.",
+                "dirty_worktree": "The previous attempt left unreviewed changes in Empy's isolated copy. Preserve that attempt, reset only the isolated copy to its last accepted baseline, and continue the ticket; the original project is not changed.",
                 "timeout": "Reduce the check scope or repair the hanging command, then rerun it with bounded output.",
                 "token_budget": "The agent reached Empy's safe fresh-token limit. Retry the same change with a compact context; do not expand the ticket or repeat discovery.",
                 "check_failed": "Fix the exact issue reported by this check in the isolated project, then rerun Verification.",
@@ -1297,6 +1322,7 @@ class GuidedState:
                 "missing_file_or_route": "بررسی کن فایل یا مسیر گزارش‌شده واقعاً برای پروژه لازم است یا تست با ورودی واقعی پروژه ناسازگار است. قرارداد تست را اصلاح کن؛ فقط برای سبزکردن تست فایل صوری نساز.",
                 "verification_contract_mismatch": "تست با ورودی یا ساختار واقعی پروژه سازگار نیست؛ قرارداد Verification/site-audit یا نیازمندی محصول را اصلاح کن و فقط برای سبزشدن تست فایل جعلی نساز.",
                 "permission": "کپی ایزولهٔ قابل‌دسترسی را انتخاب یا دسترسی همان workspace را اصلاح کن و همان بررسی را دوباره اجرا کن.",
+                "dirty_worktree": "تلاش قبلی در کپی ایزوله تغییر تأییدنشده باقی گذاشته است؛ Empy آن را در همان workspace نگه می‌دارد، فقط کپی ایزوله را به آخرین مبنای تأییدشده برمی‌گرداند و تیکت را ادامه می‌دهد. فایل اصلی پروژه تغییر نمی‌کند.",
                 "timeout": "فرمان متوقف‌شده را محدود یا اصلاح کن و Verification را دوباره با خروجی کنترل‌شده اجرا کن.",
                 "token_budget": "سقف مصرف توکن این مرحله پر شد؛ همان تغییر را با context کوچک‌تر دوباره اجرا کن و تیکت را بزرگ‌تر یا تکراری نکن.",
                 "check_failed": "ایراد دقیق گزارش‌شده توسط همین بررسی را در پروژهٔ ایزوله اصلاح کن و سپس Verification را دوباره اجرا کن.",
@@ -1313,6 +1339,25 @@ class GuidedState:
                 title = "مصرف توکن این مرحله بیش از حد شد"
                 summary = "Empy این مرحله را قبل از تولید نتیجهٔ کامل متوقف کرد؛ هنوز ZIP آماده نیست."
                 next_step = "روی «اصلاح خودکار» بزنید؛ همان تغییر با context کوچک‌تر و بدون discovery تکراری اجرا می‌شود."
+        if first_kind == "dirty_worktree":
+            if self.language == "en":
+                title = "The previous attempt needs a safe retry"
+                summary = (
+                    "Empy stopped before starting the next Agent because the isolated project still contains changes from an earlier attempt. "
+                    "Your original project is unchanged."
+                )
+                next_step = (
+                    "Choose Safely reset and continue. Empy will keep the previous attempt inside the workspace, reset only the isolated copy to its last accepted baseline, and retry the ticket."
+                )
+            else:
+                title = "تلاش قبلی نیاز به ادامهٔ امن دارد"
+                summary = (
+                    "Empy قبل از شروع Agent بعدی متوقف شد چون کپی ایزوله هنوز تغییرات تلاش قبلی را دارد. "
+                    "فایل اصلی پروژهٔ شما تغییر نکرده است."
+                )
+                next_step = (
+                    "روی «پاک‌سازی امن و ادامه» بزنید؛ Empy تلاش قبلی را داخل workspace نگه می‌دارد، فقط کپی ایزوله را به آخرین مبنای تأییدشده برمی‌گرداند و تیکت را دوباره اجرا می‌کند."
+                )
         findings = list(dict.fromkeys(str(item) for item in diagnostics if str(item).strip()))
         rendered_failures: list[dict[str, Any]] = []
         ticket_lines = [suggested_prefix]
@@ -1408,6 +1453,7 @@ class GuidedState:
             raise RuntimeError("Choose a project first.")
         if self.running:
             raise RuntimeError("Stop the active run before continuing the ticket.")
+        self._prepare_clean_worktree_for_run()
         self._capture_failure_context()
         context = self._build_continuation_context()
         with self.lock:
@@ -1442,6 +1488,7 @@ class GuidedState:
                 "Automatic repair was already attempted once. Review the exact finding "
                 "or start a new ticket with the required project decision."
             )
+        self._prepare_clean_worktree_for_run()
         context = self._build_continuation_context()
         original = self.task
         original_request = (
@@ -1457,6 +1504,12 @@ class GuidedState:
                 or "سقف مصرف" in (self.run.error_message or "")
             )
         )
+        if not budget_failure:
+            failure_text = self.error or ""
+            budget_failure = any(
+                marker in failure_text.casefold()
+                for marker in ("fresh-token limit", "token budget", "token guard", "سقف مصرف")
+            )
         if budget_failure:
             compact_context = (
                 "Previous run stopped because Empy's token guard was reached. "
@@ -1495,6 +1548,32 @@ class GuidedState:
         self.create_plan(repair_request)
         self.add_log("Automatic repair started from the confirmed verification failure.")
         self.start_run()
+
+    def _maybe_start_automatic_repair(self, *, reason: str) -> None:
+        """Continue once after a recoverable terminal failure.
+
+        A provider/runtime failure is still part of the workflow: preserve the
+        evidence, create one bounded corrective attempt, and only leave the
+        user at the failure screen when that safe retry cannot start or has
+        already been consumed. This avoids both silent abandonment and an
+        infinite retry loop.
+        """
+
+        if self.active_project_id is None or self.detection is None:
+            return
+        if self.repair_attempts >= MAX_AUTOMATIC_REPAIR_ATTEMPTS:
+            return
+        self.add_log(
+            f"{reason}; starting the bounded automatic repair pass.",
+            "warning",
+        )
+        try:
+            self.auto_repair()
+        except (OSError, RuntimeError, ValueError) as exc:
+            self.add_log(f"Automatic repair could not start: {exc}", "error")
+            with self.lock:
+                self.error = str(exc)
+            self._capture_failure_context()
 
     def create_plan(self, raw_tasks: str, task_id: str | None = None) -> None:
         if self.detection is None or self.active_project_id is None:
@@ -1592,6 +1671,70 @@ class GuidedState:
             self.message = "بنچمارک محلی بدون فراخوانی Provider اجرا شد."
         return result
 
+    def _prepare_clean_worktree_for_run(self) -> tuple[str, ...]:
+        """Preserve an unfinished isolated attempt before starting another run.
+
+        Codex needs a clean worktree to distinguish the next Agent's files from
+        earlier work. A failed attempt must not trap the user in a terminal/Git
+        loop, so Empy stores it in the isolated repository's stash and retries
+        from the last accepted checkpoint. The imported/original project is
+        never involved in this operation.
+        """
+
+        if self.detection is None:
+            return ()
+        root = self.detection.descriptor.root
+        snapshot = CodexGraphRuntime._git_snapshot(root)
+        if snapshot is None or not snapshot.status:
+            return ()
+
+        paths = tuple(sorted(snapshot.status))
+        recovery_root = (
+            self.workspace_root
+            / "recovery"
+            / f"dirty-attempt-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
+        )
+        recovery_root.mkdir(parents=True, exist_ok=False)
+        (recovery_root / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "kind": "isolated_dirty_worktree",
+                    "project_relative_paths": list(paths),
+                    "action": "git_stash_include_untracked",
+                    "source": "isolated_workspace_only",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        stash_message = f"Empy recovery {recovery_root.name}"
+        result = subprocess.run(
+            ("git", "stash", "push", "--include-untracked", "--message", stash_message),
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or "git stash failed"
+            raise RuntimeError(
+                "Empy could not safely preserve the previous isolated changes; "
+                f"no new run was started. {detail}"
+            )
+        remaining = CodexGraphRuntime._git_snapshot(root)
+        if remaining is not None and remaining.status:
+            raise RuntimeError(
+                "Empy preserved the previous isolated changes, but the isolated workspace "
+                "is still not clean; no new run was started. Re-import the project copy."
+            )
+        self.add_log(
+            f"Empy preserved {len(paths)} unreviewed isolated change(s) and reset the retry baseline.",
+            "warning",
+        )
+        return paths
+
     def start_run(self) -> None:
         if self.running:
             raise RuntimeError("A run is already active.")
@@ -1602,6 +1745,7 @@ class GuidedState:
             raise RuntimeError(installation.remediation or installation.message)
         if self.active_project_id is None or self.active_task_id is None:
             raise RuntimeError("Project and task identity are missing.")
+        self._prepare_clean_worktree_for_run()
         run = self.store.create_run(
             task_id=self.active_task_id,
             project_id=self.active_project_id,
@@ -1752,6 +1896,10 @@ class GuidedState:
                     message=terminal_message,
                     level="warning" if result.status == "cancelled" else "error",
                 )
+                if terminal_state == "failed":
+                    self._maybe_start_automatic_repair(
+                        reason="The Agent run ended before Verification"
+                    )
                 return
             # The Agent may have changed a manifest or lockfile. Reconcile
             # dependencies once more in the same isolated copy before running
@@ -1818,20 +1966,9 @@ class GuidedState:
                 # automatically so the user is not required to translate a
                 # test failure into a second ticket by hand. The repair prompt
                 # still forbids fake files and keeps every change isolated.
-                if self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS:
-                    self.add_log(
-                        "Verification found a real issue; starting the bounded automatic repair pass.",
-                        "warning",
-                    )
-                    try:
-                        self.auto_repair()
-                    except (OSError, RuntimeError, ValueError) as exc:
-                        self.add_log(
-                            f"Automatic repair could not start: {exc}",
-                            "error",
-                        )
-                        with self.lock:
-                            self.error = str(exc)
+                self._maybe_start_automatic_repair(
+                    reason="Verification found a real issue"
+                )
         except VerificationCancelled as exc:
             cancelled = (
                 replace(
@@ -1874,6 +2011,7 @@ class GuidedState:
                     message=str(exc),
                     level="error",
                 )
+            self._maybe_start_automatic_repair(reason="Verification timed out")
         except (OSError, RuntimeError, ValueError) as exc:
             if result is not None and result.status == "completed":
                 failed = replace(
@@ -1891,6 +2029,9 @@ class GuidedState:
                 )
             else:
                 self._record_failure(workspace_run_id, str(exc))
+            self._maybe_start_automatic_repair(
+                reason="The Agent/verification process failed before producing a complete result"
+            )
 
     def _record_failure(
         self,
@@ -2396,6 +2537,53 @@ class GuidedState:
                 "repair_available": repair_available,
             }
 
+        run_error_text = (
+            self.run.error_message
+            if self.run is not None and self.run.error_message
+            else self.error or ""
+        )
+        if _failure_kind(run_error_text) == "dirty_worktree":
+            repair_available = self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS
+            if self.language == "en":
+                return {
+                    "kind": "dirty_worktree",
+                    "title": "The previous attempt needs a safe retry",
+                    "summary": (
+                        "The Agent stopped before the next step because the isolated copy still has changes from the previous attempt. "
+                        "Your original project is unchanged."
+                    ),
+                    "steps": (
+                        [
+                            "Choose Safely reset and continue. Empy preserves the previous attempt, resets only the isolated copy, and retries the ticket.",
+                        ]
+                        if repair_available
+                        else [
+                            "Choose Continue and fix ticket to retry from the preserved isolated baseline.",
+                        ]
+                    ),
+                    "action": "auto-repair" if repair_available else "resume-ticket",
+                    "repair_available": repair_available,
+                }
+            return {
+                "kind": "dirty_worktree",
+                "title": "تلاش قبلی نیاز به ادامهٔ امن دارد",
+                "summary": (
+                    "Agent قبل از مرحلهٔ بعد متوقف شد چون کپی ایزوله تغییرات تلاش قبلی را دارد. "
+                    "فایل اصلی پروژهٔ شما تغییر نکرده است."
+                ),
+                "steps": (
+                    [
+                        "روی «پاک‌سازی امن و ادامه» بزنید؛ Empy تلاش قبلی را حفظ می‌کند، فقط کپی ایزوله را پاک‌سازی می‌کند و تیکت را دوباره ادامه می‌دهد.",
+                    ]
+                    if repair_available
+                    else [
+                        "روی «ادامه و اصلاح تیکت» بزنید تا از مبنای ایزولهٔ حفظ‌شده دوباره ادامه داده شود.",
+                    ]
+                ),
+                "action": "auto-repair" if repair_available else "resume-ticket",
+                "repair_available": repair_available,
+            }
+
         contract_mismatch = next(
             (
                 item
@@ -2484,26 +2672,37 @@ class GuidedState:
             }
 
         if self.run is not None and self.run.status != "completed":
+            repair_available = self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS
             if self.language == "en":
                 return {
                     "kind": "run_failed",
                     "title": "The Agent run did not finish",
                     "summary": "The result is not safe to deliver because the Agent run did not complete.",
                     "steps": [
-                        "Choose Continue and fix ticket to retry the work in the isolated copy.",
+                        (
+                            "Choose Automatically repair and rerun to retry the work in the isolated copy."
+                            if repair_available
+                            else "Choose Continue and fix ticket to retry the work in the isolated copy."
+                        ),
                         "Review the result and Verification before creating a ZIP.",
                     ],
-                    "action": "resume-ticket",
+                    "action": "auto-repair" if repair_available else "resume-ticket",
+                    "repair_available": repair_available,
                 }
             return {
                 "kind": "run_failed",
                 "title": "اجرای Agentها کامل نشد",
                 "summary": "چون اجرای Agentها کامل نشده است، نتیجه برای تحویل امن نیست.",
                 "steps": [
-                    "برای تلاش دوباره روی «ادامه و اصلاح تیکت» بزنید.",
+                    (
+                        "برای اصلاح خودکار و اجرای دوباره روی «اصلاح خودکار و اجرای دوباره» بزنید."
+                        if repair_available
+                        else "برای تلاش دوباره روی «ادامه و اصلاح تیکت» بزنید."
+                    ),
                     "قبل از ساخت ZIP، نتیجه و Verification را مرور کنید.",
                 ],
-                "action": "resume-ticket",
+                "action": "auto-repair" if repair_available else "resume-ticket",
+                "repair_available": repair_available,
             }
 
         if self.verification is None:
