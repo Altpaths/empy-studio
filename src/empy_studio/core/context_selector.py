@@ -209,9 +209,13 @@ WRITING_ROLES: Final[frozenset[str]] = frozenset(
 
 @dataclass(frozen=True)
 class ContextPolicy:
-    max_files_per_pack: int = 12
-    max_bytes_per_file: int = 32_768
-    max_total_bytes_per_pack: int = 196_608
+    # Keep the default provider context small enough that Empy's local budget
+    # remains meaningful even when a provider adds its own tool/system context.
+    # Agents can still inspect owned files directly, but the initial prompt
+    # must not reproduce an entire application.
+    max_files_per_pack: int = 8
+    max_bytes_per_file: int = 16_384
+    max_total_bytes_per_pack: int = 65_536
     max_candidate_file_bytes: int = 1_048_576
     max_candidates: int = 2_500
     excluded_directories: tuple[str, ...] = DEFAULT_EXCLUDED_DIRECTORIES

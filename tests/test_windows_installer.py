@@ -92,10 +92,14 @@ def test_installer_uses_powerShell_safe_boolean_conditions() -> None:
         "if ($null -ne $existingState -and "
         "$existingState.package_sha256 -eq $PackageSha256"
     ) in script
-    assert (
-        "if ((-not (Test-Path -LiteralPath $entrypointExe)) -and "
-        "(-not (Test-Path -LiteralPath $entrypointCmd)))"
-    ) in script
+    assert 'Fail "Installed package did not provide entrypoint"' not in script
+
+
+def test_installer_uses_its_relocatable_wrappers_as_entrypoints() -> None:
+    script = render_windows_installer(spec())
+    assert "Installed package did not provide entrypoint module" in script
+    assert "$VersionRoot\\venv\\Scripts\\python.exe" in script
+    assert "-m $Module %*" in script
 
 
 def test_wrapper_uses_relocatable_python_module() -> None:

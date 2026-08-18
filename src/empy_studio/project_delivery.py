@@ -15,6 +15,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .core.path_policy import is_sensitive_relative_path
+from .release_validation import validate_changed_html_links
 
 MAX_ARCHIVE_FILE_BYTES = 64 * 1024 * 1024
 MAX_ARCHIVE_TOTAL_BYTES = 512 * 1024 * 1024
@@ -640,6 +641,7 @@ def export_project_zip(
     members = delta.changed_members
     if not members:
         raise ValueError("No changed project files are available for a delta ZIP.")
+    validate_changed_html_links(root, members)
     target = Path(destination).expanduser().resolve()
     if target.suffix.lower() != ".zip":
         target = target / f"{root.name}-release.zip"

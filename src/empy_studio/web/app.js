@@ -9,30 +9,59 @@ const t = {
   fa: {
     subtitle: "توسعه‌ی پروژه با ایجنت‌های هماهنگ", project: "پروژه‌ها", import: "مسیر پوشه یا ZIP پروژه",
     importButton: "واردکردن پروژه", folder: "انتخاب پوشه", zip: "انتخاب ZIP", tasks: "تیکت جدید", taskHint: "درخواست را مثل توضیح به یک همکار بنویسید…",
-    importReview: "بررسی واردسازی پروژه", importedFiles: "فایل قابل‌استفاده", excludedItems: "مورد کنارگذاشته‌شده", importContinue: "فایل اصلی تغییر نکرده است؛ وابستگی‌های موجود برای Verification در کپی ایزوله حفظ شده‌اند و فقط از ZIP نهایی حذف می‌شوند.", importReady: "پروژه آماده‌ی ادامه است", importPartial: "برخی موارد از واردسازی کنار گذاشته شدند؛ دسته‌بندی زیر را بررسی کنید.", verificationReady: "Verification پیش از اجرای Agent آماده است", verificationNeedsAttention: "پیش‌نیاز Verification باید قبل از مصرف توکن رفع شود", verificationChecks: "بررسی‌های قابل اجرا", verificationDiagnostics: "علت توقف پیش از اجرا",
+    importReview: "بررسی واردسازی پروژه", importedFiles: "فایل قابل‌استفاده", excludedItems: "مورد کنارگذاشته‌شده", importContinue: "فایل اصلی تغییر نکرده است؛ وابستگی‌های موجود برای Verification در کپی ایزوله حفظ شده‌اند و فقط از ZIP نهایی حذف می‌شوند.", importReady: "پروژه آماده‌ی ادامه است", importPartial: "برخی موارد از واردسازی کنار گذاشته شدند؛ دسته‌بندی زیر را بررسی کنید.", verificationReady: "Verification پیش از اجرای Agent آماده است", verificationNeedsAttention: "Empy وابستگی واقعی را قبل از اجرا در کپی ایزوله آماده می‌کند", verificationChecks: "بررسی‌های قابل اجرا", verificationDiagnostics: "علت توقف پیش از اجرا",
     plan: "تحلیل و ساخت برنامه", start: "شروع اجرا", accept: "تأیید تغییرات", revert: "بازگردانی تغییرات", export: "خروجی ZIP پروژه",
     newProject: "پروژه‌ی دیگر", startHere: "از اینجا شروع کنید", projectStartHint: "برای شروع یک پروژه انتخاب کنید یا فایل جدید وارد کنید.", chooseProject: "انتخاب پروژه", reimportProject: "ورود دوبارهٔ پروژه", projectUnavailable: "مسیر این پروژه دیگر وجود ندارد؛ پوشه یا ZIP را دوباره وارد کنید.", noProject: "هنوز پروژه‌ای در این workspace ذخیره نشده است.", noTask: "هنوز تیکتی ثبت نشده است.", engine: "وضعیت Codex",
-    ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", cancel: "توقف اجرا", cancelled: "اجرا لغو شد", failed: "اجرا متوقف شد", backToTicket: "بازگشت به تیکت", continueTicket: "ادامه و اصلاح تیکت", autoRepair: "اصلاح خودکار و اجرای دوباره", manualRepair: "نوشتن تیکت اصلاحی", result: "نتیجه و بررسی", resume: "ادامه تیکت",
-    benchmark: "بنچمارک محلی", runBenchmark: "اجرای بنچمارک", full: "تخمین کامل", bounded: "تخمین محدود", saved: "صرفه‌جویی", brain: "Project Brain", report: "گزارش اجرای Agentها", agent: "Agent", duration: "زمان اجرا", summary: "خلاصه", usage: "مصرف Token", actual: "مصرف واقعی", fresh: "مصرف تازه", newTokens: "کار جدید", cached: "Cache", estimate: "تخمین محلی", notReported: "گزارش نشده", verification: "Verification", verificationDiagnostics: "تشخیص‌های Verification", verificationFailures: "خطاهای Verification", review: "Review", pending: "در انتظار تصمیم", evidence: "Evidence", filesChanged: "فایل تغییرکرده", exportReady: "آماده خروجی", readyForExport: "آماده تولید ZIP", releaseGate: "گیت انتشار", blocked: "مسدود", exported: "خروجی تولید شد", download: "دانلود ZIP", revealExport: "نمایش محل فایل", deltaDownloadHint: "این ZIP فقط فایل‌های تغییرکرده را دارد؛ آن را در پوشهٔ ریشهٔ همین پروژه در DirectAdmin آپلود و Extract کنید.", noReviewChanges: "تغییری برای تأیید یا بازگردانی وجود ندارد.", noReport: "گزارش اجرا هنوز موجود نیست", noDiagnostic: "جزئیات تشخیصی ثبت نشده است.", nextStep: "قدم بعدی", technicalDetails: "جزئیات فنی (اختیاری)", failureFinding: "یافتهٔ قطعی", requiredAction: "اقدام لازم", failureEvidence: "مسیر evidence", suggestedTicket: "تیکت اصلاحی پیشنهادی", refresh: "به‌روزرسانی وضعیت", openCodex: "بازکردن Codex", engineHelp: "برای اجرای واقعی، Codex باید نصب و احراز هویت شده باشد.", fieldRequired: "درخواست Ticket را وارد کنید.", schedule: "زمان‌بندی", parallel: "موازی", serial: "ترتیبی",
+    ready: "آماده", unavailable: "آماده نیست", files: "فایل مرتبط", tokens: "سقف توکن", run: "در حال اجرا…", cancel: "توقف اجرا", cancelled: "اجرا لغو شد", failed: "اجرا متوقف شد", retryDependency: "تلاش دوباره برای آماده‌سازی وابستگی", dependencyPreparing: "Empy وابستگی‌های واقعی را در کپی ایزوله آماده می‌کند؛ این پوشه وارد ZIP نمی‌شود.", backToTicket: "بازگشت به تیکت", continueTicket: "ادامه و اصلاح تیکت", autoRepair: "اصلاح خودکار و اجرای دوباره", manualRepair: "نوشتن تیکت اصلاحی", result: "نتیجه و بررسی", resume: "ادامه تیکت",
+    benchmark: "بنچمارک محلی", runBenchmark: "اجرای بنچمارک", full: "تخمین کامل", bounded: "تخمین محدود", saved: "صرفه‌جویی", brain: "Project Brain", report: "گزارش اجرای Agentها", agent: "Agent", duration: "زمان اجرا", summary: "خلاصه", usage: "مصرف Token", actual: "مصرف واقعی", fresh: "مصرف تازه", newTokens: "کار جدید", cached: "Cache", estimate: "تخمین محلی", notReported: "گزارش نشده", verification: "Verification", verificationDiagnostics: "تشخیص‌های Verification", verificationFailures: "خطاهای Verification", review: "Review", pending: "در انتظار تصمیم", evidence: "Evidence", filesChanged: "فایل تغییرکرده", exportReady: "آماده خروجی", readyForExport: "آماده تولید ZIP", releaseGate: "گیت انتشار", blocked: "مسدود", exported: "خروجی تولید شد", reviewPending: "در انتظار تأیید تغییرات", reviewPendingAction: "بررسی‌ها موفق شد؛ فقط تغییرات زیر منتظر تأیید شماست. برای ادامه روی «تأیید تغییرات» بزنید. بعد از تأیید، دکمهٔ «خروجی ZIP پروژه» فعال می‌شود.", verificationBlocked: "Verification ناموفق است", gateReason: "علت توقف", download: "دانلود ZIP", exportManifest: "دانلود فهرست فایل‌ها", exportChecksum: "دانلود checksum", sha256: "SHA-256", changedFilesList: "فایل‌های داخل ZIP", extractionRoot: "ریشهٔ استخراج", revealExport: "نمایش محل فایل", deltaDownloadHint: "این ZIP فقط وصلهٔ فایل‌های تغییرکرده است، نه کل پروژه. آن را در پوشه‌ای که پوشهٔ پروژه (مثلاً holda.ir) داخل آن است Extract کنید؛ داخل public_html استخراج نکنید.", noReviewChanges: "تغییری برای تأیید یا بازگردانی وجود ندارد.", noReport: "گزارش اجرا هنوز موجود نیست", noDiagnostic: "جزئیات تشخیصی ثبت نشده است.", nextStep: "قدم بعدی", technicalDetails: "جزئیات فنی (اختیاری)", failureFinding: "یافتهٔ قطعی", requiredAction: "اقدام لازم", failureEvidence: "مسیر evidence", suggestedTicket: "تیکت اصلاحی پیشنهادی", refresh: "به‌روزرسانی وضعیت", openCodex: "بازکردن Codex", engineHelp: "برای اجرای واقعی، Codex باید نصب و احراز هویت شده باشد.", fieldRequired: "درخواست Ticket را وارد کنید.", schedule: "زمان‌بندی", parallel: "موازی", serial: "ترتیبی",
   },
   en: {
     subtitle: "Coordinated project development with bounded agents", project: "Projects", import: "Project folder or ZIP path",
     importButton: "Import project", folder: "Choose folder", zip: "Choose ZIP", tasks: "New ticket", taskHint: "Describe the work as you would to a teammate…",
-    importReview: "Project import review", importedFiles: "usable files", excludedItems: "excluded items", importContinue: "The original project was not changed; dependencies already present are preserved for Verification in the isolated copy and excluded only from the final ZIP.", importReady: "Project is ready to continue", importPartial: "Some items were excluded from import; review the categories below.", verificationReady: "Verification is ready before the Agent run", verificationNeedsAttention: "Verification must be fixed before spending tokens", verificationChecks: "Runnable checks", verificationDiagnostics: "Pre-run blocker",
+    importReview: "Project import review", importedFiles: "usable files", excludedItems: "excluded items", importContinue: "The original project was not changed; dependencies already present are preserved for Verification in the isolated copy and excluded only from the final ZIP.", importReady: "Project is ready to continue", importPartial: "Some items were excluded from import; review the categories below.", verificationReady: "Verification is ready before the Agent run", verificationNeedsAttention: "Empy will prepare real dependencies in the isolated copy before running", verificationChecks: "Runnable checks", verificationDiagnostics: "Pre-run blocker",
     plan: "Analyze and build plan", start: "Start run", accept: "Accept changes", revert: "Restore changes", export: "Export project ZIP",
     newProject: "Another project", startHere: "Start here", projectStartHint: "Choose a project or import a new file to get started.", chooseProject: "Choose project", reimportProject: "Re-import project", projectUnavailable: "This project's path is no longer available; choose its folder or ZIP again.", noProject: "No project has been saved in this workspace yet.", noTask: "No tickets have been registered.", engine: "Codex status",
-    ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", cancel: "Stop run", cancelled: "Run cancelled", failed: "Run stopped", backToTicket: "Back to ticket", continueTicket: "Continue and fix ticket", autoRepair: "Automatically repair and rerun", manualRepair: "Write a corrective ticket", result: "Result and review", resume: "Resume ticket",
-    benchmark: "Local benchmark", runBenchmark: "Run benchmark", full: "Full estimate", bounded: "Bounded estimate", saved: "Saved", brain: "Project Brain", report: "Agent run report", agent: "Agent", duration: "Duration", summary: "Summary", usage: "Token usage", actual: "Actual usage", fresh: "Fresh input", newTokens: "New work", cached: "Cache", estimate: "Local estimate", notReported: "Not reported", verification: "Verification", verificationDiagnostics: "Verification diagnostics", verificationFailures: "Verification failures", review: "Review", pending: "Pending decisions", evidence: "Evidence", filesChanged: "Changed files", exportReady: "Export status", readyForExport: "Ready to create ZIP", releaseGate: "Release gate", blocked: "Blocked", exported: "Export created", download: "Download ZIP", revealExport: "Show file location", deltaDownloadHint: "This ZIP contains only changed files. Upload it to this project's root folder in DirectAdmin and extract it there.", noReviewChanges: "There are no file changes to accept or restore.", noReport: "Run report is not available yet", noDiagnostic: "No diagnostic details were recorded.", nextStep: "Next step", technicalDetails: "Technical details (optional)", failureFinding: "Confirmed finding", requiredAction: "Required action", failureEvidence: "Evidence path", suggestedTicket: "Suggested corrective ticket", refresh: "Refresh status", openCodex: "Open Codex", engineHelp: "Codex must be installed and authenticated for a real run.", fieldRequired: "Enter a ticket request.", schedule: "Schedule", parallel: "Parallel", serial: "Serial",
+    ready: "Ready", unavailable: "Not ready", files: "Context files", tokens: "Token cap", run: "Running…", cancel: "Stop run", cancelled: "Run cancelled", failed: "Run stopped", retryDependency: "Retry dependency preparation", dependencyPreparing: "Empy prepares real dependencies in the isolated copy; that folder is excluded from the ZIP.", backToTicket: "Back to ticket", continueTicket: "Continue and fix ticket", autoRepair: "Automatically repair and rerun", manualRepair: "Write a corrective ticket", result: "Result and review", resume: "Resume ticket",
+    benchmark: "Local benchmark", runBenchmark: "Run benchmark", full: "Full estimate", bounded: "Bounded estimate", saved: "Saved", brain: "Project Brain", report: "Agent run report", agent: "Agent", duration: "Duration", summary: "Summary", usage: "Token usage", actual: "Actual usage", fresh: "Fresh input", newTokens: "New work", cached: "Cache", estimate: "Local estimate", notReported: "Not reported", verification: "Verification", verificationDiagnostics: "Verification diagnostics", verificationFailures: "Verification failures", review: "Review", pending: "Pending decisions", evidence: "Evidence", filesChanged: "Changed files", exportReady: "Export status", readyForExport: "Ready to create ZIP", releaseGate: "Release gate", blocked: "Blocked", exported: "Export created", reviewPending: "Waiting for change approval", reviewPendingAction: "Verification passed. The listed changes are waiting for your approval. Select Approve changes to continue; the project ZIP becomes available afterwards.", verificationBlocked: "Verification failed", gateReason: "Why export stopped", download: "Download ZIP", exportManifest: "Download file manifest", exportChecksum: "Download checksum", sha256: "SHA-256", changedFilesList: "Files in the ZIP", extractionRoot: "Extraction root", revealExport: "Show file location", deltaDownloadHint: "This ZIP is a patch containing only changed files, not the whole project. Extract it in the folder that contains the project folder (for example, holda.ir); do not extract it inside public_html.", noReviewChanges: "There are no file changes to accept or restore.", noReport: "Run report is not available yet", noDiagnostic: "No diagnostic details were recorded.", nextStep: "Next step", technicalDetails: "Technical details (optional)", failureFinding: "Confirmed finding", requiredAction: "Required action", failureEvidence: "Evidence path", suggestedTicket: "Suggested corrective ticket", refresh: "Refresh status", openCodex: "Open Codex", engineHelp: "Codex must be installed and authenticated for a real run.", fieldRequired: "Enter a ticket request.", schedule: "Schedule", parallel: "Parallel", serial: "Serial",
   },
 };
 function text() { return t[language]; }
 function escapeHtml(value = "") { return String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c])); }
 function localizeMessage(value = "") {
+  if (value.startsWith("Local link validation failed:")) {
+    return language === "fa"
+      ? "یک لینک داخلی در فایل تغییرکرده معتبر نیست: " + value.slice("Local link validation failed:".length).trim()
+      : value;
+  }
+  if (value.includes("vendor/autoload.php is missing")) {
+    return language === "fa"
+      ? "وابستگی‌های Composer هنوز در کپی ایزوله آماده نیست؛ Empy قبل از اجرای Agent آن‌ها را با lockfile واقعی آماده می‌کند."
+      : value;
+  }
+  if (
+    value.includes("Dependency preparation blocked")
+    || value.includes("Composer is not installed")
+    || value.includes("composer.lock is missing")
+    || value.includes("package-lock.json is missing")
+  ) {
+    return language === "fa"
+      ? "Empy نتوانست وابستگی واقعی پروژه را آماده کند: " + value.replace("Dependency preparation blocked Verification:", "").trim()
+      : value;
+  }
   const faMessages = {
     "No changed project files are available for a delta ZIP.": "هیچ فایل تغییرکرده‌ای برای ساخت ZIP وجود ندارد؛ خروجی ناقص ساخته نشد.",
     "The project has deleted file(s); restore them before creating a ZIP.": "پروژه فایل حذف‌شده دارد؛ برای ساخت ZIP ابتدا فایل را برگردانید.",
     "Empy baseline snapshot is missing; re-import the project.": "نسخهٔ پایهٔ پروژه پیدا نشد؛ پروژه را دوباره وارد کنید.",
+    "Verification has not run.": "Verification هنوز اجرا نشده است؛ بدون اجرای آن ZIP ساخته نمی‌شود.",
+    "Verification has not passed and been finalized.": "Verification موفق و نهایی نشده است؛ ابتدا تست ناموفق را اصلاح و دوباره اجرا کنید.",
+    "Review has not been created.": "بررسی تغییرات هنوز ساخته نشده است.",
+    "Review has not completed.": "بررسی تغییرات هنوز کامل نشده است.",
+    "The agent run did not complete successfully.": "اجرای Agent کامل نشده است؛ قبل از خروجی باید اجرای کامل داشته باشید.",
   };
+  const pending = value.match(/^(\d+) changed file\(s\) still need a review decision\.$/);
+  if (pending && language === "fa") {
+    return `${pending[1]} فایل تغییرکرده هنوز نیاز به تأیید شما دارد؛ ابتدا «تأیید تغییرات» را بزنید.`;
+  }
   if (language === "fa") return faMessages[value] || value;
   const messages = {
     "پروژه در یک کپی ایزوله ذخیره شد.": "The project was saved in an isolated copy.",
@@ -63,8 +92,8 @@ function importStatusMessage(report) {
   const diagnostics = readiness.diagnostics || [];
   if (readiness.status === "needs_attention" && diagnostics.length) {
     return language === "fa"
-      ? "واردسازی کامل شد، اما قبل از اجرای Agent یک پیش‌نیاز Verification باید رفع شود: " + diagnostics[0]
-      : "Import completed, but Verification needs attention before an Agent run: " + diagnostics[0];
+      ? "واردسازی کامل شد؛ Empy پیش از مصرف توکن این پیش‌نیاز را در کپی ایزوله آماده می‌کند: " + diagnostics[0]
+      : "Import completed; Empy will prepare this prerequisite in the isolated copy before spending tokens: " + diagnostics[0];
   }
   if (!report.skipped_files) return "";
   if (language === "fa") return `پروژه در یک کپی ایزوله وارد شد؛ ${Number(report.copied_files || 0).toLocaleString()} فایل قابل‌استفاده کپی شد و ${Number(report.skipped_files || 0).toLocaleString()} مورد کنارگذاشته‌شده در بررسی واردسازی توضیح داده شده است.`;
@@ -195,8 +224,27 @@ function formatDuration(value) {
   return `${seconds.toLocaleString(undefined, {maximumFractionDigits: 2})}s`;
 }
 function statusLabel(value) {
-  const labels = language === "fa" ? {completed:"کامل شد", pass:"موفق", failed:"ناموفق", fail:"ناموفق", cancelled:"لغو شد", timed_out:"پایان زمان", unavailable:"در دسترس نیست", skipped:"رد شد", running:"در حال اجرا", waiting:"در انتظار", not_run:"اجرا نشده", ready_for_export:"آماده تولید ZIP", blocked:"مسدود", exported:"خروجی تولید شد"} : {completed:"Completed", pass:"Passed", failed:"Failed", fail:"Failed", cancelled:"Cancelled", timed_out:"Timed out", unavailable:"Unavailable", skipped:"Skipped", running:"Running", waiting:"Waiting", not_run:"Not run", ready_for_export:"Ready to create ZIP", blocked:"Blocked", exported:"Export created"};
+  const labels = language === "fa" ? {completed:"کامل شد", pass:"موفق", failed:"ناموفق", fail:"ناموفق", cancelled:"لغو شد", timed_out:"پایان زمان", unavailable:"در دسترس نیست", skipped:"به‌دلیل توقف مرحلهٔ قبل اجرا نشد", running:"در حال اجرا", waiting:"در انتظار", not_run:"اجرا نشده", ready_for_export:"آماده تولید ZIP", awaiting_review:"در انتظار تأیید تغییرات", blocked:"مسدود", exported:"خروجی تولید شد"} : {completed:"Completed", pass:"Passed", failed:"Failed", fail:"Failed", cancelled:"Cancelled", timed_out:"Timed out", unavailable:"Unavailable", skipped:"Not run (previous step stopped)", running:"Running", waiting:"Waiting", not_run:"Not run", ready_for_export:"Ready to create ZIP", awaiting_review:"Waiting for change approval", blocked:"Blocked", exported:"Export created"};
   return labels[value] || value || "—";
+}
+function releaseGateLabel(gate, verification, review) {
+  if (gate.status === "exported" || gate.exported) return text().exported;
+  if (gate.ready) return text().readyForExport;
+  if (review?.pending_count) return text().reviewPending;
+  if (verification?.status === "fail" || verification?.status === "needs_attention") return text().verificationBlocked;
+  return statusLabel(gate.status || "blocked");
+}
+function renderReleaseGateExplanation(gate, verification, review) {
+  const blockers = gate?.blockers || [];
+  if (!blockers.length && gate?.ready) return "";
+  const waitingForReview = gate?.status === "awaiting_review" && review?.pending_count;
+  if (waitingForReview) {
+    return `<section class="release-gate-explanation review-waiting" role="status"><strong>${text().nextStep}</strong><p>${escapeHtml(text().reviewPendingAction)}</p></section>`;
+  }
+  const details = blockers.length
+    ? `<ul>${blockers.map(item => `<li>${escapeHtml(localizeMessage(item))}</li>`).join("")}</ul>`
+    : `<p>${escapeHtml(releaseGateLabel(gate || {}, verification || {}, review || {}))}</p>`;
+  return `<section class="release-gate-explanation" role="alert"><strong>${text().gateReason}</strong>${details}</section>`;
 }
 function renderUsage(usage) {
   if (!usage) return `<span class="usage unavailable">${text().notReported}</span>`;
@@ -238,10 +286,10 @@ function renderRunReport() {
   const exportFileCount = exportState?.file_count ?? report.export?.file_count ?? exported.file_count ?? 0;
   const schedule = report.schedule || [];
   const scheduleText = schedule.length ? schedule.map(item => `${text().schedule} ${item.wave}: ${item.mode === "parallel" ? text().parallel : text().serial} · ${(item.node_ids || []).length}`).join(" · ") : text().notReported;
-  const exportStatus = exportVerified ? "✓" : exported.ready ? text().readyForExport : statusLabel(exported.status || "blocked");
+  const exportStatus = exportVerified ? "✓" : releaseGateLabel(exported, verification, reviewState);
   const exportDetail = exportVerified
     ? `${exportFileCount} ${text().filesChanged}`
-    : (report.guidance?.summary || statusLabel(exported.status || "blocked"));
+    : (report.guidance?.summary || (exported.blockers || []).map(localizeMessage).join(" · ") || releaseGateLabel(exported, verification, reviewState));
   const gateDetails = (exported.blockers || []).map(item => `<li>${escapeHtml(localizeMessage(item))}</li>`).join("");
   return `<section class="report"><div class="row"><div><h2>${text().report}</h2><p class="muted">${escapeHtml(report.provider || "")} · ${escapeHtml(statusLabel(report.status))}</p></div><strong>${formatDuration(report.duration_seconds)}</strong></div><div class="report-stats"><div><small>${text().actual}</small><strong>${usage.available ? Number(usage.total_tokens || 0).toLocaleString() : "—"}</strong><span>${usage.available ? escapeHtml(usage.source || "provider") : text().notReported}</span></div><div><small>${text().estimate}</small><strong>${estimate}</strong><span>${text().bounded}</span></div><div><small>${text().saved}</small><strong>${savings}</strong><span>${text().benchmark}</span></div><div><small>${text().verification}</small><strong>${escapeHtml(statusLabel(verification.status))}</strong><span>${verification.passed_checks || 0}/${verification.total_checks || 0}</span></div><div><small>${text().review}</small><strong>${review.pending || 0}</strong><span>${text().pending}</span></div><div><small>${text().exportReady}</small><strong>${exportStatus}</strong><span>${escapeHtml(exportDetail)}</span></div></div><p class="muted report-schedule">${escapeHtml(scheduleText)}</p>${gateDetails ? `<section class="verification-details"><h3>${text().releaseGate}</h3><ul>${gateDetails}</ul></section>` : ""}${verificationDetails}<div class="report-node-list">${nodes || `<p class="muted">${text().noReport}</p>`}</div></section>`;
 }
@@ -249,12 +297,19 @@ function renderRun() {
   const nodes = state.plan?.nodes || [];
   const title = state.running ? text().run : state.run_status === "cancelled" ? text().cancelled : text().failed;
   const error = state.run_error ? `<p class="muted">${escapeHtml(state.run_error)}</p>` : "";
+  const dependency = state.dependency_bootstrap || null;
+  const dependencyInfo = dependency?.message
+    ? `<section class="dependency-status ${dependency.successful ? "ready" : "blocked"}"><strong>${escapeHtml(dependency.manager || "Dependency")}</strong><p>${escapeHtml(localizeMessage(dependency.message))}</p>${dependency.generated_scope ? `<small>${escapeHtml(dependency.generated_scope)}</small>` : ""}</section>`
+    : "";
   const repairAction = state.failure_context?.repair_available ? "auto-repair" : "resume-ticket";
   const repairLabel = state.failure_context?.repair_available ? text().autoRepair : text().manualRepair;
+  const dependencyRetry = dependency?.retryable && !state.running
+    ? `<button type="button" class="primary" data-action="start-run">${text().retryDependency}</button>`
+    : "";
   const action = state.running
     ? `<button type="button" class="danger" data-action="cancel-run">${text().cancel}</button>`
-    : `<button type="button" class="primary" data-action="${repairAction}">${repairLabel}</button>`;
-  return `<div class="card"><h1>${title}</h1>${error}<div class="node-list">${nodes.map(node => `<div class="node ${node.status}"><span>${escapeHtml(statusLabel(node.status))}</span><strong>${escapeHtml(node.title)}</strong></div>`).join("")}</div><pre class="log">${(state.logs || []).map(item => `[${escapeHtml(item.time)}] ${escapeHtml(item.text)}`).join("\n")}</pre><div class="actions">${action}</div></div>`;
+    : `${dependencyRetry}<button type="button" class="${dependencyRetry ? "secondary" : "primary"}" data-action="${repairAction}">${repairLabel}</button>`;
+  return `<div class="card"><h1>${title}</h1>${error}${dependencyInfo}<div class="node-list">${nodes.map(node => `<div class="node ${node.status}"><span>${escapeHtml(statusLabel(node.status))}</span><strong>${escapeHtml(node.title)}</strong></div>`).join("")}</div><pre class="log">${(state.logs || []).map(item => `[${escapeHtml(item.time)}] ${escapeHtml(item.text)}`).join("\n")}</pre><div class="actions">${action}</div></div>`;
 }
 function enhanceImportUi() {
   if (state?.phase !== "task") return;
@@ -269,8 +324,11 @@ function renderResult() {
   const continuation = verification.finalized_at ? "" : `<button type="button" class="primary" data-action="${repairAction}">${repairLabel}</button>`;
   const verificationReady = verification.status === "pass" && Boolean(verification.finalized_at || verification.finalized);
   const gateReady = Boolean(gate.ready && verificationReady && state.run_status === "completed");
-  if (!gateReady && gate.status !== "exported") gate.status = "blocked";
-  return `<div class="card"><h1>${text().result}</h1>${renderFailureContext(state.failure_context, true)}${renderRunReport()}<div class="quality ${gateReady || gate.status === "exported" ? "pass" : "fail"}">${escapeHtml(statusLabel(gate.status || verification.status || "unknown"))}</div><div class="file-list">${(review.files || []).map(file => `<div class="file"><strong>${escapeHtml(file.relative_path)}</strong><small>${escapeHtml(file.decision)}</small><pre>${escapeHtml(file.diff_text || "")}</pre></div>`).join("") || `<p class="muted">${language === "fa" ? "تغییری ثبت نشده است. در صورت عبور از گیت، خروجی باید با دکمه زیر تولید شود." : "No changes recorded. If the gate passes, create the ZIP with the button below."}</p>`}</div><div class="actions">${continuation}<button type="button" class="primary" data-action="decide" data-decision="accept" ${review.pending_count ? "" : "disabled"}>${text().accept}</button><button type="button" class="danger" data-action="decide" data-decision="revert" ${review.pending_count ? "" : "disabled"}>${text().revert}</button><button type="button" class="secondary" data-action="export-project" ${gateReady ? "" : "disabled"}>${text().export}</button></div></div>`;
+  const gateStatus = releaseGateLabel(gate, verification, review);
+  const gateExplanation = renderReleaseGateExplanation(gate, verification, review);
+  const waitingForReview = gate.status === "awaiting_review" || Boolean(review.pending_count && !gateReady);
+  const qualityClass = gateReady || gate.status === "exported" ? "pass" : waitingForReview ? "pending" : "fail";
+  return `<div class="card"><h1>${text().result}</h1>${renderFailureContext(state.failure_context, true)}${renderRunReport()}<div class="quality ${qualityClass}">${escapeHtml(gateStatus)}</div>${gateExplanation}<div class="file-list">${(review.files || []).map(file => `<div class="file"><strong>${escapeHtml(file.relative_path)}</strong><small>${escapeHtml(file.decision)}</small><pre>${escapeHtml(file.diff_text || "")}</pre></div>`).join("") || `<p class="muted">${language === "fa" ? "تغییری ثبت نشده است. در صورت عبور از گیت، خروجی باید با دکمه زیر تولید شود." : "No changes recorded. If the gate passes, create the ZIP with the button below."}</p>`}</div><div class="actions">${continuation}<button type="button" class="primary" data-action="decide" data-decision="accept" ${review.pending_count ? "" : "disabled"}>${text().accept}</button><button type="button" class="danger" data-action="decide" data-decision="revert" ${review.pending_count ? "" : "disabled"}>${text().revert}</button><button type="button" class="secondary" data-action="export-project" ${gateReady ? "" : "disabled"}>${text().export}</button></div></div>`;
 }
 function enhanceReportUi() {
   const report = document.querySelector(".report");
@@ -291,8 +349,15 @@ function renderSaved() {
   const archive = state.export || {};
   const archiveName = archive.archive_name || String(archive.archive_path || "project.zip").split(/[\\/]/).pop();
   const downloadUrl = `/api/export/download?token=${encodeURIComponent(token)}`;
+  const manifestUrl = `/api/export/manifest?token=${encodeURIComponent(token)}`;
+  const checksumUrl = `/api/export/checksum?token=${encodeURIComponent(token)}`;
   const fileCount = Number(archive.file_count || 0).toLocaleString();
-  return `<div class="card center"><h1>✓</h1><h2>${language === "fa" ? "خروجی آماده است" : "Export is ready"}</h2><p class="muted">${language === "fa" ? `${fileCount} فایل تغییرکرده در ZIP قرار گرفت.` : `${fileCount} changed file(s) are in the ZIP.`}<br><strong>${escapeHtml(archiveName || "project.zip")}</strong></p><p class="muted export-instructions">${text().deltaDownloadHint}</p><div class="actions centered-actions"><a class="secondary download-link" href="${downloadUrl}" download="${escapeHtml(archiveName || "project.zip")}">${text().download}</a><button type="button" class="secondary" data-action="reveal-export">${text().revealExport}</button><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div></div>`;
+  const changedFiles = (archive.changed_files || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
+  const sidecars = `${archive.manifest_available ? `<a class="secondary download-link" href="${manifestUrl}" download="${escapeHtml(archive.manifest_name || "manifest.json")}">${text().exportManifest}</a>` : ""}${archive.checksum_available ? `<a class="secondary download-link" href="${checksumUrl}" download="${escapeHtml(archive.checksum_name || "checksum.sha256")}">${text().exportChecksum}</a>` : ""}`;
+  const digest = archive.sha256 ? `<p class="muted export-digest"><strong>${text().sha256}:</strong> <code>${escapeHtml(archive.sha256)}</code></p>` : "";
+  const root = archive.extraction_root ? `<p class="muted"><strong>${text().extractionRoot}:</strong> <code>${escapeHtml(archive.extraction_root)}</code></p>` : "";
+  const fileList = changedFiles ? `<details class="export-files"><summary>${text().changedFilesList}</summary><ul>${changedFiles}</ul></details>` : "";
+  return `<div class="card center"><h1>✓</h1><h2>${language === "fa" ? "خروجی آماده است" : "Export is ready"}</h2><p class="muted">${language === "fa" ? `${fileCount} فایل تغییرکرده در ZIP قرار گرفت.` : `${fileCount} changed file(s) are in the ZIP.`}<br><strong>${escapeHtml(archiveName || "project.zip")}</strong></p><p class="muted export-instructions">${text().deltaDownloadHint}</p>${root}${digest}${fileList}<div class="actions centered-actions"><a class="secondary download-link" href="${downloadUrl}" download="${escapeHtml(archiveName || "project.zip")}">${text().download}</a>${sidecars}<button type="button" class="secondary" data-action="reveal-export">${text().revealExport}</button><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div></div>`;
 }
 function render() {
   if (!state) return; language = state.language || language; banner(); let html = "";

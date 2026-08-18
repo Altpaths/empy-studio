@@ -199,6 +199,52 @@ class TokenUsage:
             provider=aggregate_provider,
         )
 
+    @classmethod
+    def aggregate_events(
+        cls,
+        events: Iterable[Mapping[str, object]],
+        *,
+        default_provider: str | None = None,
+        provider: str | None = None,
+    ) -> TokenUsage | None:
+        """Aggregate provider events without adding cumulative snapshots twice.
+
+        Recent Codex JSONL events may contain both ``total_token_usage`` (a
+        cumulative run snapshot) and ``last_token_usage`` (the most recent
+        turn).  Treating both as independent usage records, or summing
+        successive cumulative snapshots, inflates Empy's live budget guard.
+        When a cumulative snapshot exists it is authoritative; otherwise the
+        ordinary per-event usage records are summed.
+        """
+
+        cumulative: TokenUsage | None = None
+        incremental: list[TokenUsage] = []
+        for event in events:
+            snapshot = _cumulative_usage_from_event(
+                event,
+                default_provider=default_provider,
+            )
+            if snapshot is not None:
+                cumulative = _max_usage(cumulative, snapshot)
+                continue
+            usage = cls.extract_from_event(
+                event,
+                default_provider=default_provider,
+            )
+            if usage is not None:
+                incremental.append(usage)
+
+        if cumulative is not None:
+            return cumulative if provider is None else cls(
+                input=cumulative.input,
+                output=cumulative.output,
+                cached=cumulative.cached,
+                total=cumulative.total,
+                source=cumulative.source,
+                provider=provider,
+            )
+        return cls.aggregate(incremental, provider=provider)
+
 
 def _extract_usages(
     value: object,
@@ -206,6 +252,17 @@ def _extract_usages(
     default_provider: str | None,
 ) -> Iterable[TokenUsage]:
     if isinstance(value, Mapping):
+        cumulative = value.get("total_token_usage")
+        if isinstance(cumulative, Mapping):
+            usage = _usage_from_mapping(
+                cumulative,
+                default_provider=default_provider,
+            )
+            if usage is not None:
+                # Codex also places ``last_token_usage`` beside this value.
+                # It is a view of the same accounting, not a second charge.
+                yield usage
+                return
         direct = _usage_from_mapping(value, default_provider=default_provider)
         if direct is not None:
             yield direct
@@ -215,6 +272,60 @@ def _extract_usages(
     elif isinstance(value, list):
         for item in value:
             yield from _extract_usages(item, default_provider=default_provider)
+
+
+def _cumulative_usage_from_event(
+    event: Mapping[str, object],
+    *,
+    default_provider: str | None,
+) -> TokenUsage | None:
+    """Read Codex's cumulative usage snapshot, if the event has one."""
+
+    raw = _find_nested_mapping(event, "total_token_usage")
+    if raw is None:
+        return None
+    return _usage_from_mapping(raw, default_provider=default_provider)
+
+
+def _find_nested_mapping(value: object, key: str) -> Mapping[str, object] | None:
+    if isinstance(value, Mapping):
+        candidate = value.get(key)
+        if isinstance(candidate, Mapping):
+            return candidate
+        for item in value.values():
+            found = _find_nested_mapping(item, key)
+            if found is not None:
+                return found
+    elif isinstance(value, list):
+        for item in value:
+            found = _find_nested_mapping(item, key)
+            if found is not None:
+                return found
+    return None
+
+
+def _max_usage(current: TokenUsage | None, candidate: TokenUsage) -> TokenUsage:
+    if current is None:
+        return candidate
+    providers = {
+        value.provider
+        for value in (current, candidate)
+        if value.provider is not None
+    }
+    provider = next(iter(providers)) if len(providers) == 1 else None
+    source: TokenUsageSource = (
+        current.source
+        if current.source == candidate.source
+        else "mixed"
+    )
+    return TokenUsage(
+        input=max(current.input, candidate.input),
+        output=max(current.output, candidate.output),
+        cached=max(current.cached, candidate.cached),
+        total=max(current.total, candidate.total),
+        source=source,
+        provider=provider,
+    )
 
 
 def _usage_from_mapping(

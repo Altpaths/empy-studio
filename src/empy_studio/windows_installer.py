@@ -368,18 +368,6 @@ function Install-Package {{
             }}
         }}
 
-        $entrypointExe = Join-Path `
-            $stagedRoot `
-            "venv\\Scripts\\$Entrypoint.exe"
-
-        $entrypointCmd = Join-Path `
-            $stagedRoot `
-            "venv\\Scripts\\$Entrypoint.cmd"
-
-        if ((-not (Test-Path -LiteralPath $entrypointExe)) -and (-not (Test-Path -LiteralPath $entrypointCmd))) {{
-            Fail "Installed package did not provide entrypoint"
-        }}
-
         Move-Item `
             -LiteralPath $stagedRoot `
             -Destination $VersionRoot

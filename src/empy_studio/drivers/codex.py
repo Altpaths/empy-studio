@@ -713,10 +713,12 @@ class CodexDriver(BaseDriver):
         budget_pending_after_turn = threading.Event()
         budget_grace_deadline: float | None = None
         budget_warning_emitted = False
+        observed_usage: TokenUsage | None = None
         event_lock = threading.Lock()
 
         def read_stdout(stream: IO[str]) -> None:
-            nonlocal thread_id, parse_error, budget_grace_deadline, budget_warning_emitted
+            nonlocal thread_id, parse_error
+            nonlocal budget_grace_deadline, budget_warning_emitted, observed_usage
             with events_path.open("w", encoding="utf-8") as event_file:
                 for raw_line in stream:
                     event_file.write(raw_line)
@@ -747,16 +749,21 @@ class CodexDriver(BaseDriver):
                         budget_pending_after_turn.clear()
                         budget_grace_deadline = None
                     if request.fresh_token_limit is not None:
-                        usage = TokenUsage.aggregate(
-                            (
-                                TokenUsage.extract_from_event(
-                                    item,
-                                    default_provider=self.provider_id,
-                                )
-                                for item in events
-                            ),
-                            provider=self.provider_id,
+                        # Most JSONL events carry no usage at all. Avoid
+                        # rescanning the complete event history for every
+                        # progress line; that made long runs needlessly
+                        # quadratic before the guard could even decide.
+                        event_usages = TokenUsage.extract_all(
+                            event,
+                            default_provider=self.provider_id,
                         )
+                        if event_usages:
+                            observed_usage = TokenUsage.aggregate_events(
+                                events,
+                                default_provider=self.provider_id,
+                                provider=self.provider_id,
+                            )
+                        usage = observed_usage
                         if usage is not None and usage.uncached_total > request.fresh_token_limit:
                             if event_name == "turn.completed":
                                 # A provider reports the completed turn's
@@ -814,6 +821,22 @@ class CodexDriver(BaseDriver):
                     stderr_lines.append(raw_line)
                     message = raw_line.strip()
                     if message:
+                        normalized = message.casefold()
+                        if (
+                            "failed to refresh available models" in normalized
+                            or "codex_models_manager" in normalized
+                        ):
+                            self._emit(
+                                on_progress,
+                                level="warning",
+                                event_type="provider.diagnostic",
+                                message=(
+                                    "Codex model-list refresh timed out; execution continued. "
+                                    "This warning is not a project verification failure."
+                                ),
+                                node_id=node_id,
+                            )
+                            continue
                         self._emit(
                             on_progress,
                             level="warning",
@@ -901,11 +924,9 @@ class CodexDriver(BaseDriver):
             else ""
         )
         changed_files = self._changed_files_from_events(tuple(events))
-        usage = TokenUsage.aggregate(
-            (
-                TokenUsage.extract_from_event(event, default_provider=self.provider_id)
-                for event in events
-            ),
+        usage = TokenUsage.aggregate_events(
+            events,
+            default_provider=self.provider_id,
             provider=self.provider_id,
         )
 

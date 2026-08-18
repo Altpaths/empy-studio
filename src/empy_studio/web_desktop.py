@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from empy_studio.benchmark import BenchmarkResult, run_local_benchmark
 from empy_studio.core import (
     AgentRunGraph,
+    ContextPolicy,
     ContextSelection,
     DefaultProjectService,
     ExecutionPlan,
@@ -42,6 +43,10 @@ from empy_studio.core import (
 from empy_studio.core.project_brain import (
     ProjectBrainIndex,
     build_load_save_project_brain_index,
+)
+from empy_studio.dependency_bootstrap import (
+    DependencyBootstrapResult,
+    prepare_project_dependencies,
 )
 from empy_studio.desktop.codex_execution_workspace_adapter import (
     CodexExecutionWorkspaceAdapter,
@@ -69,6 +74,7 @@ from empy_studio.project_delivery import (
     safe_upload_relative_path,
     summarize_import_skips,
 )
+from empy_studio.release_validation import validate_changed_html_links
 from empy_studio.review_workspace import ReviewReport, ReviewWorkspaceAdapter
 from empy_studio.security_audit import redact_sensitive_output
 from empy_studio.token_usage import TokenUsage
@@ -107,7 +113,7 @@ DEFAULT_DEFINITION_OF_DONE = (
 def clean_workspace_root() -> Path:
     """Create a new per-launch workspace for a clean product trial."""
 
-    normal_root = default_workspace_root()
+    normal_root: Path = Path(default_workspace_root())
     clean_root = normal_root.parent / f"{normal_root.name} Clean"
     clean_root.mkdir(parents=True, exist_ok=True)
     session_root = clean_root / f"session-{uuid.uuid4().hex}"
@@ -162,7 +168,25 @@ def _failure_kind(detail: str) -> str:
     """Classify a failure into a user-actionable category without guessing a fix."""
 
     normalized = detail.casefold()
-    if "vendor/autoload.php" in normalized or "composer" in normalized and "missing" in normalized:
+    if any(
+        marker in normalized
+        for marker in (
+            "budget_exceeded",
+            "fresh-token limit",
+            "token budget",
+            "token guard",
+            "سقف مصرف",
+        )
+    ):
+        return "token_budget"
+    if (
+        "vendor/autoload.php" in normalized
+        or "composer" in normalized and "missing" in normalized
+        or "dependency preparation" in normalized
+        or "dependency bootstrap" in normalized
+        or "composer.lock" in normalized
+        or "package-lock.json" in normalized
+    ):
         return "missing_dependency"
     if "no safe verification checks" in normalized or "verification.json" in normalized:
         return "missing_verification_contract"
@@ -243,6 +267,12 @@ def _plain_failure_finding(
             "فایل یا دستور تست پروژه مشخص نیست؛ Empy نمی‌تواند نتیجهٔ واقعی را تأیید کند."
             if language == "fa"
             else "The project does not define a usable verification command."
+        )
+    if kind == "token_budget":
+        return (
+            "سقف مصرف توکن این مرحله پر شد؛ نتیجهٔ کامل تولید نشده و ZIP ساخته نمی‌شود."
+            if language == "fa"
+            else "This step reached Empy's safe token limit; no complete result or ZIP was produced."
         )
     if language == "fa":
         return "بررسی نهایی پروژه موفق نشد؛ Empy هنوز ZIP قابل‌تحویل تولید نمی‌کند."
@@ -350,6 +380,7 @@ class GuidedState:
     continuation_context: str | None = None
     failure_context: dict[str, Any] | None = None
     repair_attempts: int = 0
+    compact_retry: bool = False
     imported: ImportedProject | None = None
     import_report: dict[str, Any] | None = None
     detection: ProjectDetection | None = None
@@ -364,6 +395,10 @@ class GuidedState:
     verification: VerificationReport | None = None
     review: ReviewReport | None = None
     export: ExportedProject | None = None
+    dependency_bootstrap: DependencyBootstrapResult | None = field(
+        default=None,
+        repr=False,
+    )
     logs: list[dict[str, str]] = field(default_factory=list)
     node_states: dict[str, str] = field(default_factory=dict)
     running: bool = False
@@ -645,6 +680,7 @@ class GuidedState:
             self.verification = None
             self.review = None
             self.export = None
+            self.dependency_bootstrap = None
             self.phase = "task"
             self.message_level = (
                 "warning"
@@ -657,6 +693,7 @@ class GuidedState:
             self.continuation_context = None
             self.failure_context = failure_context
             self.repair_attempts = repair_attempts
+            self.compact_retry = False
             self.message = "پروژه بازیابی شد." if restore else "پروژه انتخاب شد."
         self.store.set_setting("active_project_id", project.project_id)
         if not restore:
@@ -876,11 +913,23 @@ class GuidedState:
         draft = generate_execution_plan(task=task, project=self.detection)
         plan = approve_execution_plan(draft, current_task=task)
         self._refresh_brain_index()
+        context_policy = (
+            ContextPolicy(
+                max_files_per_pack=4,
+                max_bytes_per_file=8_192,
+                max_total_bytes_per_pack=32_768,
+                max_candidate_file_bytes=1_048_576,
+                max_candidates=2_500,
+            )
+            if self.compact_retry
+            else None
+        )
         context = build_context_selection(
             task=task,
             project=self.detection,
             plan=plan,
             brain_index=self.brain_index,
+            policy=context_policy,
         )
         budget = lock_token_budget(build_token_budget(plan=plan, selection=context))
         graph = build_agent_run_graph(plan=plan, selection=context, budget=budget)
@@ -1228,6 +1277,7 @@ class GuidedState:
                 "verification_contract_mismatch": "The check expects a different entry point or layout than the detected project. Repair the verification/site-audit contract or the approved product requirement; do not create a placeholder file only to make the check green.",
                 "permission": "Choose an accessible project copy or repair the isolated workspace permissions, then rerun the same check.",
                 "timeout": "Reduce the check scope or repair the hanging command, then rerun it with bounded output.",
+                "token_budget": "The agent reached Empy's safe fresh-token limit. Retry the same change with a compact context; do not expand the ticket or repeat discovery.",
                 "check_failed": "Fix the exact issue reported by this check in the isolated project, then rerun Verification.",
             }
         else:
@@ -1248,8 +1298,21 @@ class GuidedState:
                 "verification_contract_mismatch": "تست با ورودی یا ساختار واقعی پروژه سازگار نیست؛ قرارداد Verification/site-audit یا نیازمندی محصول را اصلاح کن و فقط برای سبزشدن تست فایل جعلی نساز.",
                 "permission": "کپی ایزولهٔ قابل‌دسترسی را انتخاب یا دسترسی همان workspace را اصلاح کن و همان بررسی را دوباره اجرا کن.",
                 "timeout": "فرمان متوقف‌شده را محدود یا اصلاح کن و Verification را دوباره با خروجی کنترل‌شده اجرا کن.",
+                "token_budget": "سقف مصرف توکن این مرحله پر شد؛ همان تغییر را با context کوچک‌تر دوباره اجرا کن و تیکت را بزرگ‌تر یا تکراری نکن.",
                 "check_failed": "ایراد دقیق گزارش‌شده توسط همین بررسی را در پروژهٔ ایزوله اصلاح کن و سپس Verification را دوباره اجرا کن.",
             }
+        if first_kind == "token_budget":
+            if self.language == "en":
+                title = "This step used too many tokens"
+                summary = "Empy stopped this step before a complete result was produced. No ZIP is ready."
+                next_step = (
+                    "Choose automatic repair. Empy will retry the same change with a compact context "
+                    "and will not repeat discovery."
+                )
+            else:
+                title = "مصرف توکن این مرحله بیش از حد شد"
+                summary = "Empy این مرحله را قبل از تولید نتیجهٔ کامل متوقف کرد؛ هنوز ZIP آماده نیست."
+                next_step = "روی «اصلاح خودکار» بزنید؛ همان تغییر با context کوچک‌تر و بدون discovery تکراری اجرا می‌شود."
         findings = list(dict.fromkeys(str(item) for item in diagnostics if str(item).strip()))
         rendered_failures: list[dict[str, Any]] = []
         ticket_lines = [suggested_prefix]
@@ -1283,7 +1346,11 @@ class GuidedState:
             else "- بعد از اصلاح، همان بررسی‌ها را دوباره اجرا کن و evidence واقعی بده؛ اگر بررسی رد یا skip شد، موفق اعلام نکن."
         )
         return {
-            "kind": raw.get("kind", "check_failed"),
+            "kind": (
+                "token_budget"
+                if first_kind == "token_budget"
+                else raw.get("kind", "check_failed")
+            ),
             "title": (
                 "صفحهٔ اول ساخته نشد؛ نام فایل با تست یکی نیست"
                 if self.language == "fa" and first_kind == "verification_contract_mismatch"
@@ -1356,6 +1423,7 @@ class GuidedState:
             self.verification = None
             self.review = None
             self.export = None
+            self.dependency_bootstrap = None
             self.node_states.clear()
             self.phase = "task"
             self.error = None
@@ -1381,18 +1449,43 @@ class GuidedState:
             if original is not None
             else "Complete the requested project work."
         )
-        repair_request = (
-            "ریشه‌ای اصلاح کن و نتیجهٔ واقعی تحویل بده.\n"
-            f"درخواست اصلی: {original_request}\n"
-            "این اصلاح را فقط در کپی ایزولهٔ پروژه انجام بده؛ فایل اصلی کاربر را تغییر نده.\n"
-            "علت قطعی شکست قبلی:\n"
-            f"{context}\n"
-            "فایل یا قرارداد درست پروژه را تشخیص بده، تغییر واقعی را اعمال کن، "
-            "و همان Verification را دوباره اجرا کن. فایل صوری فقط برای سبزکردن تست نساز."
+        budget_failure = bool(
+            self.run is not None
+            and (
+                self.run.error_code == "budget_exceeded"
+                or "fresh-token limit" in (self.run.error_message or "").casefold()
+                or "سقف مصرف" in (self.run.error_message or "")
+            )
         )
+        if budget_failure:
+            compact_context = (
+                "Previous run stopped because Empy's token guard was reached. "
+                "Do not repeat discovery, read external skills, or print large files.\n"
+                f"Confirmed runtime detail: {context}"
+            )[:1600]
+            repair_request = (
+                "[Empy compact retry] فقط همان درخواست اصلی را در کوچک‌ترین اجرای ممکن اصلاح کن.\n"
+                f"درخواست اصلی: {original_request[:1600]}\n"
+                "فقط فایل‌های لازم را بخوان و تغییر بده؛ discovery مجدد، خواندن skill خارجی، "
+                "اجرای تست توسط Provider و چاپ فایل‌ها/لاگ‌های بزرگ ممنوع است.\n"
+                "جزئیات محدود اجرای قبلی توسط Empy در ادامهٔ همین تیکت ضمیمه می‌شود؛ آن را دوباره تولید نکن.\n"
+                "پس از تغییر، Empy خودش Verification واقعی را اجرا می‌کند؛ موفقیت ساختگی اعلام نکن."
+            )
+        else:
+            repair_request = (
+                "ریشه‌ای اصلاح کن و نتیجهٔ واقعی تحویل بده.\n"
+                f"درخواست اصلی: {original_request}\n"
+                "این اصلاح را فقط در کپی ایزولهٔ پروژه انجام بده؛ فایل اصلی کاربر را تغییر نده.\n"
+                "علت قطعی شکست قبلی:\n"
+                f"{context}\n"
+                "فایل یا قرارداد درست پروژه را تشخیص بده، تغییر واقعی را اعمال کن، "
+                "و همان Verification را دوباره اجرا کن. فایل صوری فقط برای سبزکردن تست نساز."
+            )
+        continuation_for_plan = compact_context if budget_failure else context
         with self.lock:
-            self.continuation_context = context
+            self.continuation_context = continuation_for_plan
             self.repair_attempts += 1
+            self.compact_retry = budget_failure
             repair_attempts = self.repair_attempts
             project_id = self.active_project_id
         self.store.set_setting(
@@ -1416,6 +1509,7 @@ class GuidedState:
         if continuation_context is None:
             with self.lock:
                 self.repair_attempts = 0
+                self.compact_retry = False
             self.store.set_setting(
                 self._repair_attempts_setting_key(self.active_project_id),
                 0,
@@ -1473,6 +1567,7 @@ class GuidedState:
             self.verification = None
             self.review = None
             self.export = None
+            self.dependency_bootstrap = None
             self.node_states = {node.node_id: "waiting" for node in graph.nodes}
             self.phase = "plan"
             self.error = None
@@ -1629,8 +1724,13 @@ class GuidedState:
         try:
             with self.lock:
                 runtime = self.runtime
+                cancel_event = self.cancel_event
             if runtime is None:
                 raise RuntimeError("The run runtime was not initialized.")
+            # Prepare real project dependencies before any provider call. This
+            # keeps a missing vendor/node_modules directory from consuming
+            # tokens and then surfacing as an avoidable verification failure.
+            self._prepare_dependencies(detection, cancel_event)
             result = runtime.run(
                 graph=graph,
                 selection=context,
@@ -1653,7 +1753,10 @@ class GuidedState:
                     level="warning" if result.status == "cancelled" else "error",
                 )
                 return
-            cancel_event = self.cancel_event
+            # The Agent may have changed a manifest or lockfile. Reconcile
+            # dependencies once more in the same isolated copy before running
+            # the final checks; never fabricate an autoloader or skip a check.
+            self._prepare_dependencies(detection, cancel_event)
             if cancel_event is not None and cancel_event.is_set():
                 raise VerificationCancelled("Verification was cancelled before it started.")
             verification = VerificationRuntime().run(
@@ -1710,6 +1813,25 @@ class GuidedState:
                 self._clear_failure_context()
             else:
                 self._capture_failure_context()
+                # A verification failure is an actionable finding, not a
+                # terminal product state. Use the bounded repair path once
+                # automatically so the user is not required to translate a
+                # test failure into a second ticket by hand. The repair prompt
+                # still forbids fake files and keeps every change isolated.
+                if self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS:
+                    self.add_log(
+                        "Verification found a real issue; starting the bounded automatic repair pass.",
+                        "warning",
+                    )
+                    try:
+                        self.auto_repair()
+                    except (OSError, RuntimeError, ValueError) as exc:
+                        self.add_log(
+                            f"Automatic repair could not start: {exc}",
+                            "error",
+                        )
+                        with self.lock:
+                            self.error = str(exc)
         except VerificationCancelled as exc:
             cancelled = (
                 replace(
@@ -1791,6 +1913,34 @@ class GuidedState:
         self.add_log(message, "warning" if state == "cancelled" else "error")
         self._capture_failure_context()
 
+    def _prepare_dependencies(
+        self,
+        detection: ProjectDetection,
+        cancel_event: threading.Event | None,
+    ) -> DependencyBootstrapResult:
+        """Prepare dependencies in the isolated copy or fail with the exact cause."""
+
+        def output(stream: str, line: str) -> None:
+            if line.strip():
+                self.add_log(f"dependency {stream}: {line}")
+
+        result = prepare_project_dependencies(
+            detection,
+            cancel_event=cancel_event,
+            on_output=output,
+        )
+        with self.lock:
+            self.dependency_bootstrap = result
+        if result.status in {"prepared", "not_needed"}:
+            self.add_log(result.message)
+        else:
+            self.add_log(result.message, "error")
+            detail = result.message
+            if result.stderr.strip() and result.stderr.strip() not in detail:
+                detail = f"{detail} Details: {result.stderr.strip()[-1600:]}"
+            raise RuntimeError(f"Dependency preparation blocked Verification: {detail}")
+        return result
+
     def _verification_event(self, event: VerificationEvent) -> None:
         if event.text.strip():
             self.add_log(event.text, "error" if event.stream == "stderr" else "info")
@@ -1827,6 +1977,7 @@ class GuidedState:
         """Return the evidence-backed conditions for creating a project ZIP."""
 
         blockers: list[str] = []
+        review_blocker: str | None = None
         if self.run is not None and self.run.status != "completed":
             blockers.append("The agent run did not complete successfully.")
         if self.verification is None:
@@ -1843,9 +1994,10 @@ class GuidedState:
         if self.review is None:
             blockers.append("Review has not been created.")
         elif self.review.pending_count:
-            blockers.append(
+            review_blocker = (
                 f"{self.review.pending_count} changed file(s) still need a review decision."
             )
+            blockers.append(review_blocker)
         elif self.review.status != "complete":
             blockers.append("Review has not completed.")
         elif self.detection is not None:
@@ -1862,11 +2014,19 @@ class GuidedState:
                     blockers.append(
                         "No changed project files are available for a delta ZIP."
                     )
+                else:
+                    validate_changed_html_links(
+                        self.detection.descriptor.root,
+                        delta.changed_members,
+                    )
             except (OSError, RuntimeError, ValueError) as exc:
                 blockers.append(str(exc))
 
+        hard_blockers = [item for item in blockers if item != review_blocker]
         if self.export is not None and self.export.verified:
             status = "exported"
+        elif review_blocker is not None and not hard_blockers:
+            status = "awaiting_review"
         elif blockers:
             status = "blocked"
         else:
@@ -1899,6 +2059,45 @@ class GuidedState:
         if digest.hexdigest() != exported.sha256:
             raise RuntimeError("The verified project ZIP changed; export it again.")
         return archive
+
+    def export_artifact_path(self, kind: str) -> Path:
+        """Return a verified export sidecar without exposing arbitrary files."""
+
+        if kind == "archive":
+            return self.export_download_path()
+        exported = self.export
+        if exported is None or not exported.verified:
+            raise RuntimeError("No verified project ZIP is ready for download.")
+        if kind == "manifest":
+            target = exported.manifest_path
+        elif kind == "checksum":
+            target = exported.checksum_path
+        else:
+            raise ValueError("unknown export artifact")
+        workspace = self.workspace_root.resolve()
+        target = target.expanduser().resolve()
+        try:
+            target.relative_to(workspace)
+        except ValueError as exc:
+            raise RuntimeError("The export sidecar is outside the Empy workspace.") from exc
+        if not target.is_file():
+            raise RuntimeError("The export sidecar is no longer available; export again.")
+        if kind == "checksum":
+            expected = f"{exported.sha256}  {exported.archive_path.name}"
+            if target.read_text(encoding="utf-8").strip() != expected:
+                raise RuntimeError("The export checksum changed; export the project again.")
+        if kind == "manifest":
+            try:
+                manifest = json.loads(target.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise RuntimeError("The export manifest is invalid; export the project again.") from exc
+            if (
+                not isinstance(manifest, dict)
+                or manifest.get("archive_mode") != "delta"
+                or tuple(manifest.get("changed_files", ())) != exported.changed_files
+            ):
+                raise RuntimeError("The export manifest does not match the verified ZIP.")
+        return target
 
     def export_project(self, destination: str | None = None) -> None:
         gate = self._release_gate()
@@ -1950,6 +2149,7 @@ class GuidedState:
             self.verification = None
             self.review = None
             self.export = None
+            self.dependency_bootstrap = None
             self.import_report = None
             self.runtime = None
             self.cancel_event = None
@@ -2033,7 +2233,8 @@ class GuidedState:
                     "logs": list(self.logs),
                     "verification": verification,
                     "review": review,
-                    "export": self.export.to_dict() if self.export is not None else None,
+                    "export": self._public_export(),
+                    "dependency_bootstrap": self._public_dependency_bootstrap(),
                     "failure_context": self._localized_failure_context(),
                     "import_report": self.import_report,
                     "release_gate": self._release_gate(),
@@ -2047,6 +2248,51 @@ class GuidedState:
                     },
                 }
             ))
+
+    def _public_export(self) -> dict[str, Any] | None:
+        if self.export is None:
+            return None
+        value = cast(dict[str, Any], self.export.to_dict())
+        value.update(
+            {
+                "archive_name": self.export.archive_path.name,
+                "manifest_name": self.export.manifest_path.name,
+                "checksum_name": self.export.checksum_path.name,
+                "manifest_available": self.export.manifest_path.is_file(),
+                "checksum_available": self.export.checksum_path.is_file(),
+            }
+        )
+        return value
+
+    def _public_dependency_bootstrap(self) -> dict[str, Any] | None:
+        result = self.dependency_bootstrap
+        if result is None:
+            return None
+        value = result.to_dict()
+        value["root"] = self._workspace_reference(result.root)
+        value["command"] = [
+            Path(part).name if index == 0 else part
+            for index, part in enumerate(result.command)
+        ]
+        value["stdout"] = _safe_verification_detail(
+            result.stdout,
+            (
+                self.detection.descriptor.root
+                if self.detection is not None
+                else self.workspace_root,
+                self.workspace_root,
+            ),
+        ) if result.stdout.strip() else ""
+        value["stderr"] = _safe_verification_detail(
+            result.stderr,
+            (
+                self.detection.descriptor.root
+                if self.detection is not None
+                else self.workspace_root,
+                self.workspace_root,
+            ),
+        ) if result.stderr.strip() else ""
+        return value
 
     def _provider_usage(self) -> dict[str, Any] | None:
         if self.run is None:
@@ -2108,6 +2354,48 @@ class GuidedState:
                 "action": "resume-ticket",
             }
 
+        run_error = (
+            self.run.error_message.casefold()
+            if self.run is not None and self.run.error_message
+            else ""
+        )
+        token_budget_run_failure = (
+            self.run is not None
+            and self.run.status != "completed"
+            and (
+                self.run.error_code == "budget_exceeded"
+                or "fresh-token limit" in run_error
+                or "token budget" in run_error
+                or "token guard" in run_error
+                or "سقف مصرف" in (self.run.error_message or "")
+            )
+        )
+        if token_budget_run_failure:
+            repair_available = self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS
+            if self.language == "en":
+                return {
+                    "kind": "token_budget",
+                    "title": "This step used too many tokens",
+                    "summary": "Empy stopped the step before a complete result was produced; no ZIP is ready.",
+                    "steps": [
+                        "Choose Automatically repair and rerun; Empy will retry the same change with a compact context.",
+                        "If the compact retry also reaches the limit, split the ticket into two smaller requests instead of repeating it.",
+                    ],
+                    "action": "auto-repair" if repair_available else "resume-ticket",
+                    "repair_available": repair_available,
+                }
+            return {
+                "kind": "token_budget",
+                "title": "مصرف توکن این مرحله بیش از حد شد",
+                "summary": "Empy مرحله را قبل از تولید نتیجهٔ کامل متوقف کرد؛ ZIP هنوز آماده نیست.",
+                "steps": [
+                    "روی «اصلاح خودکار و اجرای دوباره» بزنید؛ همان تغییر با context کوچک‌تر اجرا می‌شود.",
+                    "اگر اجرای کوچک‌تر هم به سقف رسید، تیکت را به دو درخواست کوچک‌تر تقسیم کنید؛ اجرای تکراری انجام نمی‌شود.",
+                ],
+                "action": "auto-repair" if repair_available else "resume-ticket",
+                "repair_available": repair_available,
+            }
+
         contract_mismatch = next(
             (
                 item
@@ -2167,7 +2455,7 @@ class GuidedState:
             or not self.verification.finalize_allowed
             or self.verification.finalized_at is None
         )
-        if failures or verification_failed:
+        if verification_failed:
             repair_available = self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS
             if self.language == "en":
                 return {
@@ -2491,15 +2779,16 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_download(self, target: Path) -> None:
+    def _send_download(self, target: Path, content_type: str = "application/zip") -> None:
         filename = target.name.replace('"', "_").replace("\r", "_").replace("\n", "_")
+        ascii_filename = filename.encode("ascii", "ignore").decode("ascii") or "download"
         encoded_filename = quote(filename, safe="")
         size = target.stat().st_size
         self.send_response(200)
-        self.send_header("Content-Type", "application/zip")
+        self.send_header("Content-Type", content_type)
         self.send_header(
             "Content-Disposition",
-            f'attachment; filename="project.zip"; filename*=UTF-8\'\'{encoded_filename}',
+            f'attachment; filename="{ascii_filename}"; filename*=UTF-8\'\'{encoded_filename}',
         )
         self.send_header("Content-Length", str(size))
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
@@ -2532,6 +2821,21 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": message}, 409)
                 return
             self._send_download(archive)
+            return
+        if parsed.path in {"/api/export/manifest", "/api/export/checksum"}:
+            kind = "manifest" if parsed.path.endswith("manifest") else "checksum"
+            try:
+                target = self.app.state.export_artifact_path(kind)
+            except (OSError, RuntimeError, ValueError) as exc:
+                message = safe_user_error(exc, language=self.app.state.language)
+                self._send_json({"error": message}, 409)
+                return
+            content_type = (
+                "application/json; charset=utf-8"
+                if kind == "manifest"
+                else "text/plain; charset=utf-8"
+            )
+            self._send_download(target, content_type)
             return
         if parsed.path in {"/api/state", "/api/health"}:
             self._send_json(self.app.state.public() if parsed.path.endswith("state") else {"ok": True})

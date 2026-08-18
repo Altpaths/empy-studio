@@ -266,6 +266,71 @@ def test_delta_export_refuses_empty_or_deleted_delivery(tmp_path: Path) -> None:
         )
 
 
+def test_delta_export_rejects_broken_local_html_links(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "public_html" / "features").mkdir(parents=True)
+    (source / "public_html" / "index.html").write_text(
+        '<a href="/features/">Features</a>\n',
+        encoding="utf-8",
+    )
+    (source / "public_html" / "features" / "index.html").write_text(
+        "features\n",
+        encoding="utf-8",
+    )
+    imported = import_project_folder(source, tmp_path / "workspace")
+    snapshot = _baseline_snapshot(imported, tmp_path)
+    (imported.project_root / "public_html" / "index.html").write_text(
+        '<a href="/missing/">Missing</a>\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Local link validation failed"):
+        export_project_zip(
+            imported.project_root,
+            tmp_path / "out" / "broken-links.zip",
+            baseline_snapshot=snapshot,
+        )
+
+
+def test_delta_export_validates_public_root_links_but_keeps_patch_only_output(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    (source / "public_html" / "features").mkdir(parents=True)
+    (source / "public_html" / "assets").mkdir()
+    (source / "public_html" / "index.html").write_text(
+        '<a href="/features/">Features</a><img src="/assets/site.css">\n',
+        encoding="utf-8",
+    )
+    (source / "public_html" / "features" / "index.html").write_text(
+        "features\n",
+        encoding="utf-8",
+    )
+    (source / "public_html" / "assets" / "site.css").write_text(
+        "body { color: green; }\n",
+        encoding="utf-8",
+    )
+    imported = import_project_folder(source, tmp_path / "workspace")
+    snapshot = _baseline_snapshot(imported, tmp_path)
+    (imported.project_root / "public_html" / "index.html").write_text(
+        '<a href="/features/">Updated features</a><img src="/assets/site.css">\n',
+        encoding="utf-8",
+    )
+
+    exported = export_project_zip(
+        imported.project_root,
+        tmp_path / "out" / "valid-links.zip",
+        baseline_snapshot=snapshot,
+    )
+
+    assert exported.verified is True
+    assert exported.changed_files == ("public_html/index.html",)
+    with zipfile.ZipFile(exported.archive_path) as archive:
+        assert archive.namelist() == [
+            f"{imported.project_root.name}/public_html/index.html"
+        ]
+
+
 def test_import_rejects_broad_system_roots(tmp_path: Path) -> None:
     with pytest.raises(PermissionError, match="system or user root"):
         import_project_folder(Path("/"), tmp_path / "workspace")

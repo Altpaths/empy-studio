@@ -427,6 +427,50 @@ def test_allows_final_turn_accounting_overage_after_process_completion(
     assert result.usage.uncached_total == 65
 
 
+def test_counts_codex_total_usage_snapshot_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "empy_studio.drivers.codex.shutil.which",
+        lambda value: "/usr/local/bin/codex",
+    )
+
+    def process_factory(command: list[str], **kwargs: Any) -> FakeProcess:
+        del kwargs
+        final_path = Path(command[command.index("--output-last-message") + 1])
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        final_path.write_text("Completed", encoding="utf-8")
+        return FakeProcess(
+            stdout=(
+                '{"type":"event_msg","payload":{"total_token_usage":'
+                '{"input_tokens":18000,"output_tokens":1000,"cached_input_tokens":12000,"total_tokens":19000},'
+                '"last_token_usage":{"input_tokens":18000,"output_tokens":1000,"cached_input_tokens":12000,"total_tokens":19000}}}\n'
+                '{"type":"turn.completed","usage":{"input_tokens":18000,"output_tokens":1000,'
+                '"cached_input_tokens":12000,"total_tokens":19000}}\n'
+            )
+        )
+
+    driver = CodexDriver(
+        artifact_root=tmp_path,
+        command_runner=ready_runner,
+        process_factory=process_factory,
+    )
+    result = driver.execute_streaming(
+        replace(request(tmp_path), fresh_token_limit=8_000),
+        node_id="node-cumulative-usage",
+        artifact_dir=tmp_path / "run" / "node-cumulative-usage",
+    )
+
+    assert result.status == "completed"
+    assert result.error_code is None
+    assert result.usage is not None
+    assert result.usage.input == 18_000
+    assert result.usage.output == 1_000
+    assert result.usage.cached == 12_000
+    assert result.usage.uncached_total == 7_000
+
+
 def test_stops_a_follow_up_turn_after_final_accounting_overage(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

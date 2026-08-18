@@ -298,7 +298,7 @@ See `docs/plugin-package-manager-v1.md` for the complete architecture.
 
 ## Status
 
-**v0.1.42 — Developer Preview**
+**v0.1.43 — Developer Preview**
 
 The current release provides a working CLI, task-graph generation, ownership-conflict detection, evidence-backed learning, runtime-aware verification, and a Finder-launchable clean macOS trial app. Public interfaces may evolve before v1.0.
 

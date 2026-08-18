@@ -31,9 +31,12 @@ def test_python_project_mapping_has_required_panels(tmp_path: Path) -> None:
     assert {item.category for item in checks} == {"tests", "build", "lint"}
 
 
-def test_plain_php_composer_mapping_is_dependency_aware(tmp_path: Path) -> None:
+def test_plain_php_composer_mapping_keeps_test_contract_visible_without_dependencies(
+    tmp_path: Path,
+) -> None:
     (tmp_path / "composer.json").write_text(
-        '{"name":"demo/php-app","scripts":{"test":"php tests/run.php"}}\n',
+        '{"name":"demo/php-app","require":{"example/package":"1.0"},'
+        '"scripts":{"test":"php tests/run.php"}}\n',
         encoding="utf-8",
     )
     (tmp_path / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
@@ -42,15 +45,22 @@ def test_plain_php_composer_mapping_is_dependency_aware(tmp_path: Path) -> None:
     checks = map_project_verification(detection)
 
     assert detection.descriptor.project_type == "php"
-    assert [item.check_id for item in checks] == ["build"]
+    assert [item.check_id for item in checks] == ["build", "tests"]
     assert checks[0].command == ("composer", "validate", "--no-check-publish")
+    assert checks[1].command == (
+        "composer",
+        "--no-interaction",
+        "run-script",
+        "test",
+    )
 
 
 def test_verification_preflight_surfaces_missing_composer_dependencies_before_run(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "composer.json").write_text(
-        '{"name":"demo/php-app","scripts":{"test":"php tests/run.php"}}\n',
+        '{"name":"demo/php-app","require":{"example/package":"1.0"},'
+        '"scripts":{"test":"php tests/run.php"}}\n',
         encoding="utf-8",
     )
     (tmp_path / "composer.lock").write_text("{}\n", encoding="utf-8")

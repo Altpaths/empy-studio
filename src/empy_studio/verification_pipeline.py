@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Literal, TextIO
 
 from empy_studio.core.project_service import ProjectDetection
+from empy_studio.dependency_bootstrap import composer_dependencies_required
 
 VerificationCategory = Literal["tests", "build", "lint"]
 VerificationStream = Literal["stdout", "stderr", "system"]
@@ -279,7 +280,11 @@ def map_project_verification(detection: ProjectDetection) -> tuple[VerificationC
                 )
             )
             composer_scripts = _composer_scripts(root)
-            if (root / "vendor" / "autoload.php").is_file() and "test" in composer_scripts:
+            # Keep the declared test contract visible even when dependencies
+            # are missing.  The preflight diagnostic below stops execution in
+            # that case; silently omitting the check made a partial run look
+            # like a successful verification.
+            if "test" in composer_scripts:
                 checks.append(
                     VerificationCheck(
                         "tests",
@@ -372,15 +377,20 @@ def _verification_diagnostics(detection: ProjectDetection) -> tuple[str, ...]:
 
     root = detection.effective_verification_root
     diagnostics: list[str] = []
-    if detection.descriptor.project_type == "php" and (root / "composer.json").is_file():
+    if (
+        detection.descriptor.project_type == "php"
+        and (root / "composer.json").is_file()
+        and composer_dependencies_required(root)
+    ):
         scripts = _composer_scripts(root)
         if ("test" in scripts or "verify-release" in scripts) and not (
             root / "vendor" / "autoload.php"
         ).is_file():
             diagnostics.append(
-                "Composer test/release scripts were not executed because "
-                "vendor/autoload.php is missing. Install the project dependencies "
-                "or provide an explicit safe verification manifest."
+                "Composer dependencies are not available in the isolated copy because "
+                "vendor/autoload.php is missing. Empy will prepare them from composer.lock "
+                "before the Agent and Verification; if Composer or the lockfile is unavailable, "
+                "Empy will report that exact blocker instead of skipping the check."
             )
     return tuple(diagnostics)
 

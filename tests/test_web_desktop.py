@@ -21,7 +21,7 @@ from empy_studio.project_delivery import ExportedProject
 from empy_studio.review_workspace import ReviewReport
 from empy_studio.token_usage import TokenUsage
 from empy_studio.verification_pipeline import VerificationCheck, VerificationReport, VerificationResult
-from empy_studio.web_desktop import GuidedState, RequestHandler, create_server
+from empy_studio.web_desktop import GuidedState, RequestHandler, _failure_kind, create_server
 
 
 def test_guided_state_persists_project_and_follow_up_ticket(tmp_path: Path) -> None:
@@ -225,7 +225,8 @@ def test_import_reports_missing_composer_dependency_before_ticket_planning(
     source = tmp_path / "source"
     source.mkdir()
     (source / "composer.json").write_text(
-        '{"name":"demo/php-app","scripts":{"test":"php tests/run.php"}}\n',
+        '{"name":"demo/php-app","require":{"example/package":"1.0"},'
+        '"scripts":{"test":"php tests/run.php"}}\n',
         encoding="utf-8",
     )
     (source / "composer.lock").write_text("{}\n", encoding="utf-8")
@@ -391,6 +392,61 @@ def test_release_gate_blocks_failed_verification_before_export(tmp_path: Path) -
     assert public["release_gate"]["ready"] is False
     with pytest.raises(RuntimeError, match="Export is blocked"):
         state.export_project(str(tmp_path / "blocked.zip"))
+
+
+def test_release_gate_distinguishes_pending_review_from_a_blocked_run(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("before\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "empy-workspace")
+    state.import_path(str(source))
+    state.create_plan("Update the README")
+    assert state.detection is not None
+    root = state.detection.descriptor.root
+    (root / "README.md").write_text("after\n", encoding="utf-8")
+    state.review = state.review_store.create(root)
+    state.run = SimpleNamespace(status="completed")
+    verification_check = VerificationCheck(
+        check_id="review-gate",
+        label="Review gate check",
+        category="quality",
+        command=("empy", "verify"),
+    )
+    state.verification = VerificationReport(
+        schema_version=1,
+        verification_id="verification-review-pending",
+        project_root=str(root),
+        project_type="generic",
+        status="pass",
+        started_at="now",
+        finished_at="now",
+        results=(
+            VerificationResult(
+                check=verification_check,
+                status="pass",
+                returncode=0,
+                stdout="ok\n",
+                stderr="",
+                started_at="now",
+                finished_at="now",
+            ),
+        ),
+        evidence_path=str(tmp_path / "evidence"),
+        finalized_at="now",
+    )
+
+    waiting = state._release_gate()
+
+    assert waiting["status"] == "awaiting_review"
+    assert waiting["ready"] is False
+    assert waiting["blockers"] == ["1 changed file(s) still need a review decision."]
+
+    state.decide_all("accept")
+    ready = state._release_gate()
+
+    assert ready["status"] == "ready_for_export"
+    assert ready["ready"] is True
+    assert ready["blockers"] == []
 
 
 def test_restart_invalidates_old_passing_verification_evidence(tmp_path: Path) -> None:
@@ -751,6 +807,67 @@ def test_failed_verification_is_visible_and_can_seed_a_follow_up_ticket(tmp_path
     assert "public_html/index.html" in reopened.public()["failure_context"]["suggested_ticket"]
 
 
+def test_token_budget_failure_is_classified_as_a_retryable_execution_problem() -> None:
+    assert _failure_kind(
+        "Codex exceeded Empy's fresh-token limit of 35758 tokens; the node was stopped before it could pass."
+    ) == "token_budget"
+
+
+def test_token_budget_run_has_clear_guidance_and_no_false_verification_failure(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("demo\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+    state.create_plan("Update the README")
+
+    assert state.graph is not None
+    assert state.task is not None
+    assert state.detection is not None
+    state.run = CodexGraphExecution(
+        schema_version=1,
+        run_id="run-budget",
+        graph_id=state.graph.graph_id,
+        task_id=state.task.task_id,
+        project_root=str(state.detection.descriptor.root),
+        provider="codex",
+        status="failed",
+        started_at="now",
+        finished_at="now",
+        installation=CodexInstallation(
+            availability="available",
+            executable="codex",
+            version="test",
+            authenticated=True,
+            message="ready",
+        ),
+        node_results=(),
+        events=(),
+        usage=None,
+        schedule=(),
+        error_code="budget_exceeded",
+        error_message=(
+            "Codex exceeded Empy's fresh-token limit of 35758 tokens; "
+            "the node was stopped before it could pass."
+        ),
+    )
+
+    public = state.public()
+
+    assert public["run_report"]["guidance"]["kind"] == "token_budget"
+    assert public["run_report"]["guidance"]["action"] == "auto-repair"
+    assert public["failure_context"]["kind"] == "token_budget"
+    assert "ZIP" in public["failure_context"]["summary"]
+
+    state.start_run = lambda: None  # type: ignore[method-assign]
+    state.auto_repair()
+
+    assert state.compact_retry is True
+    assert state.task is not None
+    assert "token guard" in state.task.objective
+    assert state.task.objective.count("Confirmed runtime detail") == 1
+
+
 def test_failure_context_identifies_entrypoint_contract_mismatch(tmp_path: Path) -> None:
     source = tmp_path / "source"
     (source / "public_html").mkdir(parents=True)
@@ -894,16 +1011,24 @@ def test_verified_export_has_authenticated_download_endpoint(tmp_path: Path) -> 
     payload = b"verified zip payload"
     archive.write_bytes(payload)
     digest = hashlib.sha256(payload).hexdigest()
+    manifest = archive.with_suffix(".manifest.json")
+    manifest.write_text(
+        '{"archive_mode":"delta","changed_files":["README.md"]}\n',
+        encoding="utf-8",
+    )
+    checksum = archive.with_suffix(".zip.sha256")
+    checksum.write_text(f"{digest}  {archive.name}\n", encoding="utf-8")
 
     server = create_server(workspace=workspace, token="download-token", port=0)
     server.state.export = ExportedProject(
         project_root=workspace / "project",
         archive_path=archive,
-        manifest_path=archive.with_suffix(".manifest.json"),
-        checksum_path=archive.with_suffix(".zip.sha256"),
+        manifest_path=manifest,
+        checksum_path=checksum,
         sha256=digest,
         file_count=1,
         verified=True,
+        changed_files=("README.md",),
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -921,6 +1046,22 @@ def test_verified_export_has_authenticated_download_endpoint(tmp_path: Path) -> 
             assert response.read() == payload
             assert response.headers["Content-Type"] == "application/zip"
             assert response.headers["Content-Disposition"].startswith("attachment;")
+
+        manifest_request = urllib.request.Request(
+            f"{base_url}/api/export/manifest?token=download-token"
+        )
+        with urllib.request.urlopen(manifest_request, timeout=2) as response:
+            assert response.status == 200
+            assert response.headers["Content-Type"].startswith("application/json")
+            assert b"README.md" in response.read()
+
+        checksum_request = urllib.request.Request(
+            f"{base_url}/api/export/checksum?token=download-token"
+        )
+        with urllib.request.urlopen(checksum_request, timeout=2) as response:
+            assert response.status == 200
+            assert response.headers["Content-Type"].startswith("text/plain")
+            assert digest.encode("ascii") in response.read()
 
         archive.write_bytes(b"tampered")
         with pytest.raises(urllib.error.HTTPError) as tampered:

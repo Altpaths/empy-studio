@@ -32,6 +32,13 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert "exportVerified" in app_js
     assert "deltaDownloadHint" in app_js
     assert "localizeMessage(item)" in app_js
+    assert "renderReleaseGateExplanation" in app_js
+    assert "releaseGateLabel" in app_js
+    assert "awaiting_review" in app_js
+    assert "reviewPendingAction" in app_js
+    assert "/api/export/manifest" in app_js
+    assert "/api/export/checksum" in app_js
+    assert "sha256" in app_js
     assert 'class="secondary download-link"' in app_js
     assert "verificationReady" in app_js
     assert 'state.run_status === "completed"' in app_js
@@ -67,5 +74,8 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert ".action-guide" in app_css
     assert ".technical-details" in app_css
     assert ".import-report" in app_css
+    assert ".release-gate-explanation" in app_css
+    assert ".quality.pending" in app_css
+    assert ".export-files" in app_css
     assert ".message.warning" in app_css
     assert ".download-link{display:inline-block;text-decoration:none;font:inherit" in app_css

@@ -1,3 +1,21 @@
+## [0.1.43] - 2026-08-18
+
+### Make the verified product path explicit and recoverable
+
+- Distinguish a pending human review from a real blocked run; the result page
+  now tells the user to approve the reviewed changes before ZIP export.
+- Keep the release gate evidence-backed: failed Verification, missing
+  dependencies, deleted files, broken local HTML links, and stale evidence
+  still block export, while an approved review transitions to a ready gate.
+- Retry token-budget failures with a compact context instead of repeating
+  discovery and consuming the same large context again.
+- Prepare Composer/npm dependencies only inside Empy's isolated copy and fail
+  with an actionable message when a lockfile or package manager is missing.
+- Add release validation for changed HTML links and harden the clean macOS
+  trial path and installer/package checks.
+- Fix the Windows installer release gate so its own relocatable wrappers are
+  used as the command contract instead of requiring pip-generated scripts.
+
 ## [0.1.42] - 2026-08-15
 
 ### Add a no-terminal clean macOS trial app
