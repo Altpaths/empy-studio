@@ -1142,6 +1142,7 @@ def _build_pack(
         )
     )
     if should_create_virtual_target:
+        assert virtual_relative is not None
         virtual_target = ContextFile(
             relative_path=virtual_relative,
             score=60,
