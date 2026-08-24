@@ -53,6 +53,15 @@ def safe_user_error(error: BaseException, *, language: str = "fa") -> str:
         return "برای این عملیات باید فایل ZIP انتخاب شود." if language == "fa" else "This operation requires a ZIP file."
     if isinstance(error, ValueError):
         message = str(error).strip()
+        if any(
+            marker in message.casefold()
+            for marker in ("no writable files for writing roles", "no writable files")
+        ):
+            return (
+                "این تیکت به هیچ فایل امن و قابل‌ویرایشی وصل نشد؛ Empy باید فهرست فایل‌های پروژه را دوباره بسازد یا هدف فایل جدید را مشخص کند. فایل اصلی تغییر نکرده است."
+                if language == "fa"
+                else "This ticket was not assigned a safe writable file. Empy must rebuild the project index or resolve an approved missing target. The original project was not changed."
+            )
         known = {
             "Choose an existing project folder or a ZIP archive.": (
                 "یک پوشه‌ی موجود پروژه یا فایل ZIP انتخاب کنید."

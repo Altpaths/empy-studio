@@ -206,6 +206,65 @@ WRITING_ROLES: Final[frozenset[str]] = frozenset(
     {"frontend", "backend", "security", "release"}
 )
 
+_CODE_SUFFIXES: Final[frozenset[str]] = frozenset(
+    {
+        ".c",
+        ".cpp",
+        ".cs",
+        ".go",
+        ".h",
+        ".hpp",
+        ".java",
+        ".js",
+        ".jsx",
+        ".kt",
+        ".php",
+        ".py",
+        ".rb",
+        ".rs",
+        ".swift",
+        ".ts",
+        ".tsx",
+        ".vue",
+        ".svelte",
+    }
+)
+_FRONTEND_SUFFIXES: Final[frozenset[str]] = frozenset(
+    {
+        ".css",
+        ".html",
+        ".htm",
+        ".js",
+        ".jsx",
+        ".scss",
+        ".sass",
+        ".less",
+        ".ts",
+        ".tsx",
+        ".vue",
+        ".svelte",
+    }
+)
+_BACKEND_PARTS: Final[frozenset[str]] = frozenset(
+    {
+        "api",
+        "app",
+        "backend",
+        "controller",
+        "controllers",
+        "database",
+        "lib",
+        "model",
+        "models",
+        "route",
+        "routes",
+        "server",
+        "service",
+        "services",
+        "src",
+    }
+)
+
 
 @dataclass(frozen=True)
 class ContextPolicy:
@@ -860,6 +919,118 @@ def _read_context_file(
     )
 
 
+def _is_writable_candidate_for_role(
+    candidate: _Candidate,
+    *,
+    role: AgentRole,
+    project: ProjectDetection,
+    task_text: str,
+) -> bool:
+    """Return whether a safe source file can give a writer a real target.
+
+    Relevance scoring is intentionally conservative, but a writer must still
+    receive at least one target.  On large imported sites a low-scoring PHP
+    entry point can otherwise fall outside the four-file context cap while
+    unrelated assets fill the pack.  This helper is only a final bounded
+    fallback; it never includes sensitive paths or dependency directories.
+    """
+
+    relative = candidate.relative_path
+    if _is_sensitive(relative):
+        return False
+    path_parts = {part.casefold() for part in Path(relative).parts[:-1]}
+    suffix = candidate.path.suffix.casefold()
+    name = candidate.path.name.casefold()
+    if (
+        path_parts & TEST_PATH_PARTS
+        and not _task_requests_test_changes(task_text)
+    ):
+        return False
+    if (
+        path_parts & DOCUMENTATION_PATH_PARTS
+        and not _task_requests_documentation_changes(task_text)
+    ):
+        return False
+    if role == "frontend":
+        return suffix in _FRONTEND_SUFFIXES or bool(
+            path_parts
+            & {
+                "public",
+                "assets",
+                "component",
+                "components",
+                "page",
+                "pages",
+                "template",
+                "templates",
+                "view",
+                "views",
+            }
+        )
+    if role == "backend":
+        if suffix in _CODE_SUFFIXES and suffix not in {".css", ".html", ".htm"}:
+            return True
+        if project.descriptor.project_type in {"php", "laravel"} and name in {"index.php", "artisan"}:
+            return True
+        if path_parts & _BACKEND_PARTS and suffix in TEXT_EXTENSIONS:
+            return True
+        return _task_requests_documentation_changes(task_text) and suffix in DOCUMENTATION_SUFFIXES
+    if role == "security":
+        return bool(path_parts & {"auth", "middleware", "permissions", "policies", "security"})
+    if role == "release":
+        return (
+            relative.startswith(".github/workflows/")
+            or name in {"pyproject.toml", "package.json", "composer.json", "cargo.toml", "go.mod", "dockerfile", "changelog.md"}
+            or ("release" in path_parts and suffix in TEXT_EXTENSIONS)
+        )
+    return False
+
+
+def _virtual_writer_target(
+    *,
+    project: ProjectDetection,
+    role: AgentRole,
+    task_text: str,
+) -> str | None:
+    """Choose a deterministic, safe creation target when a role has no file.
+
+    This is used only for an implementation request and only for conventional
+    application entry/source files.  The target is placed under the detected
+    verification root, while the archive layout remains rooted at the
+    imported project root.
+    """
+
+    if role not in {"frontend", "backend"}:
+        return None
+    if not any(term in task_text.casefold() for term in IMPLEMENTATION_TERMS):
+        return None
+
+    root = project.effective_verification_root
+    project_type = project.descriptor.project_type
+    if role == "frontend":
+        filename = "index.html"
+    elif project_type in {"php", "laravel"}:
+        filename = "src/index.php" if (root / "src").is_dir() else "index.php"
+    elif project_type == "python":
+        filename = "src/main.py" if (root / "src").is_dir() else "main.py"
+    elif project_type == "node":
+        filename = "src/index.js" if (root / "src").is_dir() else "index.js"
+    elif project_type == "rust":
+        filename = "src/main.rs"
+    elif project_type == "go":
+        filename = "main.go"
+    else:
+        filename = "src/main.py" if (root / "src").is_dir() else "main.py"
+
+    try:
+        prefix = root.relative_to(project.descriptor.root).as_posix()
+    except ValueError:
+        prefix = ""
+    if prefix in {".", "./"}:
+        prefix = ""
+    return f"{prefix}/{filename}" if prefix else filename
+
+
 def _project_brain(project: ProjectDetection) -> ProjectBrain:
     descriptor = project.descriptor
     summary_parts = [
@@ -930,44 +1101,115 @@ def _build_pack(
         if exact:
             scored = exact
 
-    virtual_homepage: ContextFile | None = None
     task_requests_implementation = any(
         term in task_text.casefold()
         for term in IMPLEMENTATION_TERMS
     )
-    if (
-        step.suggested_agent == "frontend"
-        and task_requests_implementation
-        and project.descriptor.project_type == "php"
-        and (project.effective_verification_root / "index.php").is_file()
-        and not (project.effective_verification_root / "index.html").is_file()
-    ):
-        try:
-            verification_prefix = project.effective_verification_root.relative_to(
-                project.descriptor.root
-            ).as_posix()
-        except ValueError:
-            verification_prefix = ""
-        relative_homepage = (
-            f"{verification_prefix}/index.html"
-            if verification_prefix
-            else "index.html"
+    virtual_target: ContextFile | None = None
+    virtual_relative = _virtual_writer_target(
+        project=project,
+        role=step.suggested_agent,
+        task_text=task_text,
+    ) if task_requests_implementation else None
+    has_existing_writer_target = any(
+        _is_writable_candidate_for_role(
+            candidate,
+            role=step.suggested_agent,
+            project=project,
+            task_text=task_text,
         )
-        if not any(item[1] == relative_homepage for item in scored):
-            virtual_homepage = ContextFile(
-                relative_path=relative_homepage,
-                score=60,
-                reasons=("approved frontend target is currently missing",),
-                size_bytes=0,
-                included_bytes=0,
-                sha256=hashlib.sha256(b"").hexdigest(),
-                truncated=False,
-                content="",
+        for candidate in candidates
+    ) if step.suggested_agent in WRITING_ROLES else False
+    frontend_homepage_target = (
+        step.suggested_agent == "frontend"
+        and (
+            not has_existing_writer_target
+            or (
+                project.descriptor.project_type in {"php", "laravel"}
+                and (project.effective_verification_root / "index.php").is_file()
             )
-
-    files: list[ContextFile] = (
-        [virtual_homepage] if virtual_homepage is not None else []
+        )
     )
+    should_create_virtual_target = (
+        virtual_relative is not None
+        and not (project.descriptor.root / virtual_relative).is_file()
+        and (
+            frontend_homepage_target
+            or (
+                step.suggested_agent != "frontend"
+                and not has_existing_writer_target
+            )
+        )
+    )
+    if should_create_virtual_target:
+        assert virtual_relative is not None
+        virtual_target = ContextFile(
+            relative_path=virtual_relative,
+            score=60,
+            reasons=(
+                f"approved {step.suggested_agent} target is currently missing",
+            ),
+            size_bytes=0,
+            included_bytes=0,
+            sha256=hashlib.sha256(b"").hexdigest(),
+            truncated=False,
+            content="",
+        )
+
+    # Promote one real role-compatible file into the bounded pack.  The
+    # previous relevance-only ordering could spend all four slots on assets
+    # and documentation, leaving a backend node with read-only context and
+    # causing graph construction to fail after the user had approved the
+    # ticket.  Promotion is deterministic and does not broaden the candidate
+    # scan or expose protected files.
+    if step.suggested_agent in WRITING_ROLES:
+        writable_candidates = sorted(
+            (
+                candidate
+                for candidate in candidates
+                if _is_writable_candidate_for_role(
+                    candidate,
+                    role=step.suggested_agent,
+                    project=project,
+                    task_text=task_text,
+                )
+            ),
+            key=lambda candidate: candidate.relative_path,
+        )
+        if writable_candidates:
+            preferred = writable_candidates[0]
+            for index, item in enumerate(scored):
+                if item[1] != preferred.relative_path:
+                    continue
+                score, relative, reasons, candidate = item
+                scored[index] = (
+                    max(score, 90),
+                    relative,
+                    tuple(dict.fromkeys((*reasons, "guaranteed writer scope"))),
+                    candidate,
+                )
+                break
+            else:
+                fallback_score, fallback_reasons = _score_candidate(
+                    preferred,
+                    task_tokens=task_tokens,
+                    task_text=task_text,
+                    step=step,
+                    plan=plan,
+                    project=project,
+                    brain_index=brain_index,
+                )
+                scored.append(
+                    (
+                        max(90, fallback_score),
+                        preferred.relative_path,
+                        tuple(dict.fromkeys((*fallback_reasons, "guaranteed writer scope"))),
+                        preferred,
+                    )
+                )
+            scored.sort(key=lambda item: (-item[0], item[1]))
+
+    files: list[ContextFile] = [virtual_target] if virtual_target is not None else []
     total_bytes = 0
     for score, _relative, reasons, candidate in scored:
         if len(files) >= policy.max_files_per_pack:
@@ -1013,7 +1255,7 @@ def _build_pack(
         objective=step.objective,
         files=tuple(files),
         total_bytes=total_bytes,
-        candidate_count=len(scored) + (1 if virtual_homepage is not None else 0),
+        candidate_count=len(scored) + (1 if virtual_target is not None else 0),
     )
     pack.validate()
     return pack

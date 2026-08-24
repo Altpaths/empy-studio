@@ -156,6 +156,36 @@ def test_persian_php_homepage_ticket_gets_a_writer_for_nested_entrypoint(
     assert any(path.startswith("public_html/") for path in value.likely_paths)
 
 
+def test_persian_security_ticket_is_routed_to_security_agent(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "composer.json").write_text(
+        '{"name":"demo/security-site"}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "security").mkdir()
+    (tmp_path / "security" / "permissions.php").write_text(
+        "<?php return [];\n",
+        encoding="utf-8",
+    )
+    project = DefaultProjectService().detect(tmp_path)
+    current = ProductTask(
+        task_id="persian-security-ticket",
+        project_root=str(tmp_path.resolve()),
+        kind="custom",
+        title="اصلاح امنیت و دسترسی",
+        objective="مجوزهای دسترسی را اصلاح و نتیجه را بررسی کن",
+        requirements=("مجوزهای حساس بدون دسترسی اضافی کار کنند",),
+        constraints=(),
+        definition_of_done=("بررسی امنیتی موفق شود",),
+        status="ready_for_planning",
+    )
+
+    value = generate_execution_plan(task=current, project=project)
+
+    assert "implement-security" in {step.step_id for step in value.steps}
+
+
 def test_path_fragments_do_not_create_unrelated_frontend_agents(
     tmp_path: Path,
 ) -> None:

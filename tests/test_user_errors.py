@@ -31,3 +31,17 @@ def test_missing_saved_project_has_a_reimport_action() -> None:
 
     assert "دوباره وارد" in safe_user_error(error)
     assert "re-import" in safe_user_error(error, language="en")
+
+
+def test_unowned_writer_failure_has_a_safe_bilingual_message() -> None:
+    error = ValueError(
+        "approved implementation plan has no writable files for writing roles (backend)"
+    )
+
+    fa = safe_user_error(error)
+    en = safe_user_error(error, language="en")
+
+    assert "فایل" in fa
+    assert "تغییر نکرده" in fa
+    assert "writable file" in en
+    assert "original project was not changed" in en

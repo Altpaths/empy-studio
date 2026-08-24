@@ -252,7 +252,7 @@ def test_default_registry_is_deterministic() -> None:
     }
 
 
-def test_writing_plan_without_owned_files_is_blocked(tmp_path: Path) -> None:
+def test_writing_plan_without_existing_ui_file_gets_safe_creation_target(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text(
         "[project]\nname = 'demo'\n",
         encoding="utf-8",
@@ -281,8 +281,11 @@ def test_writing_plan_without_owned_files_is_blocked(tmp_path: Path) -> None:
     selection = build_context_selection(task=task, project=project, plan=plan)
     budget = lock_token_budget(build_token_budget(plan=plan, selection=selection))
 
-    with pytest.raises(ValueError, match="no writable files"):
-        build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+    graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+
+    frontend = next(node for node in graph.nodes if node.agent_role == "frontend")
+    assert frontend.owned_files == ("index.html",)
+    assert (tmp_path / "index.html").exists() is False
 
 
 def test_missing_php_homepage_gets_virtual_frontend_ownership(tmp_path: Path) -> None:

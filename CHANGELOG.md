@@ -1,3 +1,23 @@
+## [0.1.46] - 2026-08-24
+
+### Make planning failures recoverable and non-duplicated
+
+- Guarantee every approved frontend/backend implementation node a bounded,
+  safe writable target: an existing role-compatible source file is promoted,
+  or an explicitly approved conventional target is represented when the file
+  is genuinely missing. Test, documentation, dependency, and sensitive paths
+  are not selected as accidental writers.
+- Keep graph-construction failures inside the ticket workflow with a clear
+  Persian/English explanation, a recovery action, and preserved task context;
+  the user no longer falls onto a raw HTTP error page after selecting a ticket.
+- Remove the duplicate failure panel and the automatic copy of the suggested
+  corrective ticket into the input box. The failure is shown once with an
+  actionable repair button and the ticket field remains user-editable.
+- Clear stale failure state only after a new corrective plan is successfully
+  materialized, while retaining the findings inside that task's objective.
+- Add regression coverage for nested PHP entrypoints, missing writer targets,
+  bilingual planning errors, recovery controls, and UI de-duplication.
+
 ## [0.1.45] - 2026-08-18
 
 ### Make failed runs understandable and recoverable

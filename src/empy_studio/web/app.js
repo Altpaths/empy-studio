@@ -28,6 +28,11 @@ const t = {
 function text() { return t[language]; }
 function escapeHtml(value = "") { return String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c])); }
 function localizeMessage(value = "") {
+  if (value.includes("no writable files for writing roles") || value.includes("no writable files") || value.includes("فایل قابل‌ویرایش") || value.includes("فایل قابل ویرایش") || value.includes("فایل امن و قابل‌ویرایشی") || value.includes("فایل امن و قابل ویرایشی")) {
+    return language === "fa"
+      ? "این تیکت به فایل قابل‌ویرایش وصل نشد؛ Empy باید فهرست فایل‌های پروژه را دوباره بسازد یا فایل لازم را به‌عنوان هدف امن ایجاد کند. فایل اصلی تغییر نکرده است."
+      : "This ticket was not connected to a writable file; Empy must rebuild the project index or create the required file as a safe target. The original project was not changed.";
+  }
   if (value.includes("Codex execution requires a clean Git worktree") || value.includes("Commit or restore these paths first")) {
     const marker = "Commit or restore these paths first:";
     const paths = value.includes(marker) ? value.slice(value.indexOf(marker) + marker.length).trim() : "";
@@ -150,7 +155,10 @@ function banner() {
   document.documentElement.lang = language;
   document.documentElement.dir = language === "fa" ? "rtl" : "ltr";
   const notice = document.querySelector("#notice");
-  notice.textContent = localizeMessage(state?.error || ""); notice.classList.toggle("hidden", !state?.error);
+  notice.textContent = localizeMessage(state?.error || "");
+  // A failure context is the authoritative, actionable explanation. Keep a
+  // second global banner hidden so the same error is not shown twice.
+  notice.classList.toggle("hidden", !state?.error || Boolean(state?.failure_context));
   const message = document.querySelector("#message");
   message.textContent = importStatusMessage(state?.import_report) || localizeMessage(state?.message || "");
   message.className = "message " + (state?.message_level || "info");
@@ -228,12 +236,11 @@ function renderTask() {
   const tasks = state.tasks || [];
   const projectId = state.active_project?.id || null;
   const draft = taskDraftProjectId === projectId ? taskDraft : "";
-  const suggested = !draft && state.failure_context?.suggested_ticket ? state.failure_context.suggested_ticket : draft;
-  return `<div class="card"><div class="row"><div><h1>${text().tasks}</h1><p class="muted">${escapeHtml(state.active_project?.name || "")}</p></div><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div>${renderFailureContext(state.failure_context)}<label class="field-label" for="tasks">${text().tasks}</label>${state.failure_context ? `<p class="muted corrective-ticket-hint">${escapeHtml(state.failure_context.next_step || "")}</p>` : ""}<textarea id="tasks" aria-label="${text().tasks}" placeholder="${text().taskHint}">${escapeHtml(suggested)}</textarea><div class="actions"><button type="button" class="primary" data-action="build-plan">${text().plan}</button></div><h2>${language === "fa" ? "تاریخچه تیکت‌ها" : "Ticket history"}</h2><div class="task-list">${tasks.length ? tasks.map(task => `<button type="button" class="task ${task.id === state.active_task_id ? "active" : ""}" data-action="select-task" data-task-id="${escapeHtml(task.id)}"><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.status)} · ${text().resume}</small></button>`).join("") : `<p class="muted">${text().noTask}</p>`}</div></div>`;
+  return `<div class="card"><div class="row"><div><h1>${text().tasks}</h1><p class="muted">${escapeHtml(state.active_project?.name || "")}</p></div><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div>${renderFailureContext(state.failure_context)}${state.failure_context ? `<div class="actions failure-actions">${renderRecoveryActions(state.failure_context)}</div>` : ""}<label class="field-label" for="tasks">${text().tasks}</label>${state.failure_context ? `<p class="muted corrective-ticket-hint">${escapeHtml(state.failure_context.next_step || "")}</p>` : ""}<textarea id="tasks" aria-label="${text().tasks}" placeholder="${text().taskHint}">${escapeHtml(draft)}</textarea><div class="actions"><button type="button" class="primary" data-action="build-plan">${text().plan}</button></div><h2>${language === "fa" ? "تاریخچه تیکت‌ها" : "Ticket history"}</h2><div class="task-list">${tasks.length ? tasks.map(task => `<button type="button" class="task ${task.id === state.active_task_id ? "active" : ""}" data-action="select-task" data-task-id="${escapeHtml(task.id)}"><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.status)} · ${text().resume}</small></button>`).join("") : `<p class="muted">${text().noTask}</p>`}</div></div>`;
 }
 function renderPlan() {
   const plan = state.plan || {}; const nodes = plan.nodes || [];
-  return `<div class="card"><h1>${language === "fa" ? "برنامه آماده است" : "Plan is ready"}</h1>${renderFailureContext(state.failure_context, true)}<div class="stats"><div><small>${text().files}</small><strong>${plan.selected_files || 0}</strong></div><div><small>${text().tokens}</small><strong>${Number(plan.token_limit || 0).toLocaleString()}</strong></div><div><small>${language === "fa" ? "ایجنت" : "agents"}</small><strong>${plan.agents || 0}</strong></div></div>${renderBenchmark()}<div class="node-list">${nodes.map(node => `<div class="node"><span>${escapeHtml(node.role)}</span><strong>${escapeHtml(node.title)}</strong><small>${node.owned_files?.length || 0} ${text().files}</small></div>`).join("")}</div><div class="actions"><button type="button" class="primary" data-action="start-run" ${state.engine?.ready ? "" : "disabled"}>${text().start}</button><button type="button" class="secondary" data-action="run-benchmark">${text().runBenchmark}</button><button type="button" class="secondary" data-action="go-task">${language === "fa" ? "ویرایش تیکت" : "Edit ticket"}</button></div></div>`;
+  return `<div class="card"><h1>${language === "fa" ? "برنامه آماده است" : "Plan is ready"}</h1><div class="stats"><div><small>${text().files}</small><strong>${plan.selected_files || 0}</strong></div><div><small>${text().tokens}</small><strong>${Number(plan.token_limit || 0).toLocaleString()}</strong></div><div><small>${language === "fa" ? "ایجنت" : "agents"}</small><strong>${plan.agents || 0}</strong></div></div>${renderBenchmark()}<div class="node-list">${nodes.map(node => `<div class="node"><span>${escapeHtml(node.role)}</span><strong>${escapeHtml(node.title)}</strong><small>${node.owned_files?.length || 0} ${text().files}</small></div>`).join("")}</div><div class="actions"><button type="button" class="primary" data-action="start-run" ${state.engine?.ready ? "" : "disabled"}>${text().start}</button><button type="button" class="secondary" data-action="run-benchmark">${text().runBenchmark}</button><button type="button" class="secondary" data-action="go-task">${language === "fa" ? "ویرایش تیکت" : "Edit ticket"}</button></div></div>`;
 }
 function renderBenchmark() {
   const brain = state.brain || {}; const budget = state.budget || {}; const benchmark = state.benchmark || null; const usage = state.provider_usage || {};
@@ -354,8 +361,10 @@ function renderResult() {
 function enhanceReportUi() {
   const report = document.querySelector(".report");
   const guidance = state?.run_report?.guidance;
-  if (!report || !guidance) return;
-  report.insertAdjacentHTML("afterbegin", renderGuidance(guidance));
+  if (!report) return;
+  // The result screen already renders the authoritative failure context. Do
+  // not inject the same next-step panel again inside the report.
+  if (guidance && !state?.failure_context) report.insertAdjacentHTML("afterbegin", renderGuidance(guidance));
   const technicalNodes = Array.from(report.querySelectorAll(".verification-details"));
   if (!technicalNodes.length) return;
   const details = document.createElement("details");
