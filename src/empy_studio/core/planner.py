@@ -471,6 +471,10 @@ def _roles(
             "security",
             "permission",
             "authentication",
+            "امنیت",
+            "مجوز",
+            "احراز هویت",
+            "دسترسی",
         )
     ):
         roles.append("security")

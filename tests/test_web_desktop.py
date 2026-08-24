@@ -804,8 +804,10 @@ def test_failed_verification_is_visible_and_can_seed_a_follow_up_ticket(tmp_path
     assert "Previous Empy verification findings" in state.task.objective
 
     reopened = GuidedState(tmp_path / "workspace")
-    assert reopened.public()["failure_context"] is not None
-    assert "public_html/index.html" in reopened.public()["failure_context"]["suggested_ticket"]
+    # Starting a new corrective plan consumes the old failure banner; the
+    # findings remain part of the new task objective and are not rendered a
+    # second time on the plan screen.
+    assert reopened.public()["failure_context"] is None
 
 
 def test_token_budget_failure_is_classified_as_a_retryable_execution_problem() -> None:
@@ -884,6 +886,30 @@ def test_runtime_failure_has_an_automatic_continuation_hook(tmp_path: Path) -> N
     state._maybe_start_automatic_repair(reason="runtime failure")
 
     assert calls == ["auto-repair"]
+
+
+def test_planning_failure_stays_on_ticket_screen_with_recovery_action(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("before\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+
+    def fail_materialization(task: object) -> None:
+        raise ValueError(
+            "approved implementation plan has no writable files for writing roles (backend)"
+        )
+
+    state._materialize_workflow = fail_materialization  # type: ignore[method-assign]
+    with pytest.raises(ValueError):
+        state.create_plan("Update the backend entrypoint")
+
+    public = state.public()
+    assert public["phase"] == "task"
+    assert public["failure_context"]["kind"] == "no_writable_files"
+    assert public["failure_context"]["repair_available"] is True
+    assert "فایل قابل‌ویرایش" in public["failure_context"]["title"]
+    assert "تغییر نکرده" in public["error"]
 
 
 def test_retry_preserves_and_cleans_dirty_isolated_worktree(tmp_path: Path) -> None:

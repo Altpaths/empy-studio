@@ -171,6 +171,20 @@ def _failure_kind(detail: str) -> str:
     if any(
         marker in normalized
         for marker in (
+            "no writable files for writing roles",
+            "no writable files",
+            "فایل قابل‌ویرایش",
+            "فایل قابل ویرایش",
+            "فایل امن و قابل‌ویرایشی",
+            "فایل امن و قابل ویرایشی",
+            "قابل‌ویرایشی",
+            "قابل ویرایشی",
+        )
+    ):
+        return "no_writable_files"
+    if any(
+        marker in normalized
+        for marker in (
             "dirty_worktree",
             "clean git worktree",
             "file ownership",
@@ -242,6 +256,12 @@ def _plain_failure_finding(
     """Give a nontechnical user the one fact that blocks delivery."""
 
     normalized = detail.casefold()
+    if kind == "no_writable_files":
+        return (
+            "برای این تیکت فایل امن و قابل‌ویرایشی برای نقش اجرایی پیدا نشد؛ Empy باید فهرست فایل‌ها را دوباره بررسی یا هدف فایل جدید را بسازد."
+            if language == "fa"
+            else "No safe writable target was assigned to the implementation role; Empy must re-check the project index or create the approved missing target."
+        )
     if kind == "verification_contract_mismatch" and "index.html" in normalized:
         expected_path = "index.html"
         if "public_html/index.html" in normalized:
@@ -953,6 +973,43 @@ class GuidedState:
         graph = build_agent_run_graph(plan=plan, selection=context, budget=budget)
         return plan, context, budget, graph
 
+    def _record_planning_failure(
+        self,
+        error: BaseException,
+        *,
+        task: ProductTask | None = None,
+    ) -> None:
+        """Keep plan-construction failures on the ticket screen.
+
+        Planning happens before a persisted run exists.  Without this state
+        transition a graph-construction exception only reaches the HTTP error
+        banner, leaving the user with no repair action and no way to continue.
+        Store the bounded task and an actionable failure context instead; the
+        request handler may still return 400, but the next refresh is a usable
+        recovery screen rather than an unowned error page.
+        """
+
+        message = safe_user_error(error, language=self.language)
+        with self.lock:
+            if task is not None:
+                self.task = task
+                self.active_task_id = task.task_id
+            self.phase = "task"
+            self.plan = None
+            self.context = None
+            self.budget = None
+            self.graph = None
+            self.benchmark = None
+            self.run = None
+            self.verification = None
+            self.review = None
+            self.export = None
+            self.node_states.clear()
+            self.error = message
+            self.message_level = "error"
+            self.message = message
+        self._capture_failure_context()
+
     def select_task(self, task_id: str, *, restore: bool = False) -> None:
         if self.active_project_id is None or self.detection is None:
             raise RuntimeError("Choose a project first.")
@@ -960,7 +1017,11 @@ class GuidedState:
         if saved.project_id != self.active_project_id:
             raise ValueError("task does not belong to the selected project")
         task = self._task_from_contract(saved)
-        plan, context, budget, graph = self._materialize_workflow(task)
+        try:
+            plan, context, budget, graph = self._materialize_workflow(task)
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            self._record_planning_failure(exc, task=task)
+            raise
         releases = self.store.list_task_releases(task.task_id)
         latest_release = releases[0] if releases else None
         release_manifest = (
@@ -1033,6 +1094,9 @@ class GuidedState:
                 if restore
                 else "تیکت انتخاب شد."
             )
+        # A successful task selection starts from that task's own artifacts;
+        # do not carry a planning failure from a different ticket into it.
+        self._clear_failure_context()
         self.store.set_setting("active_task_id", task.task_id)
         self._restore_task_artifacts(task.task_id)
 
@@ -1231,7 +1295,11 @@ class GuidedState:
                     "kind": failure_kind,
                 }
             )
-            kind = failure_kind if failure_kind in {"dirty_worktree", "token_budget"} else "run_failed"
+            kind = failure_kind if failure_kind in {
+                "dirty_worktree",
+                "token_budget",
+                "no_writable_files",
+            } else "run_failed"
         if not diagnostics and not failures:
             return None
         unique_diagnostics = list(dict.fromkeys(diagnostics))[:8]
@@ -1295,6 +1363,7 @@ class GuidedState:
             )
             suggested_prefix = "Resolve the previous failure at its root, not by changing the ticket text."
             action_map = {
+                "no_writable_files": "Rebuild the bounded project index and assign the implementation role a real writable source file or an explicitly approved missing target; do not stop at a read-only plan.",
                 "missing_dependency": "Install the missing project dependency in the isolated copy, or add an explicit safe verification manifest. Do not silently skip the required check.",
                 "missing_verification_contract": "Add or repair the project's explicit .empy/verification.json contract, or provide a supported test/build/lint entry point.",
                 "missing_file_or_route": "Inspect whether the reported file or route is truly required. If the check is inconsistent with the project's real entry point, fix the check contract; do not create a placeholder only to make it pass.",
@@ -1317,6 +1386,7 @@ class GuidedState:
             )
             suggested_prefix = "علت خطای قبلی را ریشه‌ای اصلاح کن، نه اینکه فقط متن تیکت را عوض کنی."
             action_map = {
+                "no_writable_files": "فهرست محدود پروژه را دوباره بساز و نقش اجرایی را به یک فایل واقعیِ قابل‌ویرایش یا هدف جدیدِ صریحاً تأییدشده وصل کن؛ برنامهٔ فقط‌خواندنی نساز.",
                 "missing_dependency": "وابستگی گمشده را در کپی ایزوله نصب/تأمین کن یا یک قرارداد بررسی امن در .empy/verification.json تعریف کن؛ تست لازم نباید بی‌صدا رد شود.",
                 "missing_verification_contract": "قرارداد .empy/verification.json یا ورودی تست/build/lint پشتیبانی‌شده را اصلاح کن تا Verification دقیقاً بداند چه چیزی را باید اجرا کند.",
                 "missing_file_or_route": "بررسی کن فایل یا مسیر گزارش‌شده واقعاً برای پروژه لازم است یا تست با ورودی واقعی پروژه ناسازگار است. قرارداد تست را اصلاح کن؛ فقط برای سبزکردن تست فایل صوری نساز.",
@@ -1339,6 +1409,27 @@ class GuidedState:
                 title = "مصرف توکن این مرحله بیش از حد شد"
                 summary = "Empy این مرحله را قبل از تولید نتیجهٔ کامل متوقف کرد؛ هنوز ZIP آماده نیست."
                 next_step = "روی «اصلاح خودکار» بزنید؛ همان تغییر با context کوچک‌تر و بدون discovery تکراری اجرا می‌شود."
+        if first_kind == "no_writable_files":
+            if self.language == "en":
+                title = "The ticket was not connected to a writable file"
+                summary = (
+                    "Empy found an implementation role but its bounded project index did not assign a safe writable target. "
+                    "No project file was changed."
+                )
+                next_step = (
+                    "Choose Automatically repair and rerun. Empy will refresh the project index, select the real source file, "
+                    "or create the approved missing target before it starts an Agent."
+                )
+            else:
+                title = "تیکت به فایل قابل‌ویرایش وصل نشد"
+                summary = (
+                    "Empy برای نقش اجرایی فایل امن و قابل‌ویرایش پیدا نکرد؛ هیچ فایل پروژه تغییر نکرده است. "
+                    "مسیر انتخاب فایل باید اصلاح شود."
+                )
+                next_step = (
+                    "روی «اصلاح خودکار و اجرای دوباره» بزنید؛ Empy فهرست پروژه را تازه می‌کند، فایل واقعی را انتخاب می‌کند "
+                    "یا هدفِ مجازِ فایل جدید را قبل از شروع Agent می‌سازد."
+                )
         if first_kind == "dirty_worktree":
             if self.language == "en":
                 title = "The previous attempt needs a safe retry"
@@ -1607,7 +1698,11 @@ class GuidedState:
             definition_of_done_text=DEFAULT_DEFINITION_OF_DONE,
         )
         ready = mark_ready_for_planning(task)
-        plan, context, budget, graph = self._materialize_workflow(ready)
+        try:
+            plan, context, budget, graph = self._materialize_workflow(ready)
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            self._record_planning_failure(exc, task=ready)
+            raise
         contract = {
             "task": asdict(ready),
             "plan": plan.to_dict(),
@@ -1651,8 +1746,11 @@ class GuidedState:
             self.phase = "plan"
             self.error = None
             self.continuation_context = None
+            self.failure_context = None
             self.message = "برنامه و مالکیت فایل‌ها آماده شد."
         self.store.set_setting("active_task_id", ready.task_id)
+        if self.active_project_id is not None:
+            self.store.set_setting(self._failure_context_setting_key(self.active_project_id), None)
 
     def run_benchmark(self) -> BenchmarkResult:
         if self.task is None or self.detection is None or self.plan is None:
