@@ -284,7 +284,7 @@ def test_writing_plan_without_existing_ui_file_gets_safe_creation_target(tmp_pat
     graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
 
     frontend = next(node for node in graph.nodes if node.agent_role == "frontend")
-    assert frontend.owned_files == ("index.html",)
+    assert frontend.owned_files == ("index.html", "src/")
     assert (tmp_path / "index.html").exists() is False
 
 

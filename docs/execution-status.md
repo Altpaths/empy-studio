@@ -31,8 +31,8 @@ new product behavior is merged.
 - Real verification: tests, compile, and Ruff passed.
 - Real review: only the approved source file remained visible after generated
   and sensitive paths were filtered.
-- Real delivery: single-root ZIP, manifest, checksum, and extraction
-  verification passed.
+- Real delivery: project-relative change-only ZIP, manifest, checksum, and
+  DirectAdmin-root extraction verification passed.
 - Workspace restart now restores the active project, active ticket, contract,
   plan, graph, and selectable ticket history.
 - Workspace schema v2 records and restores verified project release history.

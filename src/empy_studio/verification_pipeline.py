@@ -302,17 +302,20 @@ def map_project_verification(detection: ProjectDetection) -> tuple[VerificationC
                     (str(root / "vendor" / "bin" / "phpunit"),),
                 )
             )
-        else:
-            for index, source_file in enumerate(_php_source_files(root), start=1):
-                relative_path = source_file.relative_to(root).as_posix()
-                checks.append(
-                    VerificationCheck(
-                        check_id=f"php-lint-{index}",
-                        label=f"PHP syntax · {relative_path}",
-                        category="lint",
-                        command=("php", "-l", str(source_file)),
-                    )
+        # Composer validation proves only the package manifest.  It must never
+        # turn an unimplemented or syntactically broken PHP feature into a
+        # green release gate, so syntax-check application sources in every
+        # plain-PHP project, with or without Composer metadata.
+        for index, source_file in enumerate(_php_source_files(root), start=1):
+            relative_path = source_file.relative_to(root).as_posix()
+            checks.append(
+                VerificationCheck(
+                    check_id=f"php-lint-{index}",
+                    label=f"PHP syntax · {relative_path}",
+                    category="lint",
+                    command=("php", "-l", str(source_file)),
                 )
+            )
     elif project_type == "node":
         scripts = _node_scripts(root)
         node_checks: tuple[tuple[VerificationCategory, str], ...] = (

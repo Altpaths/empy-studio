@@ -45,7 +45,7 @@ def test_plain_php_composer_mapping_keeps_test_contract_visible_without_dependen
     checks = map_project_verification(detection)
 
     assert detection.descriptor.project_type == "php"
-    assert [item.check_id for item in checks] == ["build", "tests"]
+    assert [item.check_id for item in checks] == ["build", "tests", "php-lint-1"]
     assert checks[0].command == ("composer", "validate", "--no-check-publish")
     assert checks[1].command == (
         "composer",
@@ -87,7 +87,7 @@ def test_nested_composer_project_maps_real_test_script(tmp_path: Path) -> None:
     checks = map_project_verification(detection)
 
     assert detection.effective_verification_root == public_html.resolve()
-    assert [item.check_id for item in checks] == ["build", "tests"]
+    assert [item.check_id for item in checks] == ["build", "tests", "php-lint-1"]
     assert checks[1].command == (
         "composer",
         "--no-interaction",

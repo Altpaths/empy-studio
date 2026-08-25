@@ -5,6 +5,7 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Final, Literal
 
 from .context_selector import ContextPack, ContextSelection
@@ -582,6 +583,48 @@ def _build_ownership(
                 ),
             )
         )
+
+    writing_steps = tuple(
+        step for step in plan.steps if step.suggested_agent in WRITING_ROLES
+    )
+    if len(writing_steps) == 1:
+        # A single implementation Agent must be able to create a required
+        # module, not merely edit whichever existing file happened to rank
+        # first.  Grant the detected application root as a bounded creation
+        # scope.  Runtime auditing still rejects secrets, dependencies,
+        # generated files, Git metadata, and every path outside this scope.
+        writing_step = writing_steps[0]
+        marker = next(
+            (
+                item.split(":", 1)[1]
+                for item in selection.project_brain.markers
+                if item.startswith("verification-root:")
+            ),
+            None,
+        )
+        if marker:
+            application_scope = marker.rstrip("/") + "/"
+        elif plan.project_type in {"python", "node", "rust"} and (
+            Path(plan.project_root) / "src"
+        ).is_dir():
+            application_scope = "src/"
+        else:
+            application_scope = "./"
+        if application_scope not in {item.relative_path for item in ownership}:
+            owner = assignments[writing_step.step_id]
+            ownership.append(
+                FileOwnership(
+                    relative_path=application_scope,
+                    owner_node_id=f"node-{writing_step.step_id}",
+                    owner_agent_id=owner.agent_id,
+                    owner_step_id=writing_step.step_id,
+                    reader_agent_ids=(),
+                    reason=(
+                        "single-writer application creation scope; protected and "
+                        "generated paths remain denied by runtime policy"
+                    ),
+                )
+            )
     return tuple(ownership)
 
 

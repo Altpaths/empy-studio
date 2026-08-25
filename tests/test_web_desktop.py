@@ -912,7 +912,7 @@ def test_planning_failure_stays_on_ticket_screen_with_recovery_action(tmp_path: 
     assert "تغییر نکرده" in public["error"]
 
 
-def test_retry_preserves_and_cleans_dirty_isolated_worktree(tmp_path: Path) -> None:
+def test_retry_carries_partial_work_and_restores_cumulative_review_diff(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
     (source / "README.md").write_text("before\n", encoding="utf-8")
@@ -927,7 +927,8 @@ def test_retry_preserves_and_cleans_dirty_isolated_worktree(tmp_path: Path) -> N
     recovered = state._prepare_clean_worktree_for_run()
 
     assert recovered == ("README.md",)
-    assert (isolated_root / "README.md").read_text(encoding="utf-8") == "before\n"
+    assert (isolated_root / "README.md").read_text(encoding="utf-8") == "unfinished attempt\n"
+    assert state.carry_forward_base_revision is not None
     assert not subprocess.run(
         ("git", "status", "--porcelain"),
         cwd=isolated_root,
@@ -935,14 +936,16 @@ def test_retry_preserves_and_cleans_dirty_isolated_worktree(tmp_path: Path) -> N
         capture_output=True,
         check=True,
     ).stdout.strip()
-    stash = subprocess.run(
-        ("git", "stash", "list"),
+    state._restore_carry_forward_review_base(isolated_root)
+    dirty = subprocess.run(
+        ("git", "status", "--porcelain"),
         cwd=isolated_root,
         text=True,
         capture_output=True,
         check=True,
     ).stdout
-    assert "Empy recovery" in stash
+    assert "README.md" in dirty
+    assert state.carry_forward_base_revision is None
     assert (source / "README.md").read_text(encoding="utf-8") == "before\n"
 
 
