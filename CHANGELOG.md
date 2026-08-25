@@ -1,3 +1,15 @@
+## [0.1.47] - 2026-08-25
+
+### Make the downloadable macOS trial genuinely empty
+
+- Pass `--clean-workspace` through the GitHub macOS app build so the Finder
+  app starts an isolated empty workspace instead of reopening the normal
+  persistent Empy history.
+- Keep the normal persistent workspace behavior available to the CLI while
+  making the published trial artifact match its documented behavior.
+- Add a release regression check so the clean-app flag cannot silently drop
+  from the workflow again.
+
 ## [0.1.46] - 2026-08-24
 
 ### Make planning failures recoverable and non-duplicated
