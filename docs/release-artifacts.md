@@ -48,7 +48,8 @@ The Finder-launchable app is built only on macOS with the release extra:
 python -m pip install ".[release]"
 python scripts/build_macos_app.py \
   --output "build/Empy Studio.app" \
-  --architecture auto
+  --architecture auto \
+  --clean-workspace
 ```
 
 `auto`, `arm64`, `x86_64`, and `universal2` are accepted. The command fails if
