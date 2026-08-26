@@ -169,11 +169,7 @@ def test_relevance_prefers_task_scope_and_quality_files(tmp_path: Path) -> None:
         item.relative_path.startswith("resources/")
         for item in frontend_packs[0].files
     )
-    assert quality_packs
-    assert any(
-        item.relative_path.startswith("tests/")
-        for item in quality_packs[0].files
-    )
+    assert quality_packs == []
 
 
 def test_scoped_code_ticket_skips_discovery_and_repeated_documentation(

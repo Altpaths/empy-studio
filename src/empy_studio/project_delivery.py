@@ -459,11 +459,14 @@ def import_project_archive(source: str | Path, workspace_root: str | Path) -> Im
     )
 
 
-def _deterministic_zip(destination: Path, root_name: str, members: Iterable[tuple[Path, str]]) -> None:
+def _deterministic_zip(destination: Path, members: Iterable[tuple[Path, str]]) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for source, relative in members:
-            info = zipfile.ZipInfo(f"{root_name}/{relative}", date_time=(1980, 1, 1, 0, 0, 0))
+            # Archive names are project-relative so uploading the ZIP into a
+            # DirectAdmin domain/project root and extracting it places
+            # public_html/... and sibling paths directly where they belong.
+            info = zipfile.ZipInfo(relative, date_time=(1980, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
             archive.writestr(info, source.read_bytes())
@@ -598,20 +601,18 @@ def materialize_baseline_copy(
 
 def verify_project_archive(archive_path: str | Path, manifest: dict[str, Any]) -> None:
     archive = Path(archive_path).expanduser().resolve()
-    expected_root = str(manifest["project_name"])
     expected_files = {str(item["path"]): str(item["sha256"]) for item in manifest["files"]}
     with zipfile.ZipFile(archive) as handle:
         names = set(handle.namelist())
         if any(name.startswith("/") or ".." in PurePosixPath(name).parts for name in names):
             raise ValueError("exported archive contains an unsafe path")
-        if any(name.split("/", 1)[0] != expected_root for name in names):
-            raise ValueError("exported archive must contain exactly one project root")
         actual: dict[str, str] = {}
         for name in names:
             if name.endswith("/"):
                 continue
-            relative = name.split("/", 1)[1]
-            actual[relative] = _sha256_bytes(handle.read(name))
+            if _safe_member_name(name, DELIVERY_EXCLUDED_NAMES) is None:
+                raise ValueError("exported archive contains a protected path")
+            actual[name] = _sha256_bytes(handle.read(name))
     if actual != expected_files:
         raise ValueError("exported archive failed its manifest verification")
 
@@ -650,15 +651,18 @@ def export_project_zip(
     manifest = _expected_manifest(root, members)
     manifest.update(
         {
-            "schema_version": 2,
+            "schema_version": 3,
             "archive_mode": "delta",
-            "extraction_root": root.name,
+            "extraction_root": ".",
+            "deployment_instruction": (
+                "Upload this ZIP into the project/domain root in DirectAdmin and extract it there."
+            ),
             "baseline_snapshot_sha256": delta.baseline_sha256,
             "changed_files": list(delta.changed_files),
             "deleted_files": list(delta.deleted_files),
         }
     )
-    _deterministic_zip(target, root.name, members)
+    _deterministic_zip(target, members)
     verify_project_archive(target, manifest)
     manifest_path = target.with_suffix(".manifest.json")
     checksum_path = target.with_suffix(target.suffix + ".sha256")
@@ -677,5 +681,5 @@ def export_project_zip(
         changed_files=delta.changed_files,
         deleted_files=delta.deleted_files,
         baseline_sha256=delta.baseline_sha256,
-        extraction_root=root.name,
+        extraction_root=".",
     )

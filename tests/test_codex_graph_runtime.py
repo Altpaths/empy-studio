@@ -138,7 +138,8 @@ def test_prompt_contains_bounded_context_and_safety_rules(tmp_path: Path) -> Non
     assert "Provider-neutral local estimate" in prompt
     assert "Writing nodes must not spend provider time" in prompt
     assert "Empy's verification pipeline" in prompt
-    assert "A provider Quality node is planned" in prompt
+    assert "No provider Quality node is planned" in prompt
+    assert "EMPY_NODE_RESULT: PASS" in prompt
     assert "Do not claim that a provider Quality node" in prompt
     assert "current working tree and current file contents" in prompt
     assert str(node.token_limit) in prompt
@@ -254,8 +255,8 @@ def test_runtime_runs_independent_wave_in_parallel_when_driver_allows_it(
 
     assert result.status == "completed"
     assert len(result.schedule) == 1
-    assert result.schedule[0].mode == "parallel"
-    assert result.schedule[0].capacity == 3
+    assert result.schedule[0].mode == "serial"
+    assert result.schedule[0].capacity == 1
     assert tuple(item.node_id for item in result.node_results) == tuple(
         node.node_id for node in nodes
     )

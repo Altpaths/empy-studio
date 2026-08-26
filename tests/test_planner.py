@@ -87,7 +87,8 @@ def test_generates_bounded_plan(
     assert "resources/views/" in (
         value.likely_paths
     )
-    assert value.estimated_agents >= 2
+    assert value.estimated_agents == 1
+    assert [step.suggested_agent for step in value.steps] == ["frontend"]
     assert value.estimated_tokens > 0
 
 
@@ -152,7 +153,7 @@ def test_persian_php_homepage_ticket_gets_a_writer_for_nested_entrypoint(
     value = generate_execution_plan(task=current, project=project)
 
     agents = {step.suggested_agent for step in value.steps}
-    assert {"discovery", "frontend", "backend", "quality"} <= agents
+    assert agents == {"frontend", "backend"}
     assert any(path.startswith("public_html/") for path in value.likely_paths)
 
 

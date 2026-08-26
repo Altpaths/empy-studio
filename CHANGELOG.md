@@ -1,3 +1,34 @@
+## [0.1.48] - 2026-08-25
+
+### Make implementation runs result-driven and DirectAdmin-ready
+
+- Replace redundant provider discovery and quality turns with Empy's local
+  Project Brain and deterministic Verification whenever an implementation
+  ticket has a supported verification contract. Mixed implementation domains
+  still receive separate writers when their ownership does not overlap.
+- Detect the real plain-PHP application root, rank bilingual ticket concepts
+  against English filenames, and grant one safe writer a bounded application
+  creation scope while continuing to deny secrets, dependencies, generated
+  files, and Git metadata.
+- Treat a zero-change writer or an Agent-declared failed objective as a failed
+  run even when the provider process exits successfully. Enforce the fresh
+  token ceiling on final provider accounting instead of displaying an
+  over-budget turn as successful.
+- Carry safe partial changes into one corrective pass instead of stashing and
+  repeating them, then restore the cumulative diff for final human Review.
+- Always syntax-check plain-PHP source alongside Composer validation, so a
+  valid package manifest cannot falsely verify an unimplemented feature.
+- Produce deterministic change-only ZIPs with project-relative paths such as
+  `public_html/...`; upload them into the DirectAdmin project/domain root and
+  extract there without creating a duplicate project folder.
+- Keep raw Agent reports and verification diagnostics inside one optional
+  technical-details panel while the main result focuses on new token work,
+  Verification, Review, and ZIP readiness.
+- Add a synthetic end-to-end PHP/API/report fixture proving one relevant
+  writer, real file creation, false-success rejection, and a two-file
+  DirectAdmin extraction archive without using any customer project as a
+  repository fixture.
+
 ## [0.1.47] - 2026-08-25
 
 ### Make the downloadable macOS trial genuinely empty

@@ -267,7 +267,17 @@ def _likely_paths(
     elif project_type == "python" or project_type == "node" or project_type == "rust":
         paths.extend(("src/", "tests/"))
     elif project_type == "php":
-        paths.extend(("src/", "app/", "public/", "routes/", "tests/"))
+        # Plain PHP projects frequently keep the whole application directly
+        # in a nested deployment root such as public_html/.  Assuming a
+        # framework-style src/app/routes layout hid the real files and made a
+        # low-relevance file the writer's only target.  Always include the
+        # detected application root, then add only conventional directories
+        # that actually exist beneath it.
+        paths.append("./")
+        verification_root = project.effective_verification_root
+        for directory in ("src", "app", "public", "routes", "tests", "assets"):
+            if (verification_root / directory).is_dir():
+                paths.append(f"{directory}/")
         if any(
             word in text
             for word in (
@@ -290,10 +300,8 @@ def _likely_paths(
                 "خانه",
             )
         ):
-            # The PHP detector may use a nested public root.  The explicit
-            # root scope lets the frontend writer see existing static pages
-            # and, when necessary, receive a virtual ownership target for a
-            # missing homepage without exposing the whole dependency tree.
+            # Kept as an explicit branch for readability: the application
+            # root was already added above and is deduplicated below.
             paths.append("./")
     elif project_type == "go":
         paths.extend(("./",))
@@ -400,6 +408,16 @@ def _should_skip_discovery(
         "معماری",
         "شناخت",
     )
+    implementation_requested = (
+        task.kind in {"bug_fix", "feature", "ui_improvement"}
+        or _contains_any_term(text, IMPLEMENTATION_TERMS)
+    )
+    # Project Brain and the bounded context selector already perform local,
+    # deterministic discovery.  A provider discovery turn before every
+    # implementation repeats the same scan, spends tokens, and cannot expand
+    # the writer's approved ownership anyway.
+    if implementation_requested and likely_paths:
+        return True
     return (
         risk == "low"
         and bool(likely_paths)
@@ -461,6 +479,15 @@ def _roles(
             "controller",
             "database",
             "model",
+            "integration",
+            "openai",
+            "avalai",
+            "ai",
+            "ای پی آی",
+            "ای‌پی‌آی",
+            "هوش مصنوعی",
+            "اتصال",
+            "سرویس",
         )
     ):
         roles.append("backend")
@@ -518,7 +545,7 @@ def _has_deterministic_verification(project: ProjectDetection) -> bool:
         return True
     if project.descriptor.project_type in {"php", "laravel", "rust", "go"}:
         return True
-    return (root / ".empy" / "verification.json").is_file()
+    return bool((root / ".empy" / "verification.json").is_file())
 
 
 def _should_skip_provider_quality(
@@ -526,13 +553,17 @@ def _should_skip_provider_quality(
     project: ProjectDetection,
     risk: RiskLevel,
 ) -> bool:
-    text = " ".join((task.title, task.objective, *task.requirements))
-    return (
-        risk == "low"
-        and _has_explicit_file_scope(text)
-        and task.kind in {"bug_fix", "feature", "ui_improvement", "custom"}
-        and _has_deterministic_verification(project)
+    del risk
+    text = " ".join((task.title, task.objective, *task.requirements)).casefold()
+    implementation_requested = (
+        task.kind in {"bug_fix", "feature", "ui_improvement"}
+        or _contains_any_term(text, IMPLEMENTATION_TERMS)
     )
+    # Quality is an evidence phase, not a second language-model opinion.
+    # Whenever Empy has a deterministic contract, run that contract locally
+    # after the writer instead of paying a provider to describe checks that
+    # Empy will run again.
+    return implementation_requested and _has_deterministic_verification(project)
 
 
 def _build_steps(

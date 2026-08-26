@@ -166,7 +166,7 @@ def test_import_and_export_keep_runtime_config_and_logs_out_of_delivery(
     assert f"{imported.project_root.name}/config/config.example.php" not in names
 
 
-def test_archive_import_rejects_traversal_and_export_is_single_root(tmp_path: Path) -> None:
+def test_archive_import_rejects_traversal_and_export_is_directadmin_relative(tmp_path: Path) -> None:
     source_archive = tmp_path / "input.zip"
     with zipfile.ZipFile(source_archive, "w") as archive:
         archive.writestr("demo/README.md", "hello\n")
@@ -189,7 +189,7 @@ def test_archive_import_rejects_traversal_and_export_is_single_root(tmp_path: Pa
     assert exported.file_count == 1
     with zipfile.ZipFile(exported.archive_path) as archive:
         names = archive.namelist()
-    assert names == [f"{imported.project_root.name}/README.md"]
+    assert names == ["README.md"]
     assert "../outside.txt" in imported.skipped_members
     assert imported.copied_members == 1
     assert not (tmp_path / "outside.txt").exists()
@@ -220,16 +220,11 @@ def test_delta_export_contains_only_changed_files_and_baseline_can_be_rebuilt(
     )
 
     with zipfile.ZipFile(exported.archive_path) as archive:
-        assert archive.namelist() == [
-            f"{imported.project_root.name}/public_html/index.php"
-        ]
+        assert archive.namelist() == ["public_html/index.php"]
         deployment_root = tmp_path / "deployment"
         archive.extractall(deployment_root)
     assert (
-        deployment_root
-        / imported.project_root.name
-        / "public_html"
-        / "index.php"
+        deployment_root / "public_html" / "index.php"
     ).read_text(encoding="utf-8") == "<?php echo 'updated';\n"
     manifest = exported.manifest_path.read_text(encoding="utf-8")
     assert '"archive_mode": "delta"' in manifest
@@ -326,9 +321,7 @@ def test_delta_export_validates_public_root_links_but_keeps_patch_only_output(
     assert exported.verified is True
     assert exported.changed_files == ("public_html/index.html",)
     with zipfile.ZipFile(exported.archive_path) as archive:
-        assert archive.namelist() == [
-            f"{imported.project_root.name}/public_html/index.html"
-        ]
+        assert archive.namelist() == ["public_html/index.html"]
 
 
 def test_import_rejects_broad_system_roots(tmp_path: Path) -> None:

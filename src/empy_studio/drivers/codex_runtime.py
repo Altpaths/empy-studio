@@ -19,6 +19,7 @@ from empy_studio.core import (
     ProjectDescriptor,
     TokenBudget,
 )
+from empy_studio.core.path_policy import is_sensitive_relative_path
 from empy_studio.token_usage import TokenUsage
 
 from .codex import (
@@ -241,7 +242,8 @@ def build_codex_node_prompt(
         f"Provider-neutral local estimate recorded by Empy: {node.token_limit}\n\n"
         "## Non-negotiable execution rules\n"
         "1. Work only inside the selected project root.\n"
-        "2. Modify only files listed under OWNED FILES.\n"
+        "2. Modify only files listed under OWNED FILES. A path ending in / is an approved "
+        "directory creation scope; every file created or changed must remain below it.\n"
         "3. Treat READ-ONLY FILES as context; do not modify them.\n"
         "4. Do not read or modify protected paths.\n"
         "5. Do not commit, push, merge, tag, publish, or change Git remotes.\n"
@@ -270,7 +272,9 @@ def build_codex_node_prompt(
         "or bypass Empy verification.\n\n"
         "## Required final message\n"
         "Report: work completed, files changed, checks run, remaining risks, "
-        "and whether the node objective passed.\n"
+        "and whether the node objective passed. End with exactly one machine-readable "
+        "line: EMPY_NODE_RESULT: PASS or EMPY_NODE_RESULT: FAIL. Use FAIL whenever "
+        "the objective was not implemented completely or cannot be verified.\n"
     )
 
 
@@ -326,11 +330,14 @@ class CodexGraphRuntime:
             # reads as if they were new reasoning. Small, explicitly scoped
             # implementation nodes disable extra reasoning; higher-budget or
             # sensitive roles retain low reasoning for safer judgment.
-            fresh_token_limit=max(16_000, node.token_limit * 2),
+            # Provider accounting includes system/tool overhead that is not
+            # present in Empy's local context estimate.  A 24k fresh-work cap
+            # is large enough for one bounded writer while still preventing
+            # the 65k+ fresh-token multi-Agent runs observed in production.
+            fresh_token_limit=max(24_000, node.token_limit),
             reasoning_effort=(
                 "none"
-                if node.agent_role in {"frontend", "backend"}
-                and node.token_limit <= 8_000
+                if node.agent_role in {"frontend", "backend", "release"}
                 else "low"
             ),
             ignore_user_config=True,
@@ -384,6 +391,56 @@ class CodexGraphRuntime:
                     timestamp=self._utc_now(),
                     level="error",
                     event_type="run.scope_violation",
+                    message=error_message,
+                    node_id=node.node_id,
+                )
+            )
+        elif (
+            node_result.status == "completed"
+            and task is not None
+            and node.agent_role in {"frontend", "backend", "security", "release"}
+            and not changed_files
+        ):
+            error_message = (
+                "The implementation Agent completed its process but produced no project "
+                "change. Empy will not report the requested work as successful."
+            )
+            node_result = replace(
+                node_result,
+                status="failed",
+                summary="The requested implementation was not produced.",
+                error_code="objective_not_met",
+                error_message=error_message,
+            )
+            report(
+                CodexProgressEvent(
+                    timestamp=self._utc_now(),
+                    level="error",
+                    event_type="run.objective_not_met",
+                    message=error_message,
+                    node_id=node.node_id,
+                )
+            )
+        elif (
+            node_result.status == "completed"
+            and self._summary_declares_failure(node_result.summary)
+        ):
+            error_message = (
+                "The Agent explicitly reported that its objective did not pass. "
+                "Empy will continue through the corrective workflow instead of "
+                "displaying a false success."
+            )
+            node_result = replace(
+                node_result,
+                status="failed",
+                error_code="objective_not_met",
+                error_message=error_message,
+            )
+            report(
+                CodexProgressEvent(
+                    timestamp=self._utc_now(),
+                    level="error",
+                    event_type="run.objective_not_met",
                     message=error_message,
                     node_id=node.node_id,
                 )
@@ -839,13 +896,48 @@ class CodexGraphRuntime:
     @staticmethod
     def _path_is_owned(path: str, owned_files: tuple[str, ...]) -> bool:
         normalized = Path(path).as_posix().lstrip("./")
+        if not normalized or is_sensitive_relative_path(normalized):
+            return False
+        denied_parts = {
+            ".git",
+            "vendor",
+            "node_modules",
+            "dist",
+            "build",
+            "coverage",
+            "__pycache__",
+        }
+        if set(Path(normalized).parts) & denied_parts:
+            return False
         for owned in owned_files:
+            if owned in {".", "./"}:
+                return True
             normalized_owned = Path(owned).as_posix().rstrip("/").lstrip("./")
             if normalized == normalized_owned:
                 return True
             if owned.endswith("/") and normalized.startswith(f"{normalized_owned}/"):
                 return True
         return False
+
+    @staticmethod
+    def _summary_declares_failure(summary: str) -> bool:
+        normalized = summary.casefold().replace("\u200c", " ").replace("*", "")
+        if "empy_node_result: fail" in normalized:
+            return True
+        failure_markers = (
+            "objective failed",
+            "objective did not pass",
+            "could not complete",
+            "cannot complete",
+            "unable to complete",
+            "هدف نود: ناموفق",
+            "وضعیت هدف نود: ناموفق",
+            "نتیجه گره: ناموفق",
+            "قابل انجام نبود",
+            "قابل تأیید نیست",
+            "قابل تأیید نیست",
+        )
+        return any(marker in normalized for marker in failure_markers)
 
     def _skipped_result(
         self,

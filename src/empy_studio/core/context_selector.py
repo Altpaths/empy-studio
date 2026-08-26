@@ -446,6 +446,45 @@ def _tokens(value: str) -> frozenset[str]:
     )
 
 
+def _expanded_task_tokens(value: str) -> frozenset[str]:
+    """Return bilingual semantic tokens used only for relevance ranking.
+
+    Project filenames are commonly English while the ticket is Persian.  A
+    literal intersection therefore ranked unrelated files (for example
+    ``about.php``) above ``journey-report.php`` or ``patrol.php``.  Keep the
+    expansion deliberately small and product-domain neutral; it only maps
+    concepts whose filename equivalents are unambiguous.
+    """
+
+    normalized = value.casefold().replace("\u200c", " ")
+    expanded = set(_tokens(normalized))
+    aliases: dict[str, tuple[str, ...]] = {
+        "گزارش": ("report", "journey", "completion"),
+        "مقایسه": ("compare", "comparison"),
+        "مقابسه": ("compare", "comparison"),
+        "پایش": ("patrol", "monitor", "monitoring", "journey"),
+        "مالی": ("financial", "finance", "analyze"),
+        "تحلیل": ("analyze", "analysis"),
+        "اتصال": ("api", "client", "service", "integration"),
+        "سرویس": ("service", "client", "api"),
+        "صفحه": ("page", "view", "index"),
+        "خانه": ("home", "index"),
+    }
+    for token in tuple(expanded):
+        expanded.update(aliases.get(token, ()))
+    if any(
+        phrase in normalized
+        for phrase in ("ای پی آی", "ای پی ا ی", "ای‌پی‌آی", "api")
+    ):
+        expanded.update(("api", "client", "service", "integration"))
+    if any(
+        phrase in normalized
+        for phrase in ("هوش مصنوعی", "openai", "avalai", "اول ای آی")
+    ):
+        expanded.update(("ai", "openai", "avalai", "analyze", "service", "client"))
+    return frozenset(expanded)
+
+
 def _task_requests_test_changes(task_text: str) -> bool:
     """Return whether the ticket asks the writer to change a test file.
 
@@ -516,7 +555,7 @@ def _normalise_relative(path: Path, root: Path) -> str:
 
 
 def _is_sensitive(relative_path: str) -> bool:
-    return is_sensitive_relative_path(relative_path)
+    return bool(is_sensitive_relative_path(relative_path))
 
 
 def _looks_textual(path: Path, raw: bytes) -> bool:
@@ -1073,7 +1112,7 @@ def _build_pack(
             step.objective,
         )
     )
-    task_tokens = _tokens(task_text)
+    task_tokens = _expanded_task_tokens(task_text)
 
     scored: list[tuple[int, str, tuple[str, ...], _Candidate]] = []
     for candidate in candidates:
@@ -1163,21 +1202,30 @@ def _build_pack(
     # ticket.  Promotion is deterministic and does not broaden the candidate
     # scan or expose protected files.
     if step.suggested_agent in WRITING_ROLES:
-        writable_candidates = sorted(
+        writable_by_path = {
+            candidate.relative_path: candidate
+            for candidate in candidates
+            if _is_writable_candidate_for_role(
+                candidate,
+                role=step.suggested_agent,
+                project=project,
+                task_text=task_text,
+            )
+        }
+        # Pick the highest semantic score.  Alphabetical promotion previously
+        # turned about.php into the only owned backend file even when the
+        # ticket and Project Brain pointed at report/API modules.
+        preferred = next(
             (
                 candidate
-                for candidate in candidates
-                if _is_writable_candidate_for_role(
-                    candidate,
-                    role=step.suggested_agent,
-                    project=project,
-                    task_text=task_text,
-                )
+                for _score, relative, _reasons, candidate in scored
+                if relative in writable_by_path
             ),
-            key=lambda candidate: candidate.relative_path,
+            None,
         )
-        if writable_candidates:
-            preferred = writable_candidates[0]
+        if preferred is None and writable_by_path:
+            preferred = writable_by_path[min(writable_by_path)]
+        if preferred is not None:
             for index, item in enumerate(scored):
                 if item[1] != preferred.relative_path:
                     continue

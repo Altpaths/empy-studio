@@ -419,6 +419,7 @@ class GuidedState:
     failure_context: dict[str, Any] | None = None
     repair_attempts: int = 0
     compact_retry: bool = False
+    carry_forward_base_revision: str | None = None
     imported: ImportedProject | None = None
     import_report: dict[str, Any] | None = None
     detection: ProjectDetection | None = None
@@ -552,6 +553,10 @@ class GuidedState:
     @staticmethod
     def _repair_attempts_setting_key(project_id: str) -> str:
         return f"repair-attempts:{project_id}"
+
+    @staticmethod
+    def _carry_forward_setting_key(project_id: str) -> str:
+        return f"carry-forward-base:{project_id}"
 
     def _load_import_report(self, project_id: str) -> dict[str, Any] | None:
         value = self.store.get_setting(self._import_report_setting_key(project_id))
@@ -1770,13 +1775,14 @@ class GuidedState:
         return result
 
     def _prepare_clean_worktree_for_run(self) -> tuple[str, ...]:
-        """Preserve an unfinished isolated attempt before starting another run.
+        """Checkpoint safe partial work so a corrective run can build on it.
 
-        Codex needs a clean worktree to distinguish the next Agent's files from
-        earlier work. A failed attempt must not trap the user in a terminal/Git
-        loop, so Empy stores it in the isolated repository's stash and retries
-        from the last accepted checkpoint. The imported/original project is
-        never involved in this operation.
+        Stashing the previous attempt made every repair rediscover and rewrite
+        the same files.  Empy now creates a temporary local checkpoint in its
+        isolated Git repository, runs the next Agent from a clean tree, then
+        resets to the pre-checkpoint revision before Review so the user still
+        sees and approves the complete cumulative diff.  The immutable import
+        baseline and the user's original project are never changed.
         """
 
         if self.detection is None:
@@ -1787,6 +1793,17 @@ class GuidedState:
             return ()
 
         paths = tuple(sorted(snapshot.status))
+        unsafe_paths = tuple(
+            path
+            for path in paths
+            if not CodexGraphRuntime._path_is_owned(path, ("./",))
+        )
+        if unsafe_paths:
+            raise RuntimeError(
+                "Empy found a protected or generated path in the isolated partial "
+                "attempt and will not carry it into a repair: "
+                + ", ".join(unsafe_paths)
+            )
         recovery_root = (
             self.workspace_root
             / "recovery"
@@ -1798,7 +1815,7 @@ class GuidedState:
                 {
                     "kind": "isolated_dirty_worktree",
                     "project_relative_paths": list(paths),
-                    "action": "git_stash_include_untracked",
+                    "action": "local_carry_forward_checkpoint",
                     "source": "isolated_workspace_only",
                 },
                 ensure_ascii=False,
@@ -1807,31 +1824,67 @@ class GuidedState:
             + "\n",
             encoding="utf-8",
         )
-        stash_message = f"Empy recovery {recovery_root.name}"
+        head_result = subprocess.run(
+            ("git", "rev-parse", "--verify", "HEAD"),
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if head_result.returncode != 0:
+            detail = head_result.stderr.strip() or "Git baseline is unavailable"
+            raise RuntimeError(
+                "Empy could not identify the isolated review baseline; "
+                f"no new run was started. {detail}"
+            )
+        if self.carry_forward_base_revision is None:
+            self.carry_forward_base_revision = head_result.stdout.strip()
+            if self.active_project_id is not None:
+                self.store.set_setting(
+                    self._carry_forward_setting_key(self.active_project_id),
+                    self.carry_forward_base_revision,
+                )
+        checkpoint_accepted_changes(root, paths)
+        remaining = CodexGraphRuntime._git_snapshot(root)
+        if remaining is not None and remaining.status:
+            raise RuntimeError(
+                "Empy checkpointed the previous isolated changes, but the workspace "
+                "is still not clean; no new run was started. Re-import the project copy."
+            )
+        self.add_log(
+            f"Empy carried {len(paths)} safe partial change(s) into the corrective run.",
+            "warning",
+        )
+        return paths
+
+    def _restore_carry_forward_review_base(self, root: Path) -> None:
+        base = self.carry_forward_base_revision
+        if base is None and self.active_project_id is not None:
+            saved = self.store.get_setting(
+                self._carry_forward_setting_key(self.active_project_id)
+            )
+            base = saved if isinstance(saved, str) and saved else None
+        if base is None:
+            return
         result = subprocess.run(
-            ("git", "stash", "push", "--include-untracked", "--message", stash_message),
+            ("git", "reset", "--mixed", base),
             cwd=root,
             text=True,
             capture_output=True,
             check=False,
         )
         if result.returncode != 0:
-            detail = result.stderr.strip() or result.stdout.strip() or "git stash failed"
+            detail = result.stderr.strip() or result.stdout.strip() or "git reset failed"
             raise RuntimeError(
-                "Empy could not safely preserve the previous isolated changes; "
-                f"no new run was started. {detail}"
+                "Empy completed the corrective Agent but could not restore the cumulative "
+                f"Review diff. {detail}"
             )
-        remaining = CodexGraphRuntime._git_snapshot(root)
-        if remaining is not None and remaining.status:
-            raise RuntimeError(
-                "Empy preserved the previous isolated changes, but the isolated workspace "
-                "is still not clean; no new run was started. Re-import the project copy."
+        self.carry_forward_base_revision = None
+        if self.active_project_id is not None:
+            self.store.set_setting(
+                self._carry_forward_setting_key(self.active_project_id),
+                None,
             )
-        self.add_log(
-            f"Empy preserved {len(paths)} unreviewed isolated change(s) and reset the retry baseline.",
-            "warning",
-        )
-        return paths
 
     def start_run(self) -> None:
         if self.running:
@@ -1999,6 +2052,7 @@ class GuidedState:
                         reason="The Agent run ended before Verification"
                     )
                 return
+            self._restore_carry_forward_review_base(detection.descriptor.root)
             # The Agent may have changed a manifest or lockfile. Reconcile
             # dependencies once more in the same isolated copy before running
             # the final checks; never fabricate an autoloader or skip a check.

@@ -387,7 +387,7 @@ def test_streams_json_events_and_preserves_evidence(
     assert any(event.event_type == "run.completed" for event in events)
 
 
-def test_allows_final_turn_accounting_overage_after_process_completion(
+def test_rejects_final_turn_accounting_overage_after_process_completion(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -421,8 +421,8 @@ def test_allows_final_turn_accounting_overage_after_process_completion(
         artifact_dir=tmp_path / "run" / "node-budget",
     )
 
-    assert result.status == "completed"
-    assert result.error_code is None
+    assert result.status == "failed"
+    assert result.error_code == "budget_exceeded"
     assert result.usage is not None
     assert result.usage.uncached_total == 65
 

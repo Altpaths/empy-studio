@@ -63,11 +63,12 @@ workspace, and rechecks its recorded SHA-256 before sending it to the browser.
 If the archive is missing or has changed, the download is rejected and a new
 export is required.
 
-After a run, the result screen shows a compact report for every graph node:
-agent identity, role, status, duration, changed files, provider-reported usage
-when available, local estimate source, and safe workspace-relative evidence
-references. It also exposes the dependency-wave schedule and whether each wave
-ran serially or in a bounded parallel batch. Missing provider usage is shown as
+After a run, the result screen shows the outcome, uncached provider work,
+Verification, Review, and ZIP readiness first. Per-node reports—agent identity,
+role, status, duration, changed files, provider-reported usage, and safe
+workspace-relative evidence references—remain available inside one optional
+technical-details panel. It also exposes the dependency-wave schedule and
+whether each wave ran serially or in a bounded parallel batch. Missing provider usage is shown as
 `not_reported`; it is never converted into an exact value.
 
 ## Security boundary
