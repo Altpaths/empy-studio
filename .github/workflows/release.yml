@@ -94,8 +94,11 @@ jobs:
           ditto -c -k --norsrc --noextattr --noqtn --keepParent \
             "build/app/Empy Studio.app" \
             "build/app/empy-studio-macos-${{ matrix.architecture }}.zip"
-          shasum -a 256 "build/app/empy-studio-macos-${{ matrix.architecture }}.zip" \
-            > "build/app/empy-studio-macos-${{ matrix.architecture }}.zip.sha256"
+          (
+            cd build/app
+            shasum -a 256 "empy-studio-macos-${{ matrix.architecture }}.zip" \
+              > "empy-studio-macos-${{ matrix.architecture }}.zip.sha256"
+          )
       - uses: actions/upload-artifact@v4
         with:
           name: macos-app-${{ matrix.architecture }}
@@ -215,7 +218,11 @@ jobs:
           rm -f "$SIGNED_ZIP"
           ditto -c -k --norsrc --noextattr --noqtn --keepParent \
             "$APP_PATH" "$SIGNED_ZIP"
-          shasum -a 256 "$SIGNED_ZIP" > "$SIGNED_ZIP.sha256"
+          (
+            cd "$SIGNED_DIR"
+            shasum -a 256 "empy-studio-macos-${{ matrix.architecture }}.zip" \
+              > "empy-studio-macos-${{ matrix.architecture }}.zip.sha256"
+          )
           python - "$EVIDENCE" <<'PY'
           import json
           import os

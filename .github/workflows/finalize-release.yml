@@ -134,7 +134,11 @@ jobs:
           rm -f "$SIGNED_ZIP"
           ditto -c -k --norsrc --noextattr --noqtn --keepParent \
             "$APP_PATH" "$SIGNED_ZIP"
-          shasum -a 256 "$SIGNED_ZIP" > "$SIGNED_ZIP.sha256"
+          (
+            cd "$SIGNED_DIR"
+            shasum -a 256 "empy-studio-macos-${ARCHITECTURE}.zip" \
+              > "empy-studio-macos-${ARCHITECTURE}.zip.sha256"
+          )
           python - "$EVIDENCE" <<'PY'
           import json
           import os
