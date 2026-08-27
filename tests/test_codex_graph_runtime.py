@@ -142,6 +142,8 @@ def test_prompt_contains_bounded_context_and_safety_rules(tmp_path: Path) -> Non
     assert "EMPY_NODE_RESULT: PASS" in prompt
     assert "Do not claim that a provider Quality node" in prompt
     assert "current working tree and current file contents" in prompt
+    assert "at most 4096 output characters" in prompt
+    assert "line counts are unsafe" in prompt
     assert str(node.token_limit) in prompt
 
     without_quality_nodes = tuple(
@@ -216,6 +218,8 @@ def test_runtime_executes_dependency_order(tmp_path: Path) -> None:
     )
     assert len(driver.requests) == len(graph.nodes)
     assert all(request.timeout_seconds == 120 for request in driver.requests)
+    assert all(request.fresh_token_limit is not None for request in driver.requests)
+    assert all(request.fresh_token_limit > 24_000 for request in driver.requests)
     assert result.usage is not None
     assert result.usage.input == sum(10 * index for index in range(1, len(graph.nodes) + 1))
     assert result.usage.output == 3 * len(graph.nodes)

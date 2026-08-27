@@ -1,3 +1,22 @@
+## [0.1.49] - 2026-08-27
+
+### Bound provider work and preserve useful results at the token limit
+
+- Normalize Persian implementation language and common `لینگ`/`لینک`
+  spelling so a small homepage ticket does not trigger redundant discovery.
+- Use one bounded writer for a simple homepage request, select only the real
+  application entry point, and reduce its initial context to a 6 KiB
+  head-and-tail excerpt instead of unrelated files or migrations.
+- Account for the provider execution harness in the visible token budget and
+  require byte-bounded inspection commands to avoid replaying long files.
+- Replace provider quality narration with Empy's deterministic Verification
+  whenever the project has an executable local contract.
+- Preserve a scoped file change when the provider reaches its token ceiling,
+  verify it locally, and continue to Review when it passes instead of
+  discarding the work and automatically repeating the same expensive turn.
+- Add bilingual intent, ownership, context, runtime-budget, and recovery
+  regressions plus a read-only real-project planning check.
+
 ## [0.1.48] - 2026-08-25
 
 ### Make implementation runs result-driven and DirectAdmin-ready

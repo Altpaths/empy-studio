@@ -284,7 +284,7 @@ def test_writing_plan_without_existing_ui_file_gets_safe_creation_target(tmp_pat
     graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
 
     frontend = next(node for node in graph.nodes if node.agent_role == "frontend")
-    assert frontend.owned_files == ("index.html", "src/")
+    assert frontend.owned_files == ("index.html",)
     assert (tmp_path / "index.html").exists() is False
 
 
@@ -324,7 +324,7 @@ def test_missing_php_homepage_gets_virtual_frontend_ownership(tmp_path: Path) ->
     graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
 
     frontend = next(node for node in graph.nodes if node.agent_role == "frontend")
-    assert "public_html/index.html" in frontend.owned_files
+    assert frontend.owned_files == ("public_html/index.html",)
     assert "public_html/index.html" in {
         item.relative_path for item in graph.ownership if item.owner_node_id == frontend.node_id
     }

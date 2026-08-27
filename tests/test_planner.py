@@ -157,6 +157,38 @@ def test_persian_php_homepage_ticket_gets_a_writer_for_nested_entrypoint(
     assert any(path.startswith("public_html/") for path in value.likely_paths)
 
 
+def test_persian_homepage_creation_with_typo_skips_provider_discovery_and_backend(
+    tmp_path: Path,
+) -> None:
+    public_html = tmp_path / "public_html"
+    public_html.mkdir()
+    (public_html / "composer.json").write_text(
+        '{"name":"demo/site","scripts":{"test":"php tests/site-audit.php"}}\n',
+        encoding="utf-8",
+    )
+    (public_html / "index.php").write_text("<?php echo 'app';\n", encoding="utf-8")
+    (public_html / "index.html").write_text("<main></main>\n", encoding="utf-8")
+    (public_html / "tests").mkdir()
+    project = DefaultProjectService().detect(tmp_path)
+    current = ProductTask(
+        task_id="persian-homepage-typo",
+        project_root=str(tmp_path.resolve()),
+        kind="custom",
+        title="برای سایت صفحه اول درست کن و لینگ بده",
+        objective="برای سایت صفحه اول درست کن و لینگ بده",
+        requirements=("صفحه اصلی قابل استفاده باشد",),
+        constraints=(),
+        definition_of_done=("Verification واقعی موفق شود",),
+        status="ready_for_planning",
+    )
+
+    value = generate_execution_plan(task=current, project=project)
+
+    assert [step.suggested_agent for step in value.steps] == ["frontend"]
+    assert "discovery" not in {step.step_id for step in value.steps}
+    assert "quality" not in {step.step_id for step in value.steps}
+
+
 def test_persian_security_ticket_is_routed_to_security_agent(
     tmp_path: Path,
 ) -> None:

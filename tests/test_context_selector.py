@@ -11,9 +11,12 @@ from empy_studio.core import (
     DefaultProjectService,
     ProductTask,
     approve_execution_plan,
+    build_agent_run_graph,
     build_context_selection,
+    build_token_budget,
     context_selector,
     generate_execution_plan,
+    lock_token_budget,
 )
 from empy_studio.core.planner import PlanStep
 from empy_studio.core.project_brain import build_project_brain_index
@@ -223,6 +226,66 @@ def test_scoped_code_ticket_skips_discovery_and_repeated_documentation(
         if pack.agent_role in {"backend", "quality"}:
             assert "README.md" not in {item.relative_path for item in pack.files}
             assert {item.relative_path for item in pack.files} <= named
+
+
+def test_frontend_writer_pack_excludes_sql_and_uses_head_tail_excerpt(
+    tmp_path: Path,
+) -> None:
+    public_html = tmp_path / "public_html"
+    (public_html / "database").mkdir(parents=True)
+    (public_html / "assets").mkdir()
+    (public_html / "index.html").write_text(
+        "<head>important-head</head>\n"
+        + ("<section>middle</section>\n" * 900)
+        + "<footer>important-tail</footer>\n",
+        encoding="utf-8",
+    )
+    (public_html / "assets" / "home.css").write_text(
+        ".hero { display: grid; }\n",
+        encoding="utf-8",
+    )
+    (public_html / "database" / "migration.sql").write_text(
+        "create table unrelated(id int);\n",
+        encoding="utf-8",
+    )
+    (public_html / "composer.json").write_text(
+        '{"name":"demo/site","scripts":{"test":"php -l index.php"}}\n',
+        encoding="utf-8",
+    )
+    project = DefaultProjectService().detect(tmp_path)
+    current = ProductTask(
+        task_id="bounded-persian-homepage",
+        project_root=str(tmp_path.resolve()),
+        kind="custom",
+        title="برای سایت صفحه اول درست کن و لینگ بده",
+        objective="برای سایت صفحه اول درست کن و لینگ بده",
+        requirements=("صفحه اصلی کامل باشد",),
+        constraints=(),
+        definition_of_done=("بررسی محلی موفق شود",),
+        status="ready_for_planning",
+    )
+    plan = approve_execution_plan(
+        generate_execution_plan(task=current, project=project),
+        current_task=current,
+    )
+
+    selection = build_context_selection(task=current, project=project, plan=plan)
+    frontend = next(pack for pack in selection.packs if pack.agent_role == "frontend")
+    paths = {item.relative_path for item in frontend.files}
+    index = next(item for item in frontend.files if item.relative_path == "public_html/index.html")
+
+    assert frontend.total_bytes <= 8_192
+    assert len(frontend.files) <= 3
+    assert frontend.files[0].relative_path == "public_html/index.html"
+    assert not any(path.endswith(".sql") for path in paths)
+    assert "important-head" in index.content
+    assert "important-tail" in index.content
+    assert "Empy omitted the bounded middle section" in index.content
+
+    budget = lock_token_budget(build_token_budget(plan=plan, selection=selection))
+    graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+    frontend_node = next(node for node in graph.nodes if node.agent_role == "frontend")
+    assert frontend_node.owned_files == ("public_html/index.html",)
 
 
 def test_documentation_ticket_keeps_named_readme_in_writer_context(

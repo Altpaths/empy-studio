@@ -50,6 +50,8 @@ IMPLEMENTATION_TERMS: tuple[str, ...] = (
     "دکمه",
     "بساز",
     "ایجاد",
+    "درست کن",
+    "درستش کن",
 )
 RiskLevel = Literal[
     "low",
@@ -359,13 +361,37 @@ def _risk(
     return "low"
 
 
+def _normalise_intent_text(text: str) -> str:
+    """Normalise common bilingual spelling variants before intent matching."""
+
+    value = (
+        text.casefold()
+        .replace("\u200c", " ")
+        .replace("ي", "ی")
+        .replace("ك", "ک")
+        .replace("لینگ", "لینک")
+    )
+    return re.sub(r"\s+", " ", value).strip()
+
+
 def _contains_any_term(text: str, terms: tuple[str, ...]) -> bool:
     """Match whole words/phrases without treating path fragments as domains."""
 
+    normalized = _normalise_intent_text(text)
     return any(
-        re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text) is not None
+        re.search(
+            rf"(?<!\w){re.escape(_normalise_intent_text(term))}(?!\w)",
+            normalized,
+        )
+        is not None
         for term in terms
     )
+
+
+def requests_implementation(text: str) -> bool:
+    """Return whether bilingual ticket text clearly requests a real change."""
+
+    return _contains_any_term(text, IMPLEMENTATION_TERMS)
 
 
 def _has_explicit_file_scope(text: str) -> bool:
@@ -410,7 +436,7 @@ def _should_skip_discovery(
     )
     implementation_requested = (
         task.kind in {"bug_fix", "feature", "ui_improvement"}
-        or _contains_any_term(text, IMPLEMENTATION_TERMS)
+        or requests_implementation(text)
     )
     # Project Brain and the bounded context selector already perform local,
     # deterministic discovery.  A provider discovery turn before every
@@ -519,7 +545,7 @@ def _roles(
     # their narrower patterns.
     if not set(roles) & {"frontend", "backend", "security", "release"} and (
         task.kind in {"bug_fix", "feature", "ui_improvement"}
-        or _contains_any_term(text, IMPLEMENTATION_TERMS)
+        or requests_implementation(text)
     ):
         roles.append("backend")
 
@@ -557,7 +583,7 @@ def _should_skip_provider_quality(
     text = " ".join((task.title, task.objective, *task.requirements)).casefold()
     implementation_requested = (
         task.kind in {"bug_fix", "feature", "ui_improvement"}
-        or _contains_any_term(text, IMPLEMENTATION_TERMS)
+        or requests_implementation(text)
     )
     # Quality is an evidence phase, not a second language-model opinion.
     # Whenever Empy has a deterministic contract, run that contract locally
@@ -705,8 +731,8 @@ def generate_execution_plan(
     # not a read-only audit. Ensure the server-side entry point has an owner
     # whenever the detected application actually has one.
     task_text = " ".join((task.title, task.objective, *task.requirements))
-    implementation_requested = task.kind in {"bug_fix", "feature", "ui_improvement"} or _contains_any_term(
-        task_text.casefold(), IMPLEMENTATION_TERMS
+    implementation_requested = task.kind in {"bug_fix", "feature", "ui_improvement"} or requests_implementation(
+        task_text
     )
     if (
         implementation_requested
@@ -714,6 +740,7 @@ def generate_execution_plan(
         and "frontend" in roles
         and "backend" not in roles
         and (project.effective_verification_root / "index.php").is_file()
+        and not (project.effective_verification_root / "index.html").is_file()
     ):
         roles_without_quality = tuple(role for role in roles if role != "quality")
         roles = (*roles_without_quality, "backend")

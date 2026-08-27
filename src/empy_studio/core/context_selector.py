@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Final
 
 from .path_policy import is_sensitive_relative_path
-from .planner import IMPLEMENTATION_TERMS, AgentRole, ExecutionPlan, PlanStep
+from .planner import AgentRole, ExecutionPlan, PlanStep, requests_implementation
 from .project_brain import ProjectBrainIndex, ProjectBrainRecord
 from .project_service import ProjectDetection
 from .task_intake import ProductTask
@@ -272,9 +272,9 @@ class ContextPolicy:
     # remains meaningful even when a provider adds its own tool/system context.
     # Agents can still inspect owned files directly, but the initial prompt
     # must not reproduce an entire application.
-    max_files_per_pack: int = 8
-    max_bytes_per_file: int = 16_384
-    max_total_bytes_per_pack: int = 65_536
+    max_files_per_pack: int = 6
+    max_bytes_per_file: int = 8_192
+    max_total_bytes_per_pack: int = 24_576
     max_candidate_file_bytes: int = 1_048_576
     max_candidates: int = 2_500
     excluded_directories: tuple[str, ...] = DEFAULT_EXCLUDED_DIRECTORIES
@@ -483,6 +483,44 @@ def _expanded_task_tokens(value: str) -> frozenset[str]:
     ):
         expanded.update(("ai", "openai", "avalai", "analyze", "service", "client"))
     return frozenset(expanded)
+
+
+def _task_requests_homepage(task_text: str) -> bool:
+    normalized = task_text.casefold().replace("\u200c", " ")
+    return any(
+        phrase in normalized
+        for phrase in (
+            "homepage",
+            "home page",
+            "landing page",
+            "صفحه اول",
+            "صفحه اصلی",
+            "صفحه خانه",
+        )
+    )
+
+
+def _task_requests_frontend_assets(task_text: str) -> bool:
+    """Return whether the ticket explicitly calls for styling/assets too."""
+
+    normalized = task_text.casefold().replace("\u200c", " ")
+    return any(
+        phrase in normalized
+        for phrase in (
+            "css",
+            "style",
+            "stylesheet",
+            "layout",
+            "theme",
+            "asset",
+            "استایل",
+            "چیدمان",
+            "قالب",
+            "تم",
+            "ظاهر",
+            "طراحی",
+        )
+    )
 
 
 def _task_requests_test_changes(task_text: str) -> bool:
@@ -829,6 +867,16 @@ def _score_candidate(
         score += 120
         reasons.append("explicitly named in ticket")
 
+    if _task_requests_homepage(task_text):
+        verification_root = project.effective_verification_root
+        homepage_paths = {
+            (verification_root / name).relative_to(project.descriptor.root).as_posix()
+            for name in ("index.html", "index.htm", "index.php")
+        }
+        if relative in homepage_paths:
+            score += 100
+            reasons.append("detected homepage entry point requested by ticket")
+
     overlap = task_tokens & path_tokens
     if overlap:
         points = min(35, len(overlap) * 7)
@@ -944,7 +992,14 @@ def _read_context_file(
     if not _looks_textual(candidate.path, raw):
         raise _SkipCandidate("binary or unsupported file")
 
-    included = raw[:byte_limit]
+    if len(raw) <= byte_limit:
+        included = raw
+    else:
+        marker = b"\n\n... [Empy omitted the bounded middle section] ...\n\n"
+        usable = max(1, byte_limit - len(marker))
+        head_size = max(1, (usable * 2) // 3)
+        tail_size = max(0, usable - head_size)
+        included = raw[:head_size] + marker + (raw[-tail_size:] if tail_size else b"")
     content = included.decode("utf-8", errors="replace")
     return ContextFile(
         relative_path=candidate.relative_path,
@@ -1041,7 +1096,7 @@ def _virtual_writer_target(
 
     if role not in {"frontend", "backend"}:
         return None
-    if not any(term in task_text.casefold() for term in IMPLEMENTATION_TERMS):
+    if not requests_implementation(task_text):
         return None
 
     root = project.effective_verification_root
@@ -1140,10 +1195,24 @@ def _build_pack(
         if exact:
             scored = exact
 
-    task_requests_implementation = any(
-        term in task_text.casefold()
-        for term in IMPLEMENTATION_TERMS
-    )
+    # A writer pack is an edit contract, not a second project scan. Keep only
+    # files that this role could actually own, plus a path explicitly named by
+    # the user. This prevents frontend tickets from receiving unrelated SQL,
+    # migrations, reports, or every file below a broad public_html/ scope.
+    if step.suggested_agent in WRITING_ROLES:
+        scored = [
+            item
+            for item in scored
+            if item[1] in explicit_paths
+            or _is_writable_candidate_for_role(
+                item[3],
+                role=step.suggested_agent,
+                project=project,
+                task_text=task_text,
+            )
+        ]
+
+    task_requests_implementation = requests_implementation(task_text)
     virtual_target: ContextFile | None = None
     virtual_relative = _virtual_writer_target(
         project=project,
@@ -1259,13 +1328,35 @@ def _build_pack(
 
     files: list[ContextFile] = [virtual_target] if virtual_target is not None else []
     total_bytes = 0
+    writer_pack = step.suggested_agent in WRITING_ROLES
+    homepage_writer = (
+        step.suggested_agent == "frontend"
+        and _task_requests_homepage(task_text)
+        and not _task_requests_frontend_assets(task_text)
+        and not explicit_paths
+    )
+    max_files = (
+        1
+        if homepage_writer
+        else min(policy.max_files_per_pack, 3)
+        if writer_pack
+        else policy.max_files_per_pack
+    )
+    max_total_bytes = (
+        min(policy.max_total_bytes_per_pack, 6_144)
+        if homepage_writer
+        else min(policy.max_total_bytes_per_pack, 8_192)
+        if writer_pack
+        else policy.max_total_bytes_per_pack
+    )
+    max_bytes_per_file = min(policy.max_bytes_per_file, 6_144) if writer_pack else policy.max_bytes_per_file
     for score, _relative, reasons, candidate in scored:
-        if len(files) >= policy.max_files_per_pack:
+        if len(files) >= max_files:
             break
-        remaining = policy.max_total_bytes_per_pack - total_bytes
+        remaining = max_total_bytes - total_bytes
         if remaining <= 0:
             break
-        byte_limit = min(policy.max_bytes_per_file, remaining)
+        byte_limit = min(max_bytes_per_file, remaining)
         try:
             context_file = _read_context_file(
                 candidate,

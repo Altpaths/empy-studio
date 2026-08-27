@@ -160,7 +160,8 @@ def test_plain_php_ticket_uses_one_relevant_writer_and_directadmin_zip(
     assert [step.suggested_agent for step in plan.steps] == ["backend"]
     pack = selection.packs[0]
     scores = {item.relative_path: item.score for item in pack.files}
-    assert scores["public_html/journey-report.php"] > scores["public_html/about.php"]
+    assert scores["public_html/journey-report.php"] == max(scores.values())
+    assert pack.total_bytes <= 8_192
     assert "public_html/" in graph.nodes[0].owned_files
 
     driver = _ResultDriver()
@@ -177,7 +178,8 @@ def test_plain_php_ticket_uses_one_relevant_writer_and_directadmin_zip(
 
     assert result.status == "completed"
     assert len(driver.requests) == 1
-    assert driver.requests[0].fresh_token_limit == 24_000
+    assert driver.requests[0].fresh_token_limit is not None
+    assert driver.requests[0].fresh_token_limit > 24_000
     assert driver.requests[0].reasoning_effort == "none"
     exported = export_project_zip(
         imported.project_root,

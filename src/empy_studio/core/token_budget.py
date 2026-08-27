@@ -15,6 +15,11 @@ BudgetStatus = Literal["draft", "locked", "exhausted", "cancelled"]
 RunStatus = Literal["ready", "running", "stopped", "completed"]
 UsageKind = Literal["planning", "agent", "retry", "handoff"]
 
+# Provider usage includes its system/tool harness and usually at least one
+# replay after a tool call. The former budget counted only selected project
+# excerpts, understating real fresh usage by 2x-6x in production.
+PROVIDER_EXECUTION_OVERHEAD_TOKENS = 36_000
+
 
 @dataclass(frozen=True)
 class TokenBudgetPolicy:
@@ -266,7 +271,7 @@ def build_token_budget(
                 f"context selection is missing plan step: {step.step_id}"
             ) from exc
         context_tokens = _context_tokens(pack)
-        instruction_tokens = estimate_tokens(
+        instruction_tokens = PROVIDER_EXECUTION_OVERHEAD_TOKENS + estimate_tokens(
             f"{plan.summary}\n"
             f"{selection.project_brain.summary}\n"
             f"{step.title}\n"
