@@ -587,12 +587,23 @@ def _build_ownership(
     writing_steps = tuple(
         step for step in plan.steps if step.suggested_agent in WRITING_ROLES
     )
-    if len(writing_steps) == 1:
+    bounded_frontend_entry = False
+    if len(writing_steps) == 1 and writing_steps[0].suggested_agent == "frontend":
+        writer_pack = packs[writing_steps[0].step_id]
+        bounded_frontend_entry = bool(writer_pack.files) and all(
+            Path(item.relative_path).name.casefold() in {"index.html", "index.htm"}
+            for item in writer_pack.files
+        )
+
+    if len(writing_steps) == 1 and not bounded_frontend_entry:
         # A single implementation Agent must be able to create a required
         # module, not merely edit whichever existing file happened to rank
         # first.  Grant the detected application root as a bounded creation
         # scope.  Runtime auditing still rejects secrets, dependencies,
         # generated files, Git metadata, and every path outside this scope.
+        # A homepage-only frontend pack is intentionally exempt: its concrete
+        # index target is already writable, and widening it to the complete
+        # deployment root would defeat the ticket's bounded scope.
         writing_step = writing_steps[0]
         marker = next(
             (

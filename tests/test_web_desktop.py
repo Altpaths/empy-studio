@@ -7,6 +7,7 @@ import subprocess
 import threading
 import urllib.error
 import urllib.request
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -1002,6 +1003,97 @@ def test_token_budget_run_has_clear_guidance_and_no_false_verification_failure(t
     assert state.task is not None
     assert "token guard" in state.task.objective
     assert state.task.objective.count("Confirmed runtime detail") == 1
+
+
+def test_budget_limited_scoped_change_is_kept_for_local_verification(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("before\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+    state.create_plan("Update README.md")
+
+    assert state.graph is not None
+    assert state.task is not None
+    writer = next(node for node in state.graph.nodes if node.agent_role == "backend")
+    node_results = []
+    for node in state.graph.nodes:
+        if node.node_id == writer.node_id:
+            node_results.append(
+                CodexNodeExecution(
+                    node_id=node.node_id,
+                    task_id=f"{state.task.task_id}:{node.step_id}",
+                    status="failed",
+                    started_at="now",
+                    finished_at="now",
+                    return_code=0,
+                    thread_id="thread-budget",
+                    summary="The requested file was changed.",
+                    changed_files=("README.md",),
+                    event_count=1,
+                    events_path="events.jsonl",
+                    stderr_path="stderr.log",
+                    final_message_path="final.md",
+                    command_path="command.json",
+                    error_code="budget_exceeded",
+                    error_message="fresh-token limit exceeded",
+                )
+            )
+        else:
+            node_results.append(
+                CodexNodeExecution(
+                    node_id=node.node_id,
+                    task_id=f"{state.task.task_id}:{node.step_id}",
+                    status="skipped",
+                    started_at="now",
+                    finished_at="now",
+                    return_code=None,
+                    thread_id=None,
+                    summary="Skipped after upstream budget warning.",
+                    changed_files=(),
+                    event_count=0,
+                    events_path="events.jsonl",
+                    stderr_path="stderr.log",
+                    final_message_path="final.md",
+                    command_path="command.json",
+                )
+            )
+    result = CodexGraphExecution(
+        schema_version=1,
+        run_id="budget-with-change",
+        graph_id=state.graph.graph_id,
+        task_id=state.task.task_id,
+        project_root=state.graph.project_root,
+        provider="codex",
+        status="failed",
+        started_at="now",
+        finished_at="now",
+        installation=CodexInstallation(
+            availability="available",
+            executable="codex",
+            version="test",
+            authenticated=True,
+            message="ready",
+        ),
+        node_results=tuple(node_results),
+        events=(),
+        error_code="budget_exceeded",
+        error_message="fresh-token limit exceeded",
+    )
+
+    assert state._budget_result_can_continue_to_verification(result) is True
+    promoted = state._promote_verified_budget_result(result)
+    assert promoted.status == "completed"
+    assert promoted.error_code is None
+    assert all(node.status == "completed" for node in promoted.node_results)
+
+    no_change = replace(
+        result,
+        node_results=(replace(result.node_results[0], changed_files=()), *result.node_results[1:]),
+    )
+    assert state._budget_result_can_continue_to_verification(no_change) is False
 
 
 def test_failure_context_identifies_entrypoint_contract_mismatch(tmp_path: Path) -> None:

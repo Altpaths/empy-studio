@@ -1921,6 +1921,79 @@ class GuidedState:
         thread = threading.Thread(target=self._run_worker, args=(run.run_id,), daemon=True, name="empy-web-run")
         thread.start()
 
+    def _budget_result_can_continue_to_verification(
+        self,
+        result: CodexGraphExecution,
+    ) -> bool:
+        """Keep useful scoped changes instead of paying for a blind retry."""
+
+        if result.error_code != "budget_exceeded" or self.graph is None:
+            return False
+        roles = {node.node_id: node.agent_role for node in self.graph.nodes}
+        has_budget_limited_change = False
+        for node in result.node_results:
+            role = roles.get(node.node_id)
+            if node.status == "completed":
+                continue
+            if node.status == "failed" and node.error_code == "budget_exceeded":
+                if not node.changed_files or role not in {"frontend", "backend", "security", "release"}:
+                    return False
+                has_budget_limited_change = True
+                continue
+            if node.status == "skipped" and role == "quality":
+                continue
+            return False
+        return has_budget_limited_change
+
+    def _promote_verified_budget_result(
+        self,
+        result: CodexGraphExecution,
+    ) -> CodexGraphExecution:
+        """Convert a locally verified budget-limited diff into a reviewable run."""
+
+        if self.graph is None:
+            raise RuntimeError("Agent graph is unavailable for budget recovery.")
+        roles = {node.node_id: node.agent_role for node in self.graph.nodes}
+        nodes = []
+        for node in result.node_results:
+            role = roles.get(node.node_id)
+            if node.status == "failed" and node.error_code == "budget_exceeded":
+                nodes.append(
+                    replace(
+                        node,
+                        status="completed",
+                        return_code=0,
+                        summary=(
+                            f"{node.summary}\n\nEmpy retained the scoped change after "
+                            "deterministic Verification passed; provider budget was exceeded."
+                        ),
+                        error_code=None,
+                        error_message=None,
+                    )
+                )
+            elif node.status == "skipped" and role == "quality":
+                nodes.append(
+                    replace(
+                        node,
+                        status="completed",
+                        return_code=0,
+                        summary="Empy's deterministic Verification replaced this Provider quality node.",
+                        error_code=None,
+                        error_message=None,
+                    )
+                )
+            else:
+                nodes.append(node)
+        promoted = replace(
+            result,
+            status="completed",
+            node_results=tuple(nodes),
+            error_code=None,
+            error_message=None,
+        )
+        promoted.validate()
+        return promoted
+
     def cancel_run(self) -> None:
         with self.lock:
             if not self.running or self.runtime is None:
@@ -2037,7 +2110,8 @@ class GuidedState:
             self.run = result
             for node in result.node_results:
                 self.node_states[node.node_id] = node.status
-            if result.status != "completed":
+            budget_recovery = self._budget_result_can_continue_to_verification(result)
+            if result.status != "completed" and not budget_recovery:
                 terminal_message = result.error_message or f"Codex run ended as {result.status}"
                 terminal_state = "cancelled" if result.status == "cancelled" else "failed"
                 self._record_terminal_result(
@@ -2047,11 +2121,17 @@ class GuidedState:
                     message=terminal_message,
                     level="warning" if result.status == "cancelled" else "error",
                 )
-                if terminal_state == "failed":
+                if terminal_state == "failed" and result.error_code != "budget_exceeded":
                     self._maybe_start_automatic_repair(
                         reason="The Agent run ended before Verification"
                     )
                 return
+            if budget_recovery:
+                self.add_log(
+                    "The Provider budget was exceeded after a scoped file change; "
+                    "Empy is verifying that preserved change locally before deciding on any retry.",
+                    "warning",
+                )
             self._restore_carry_forward_review_base(detection.descriptor.root)
             # The Agent may have changed a manifest or lockfile. Reconcile
             # dependencies once more in the same isolated copy before running
@@ -2073,11 +2153,33 @@ class GuidedState:
             self.verification = verification
             self.review = review
             self.verification_store.save(verification)
+            if budget_recovery and not verification.finalize_allowed:
+                message = (
+                    "The budget-limited change was preserved but did not pass deterministic "
+                    "Verification; only the exact failed check may be repaired."
+                )
+                self._record_terminal_result(
+                    workspace_run_id,
+                    result,
+                    state="failed",
+                    message=message,
+                    level="error",
+                    verification_id=verification.verification_id,
+                    review_id=review.review_id,
+                )
+                self._maybe_start_automatic_repair(
+                    reason="The preserved change failed deterministic Verification"
+                )
+                return
             # Keep the provider run status separate from project verification.
             # Agent execution may complete while a project check fails; marking
             # the whole run failed made the UI falsely blame the Agent phase.
-            final_result = result
-            self.run = result
+            final_result = (
+                self._promote_verified_budget_result(result)
+                if budget_recovery
+                else result
+            )
+            self.run = final_result
             manifest_path = self._save_runtime_result(
                 workspace_run_id,
                 final_result,

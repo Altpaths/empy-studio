@@ -20,6 +20,10 @@ from empy_studio.core import (
     TokenBudget,
 )
 from empy_studio.core.path_policy import is_sensitive_relative_path
+from empy_studio.core.token_budget import (
+    PROVIDER_EXECUTION_OVERHEAD_TOKENS,
+    estimate_tokens,
+)
 from empy_studio.token_usage import TokenUsage
 
 from .codex import (
@@ -251,7 +255,9 @@ def build_codex_node_prompt(
         "7. Keep the implementation bounded to this node and its objective.\n\n"
         "8. Do not read or execute external skills, agent instructions, or files outside the selected project root. "
         "This prompt is the complete execution contract; never spend provider turns loading unrelated guidance.\n"
-        "9. Use targeted searches and bounded file ranges; do not print whole large files, dependency trees, or logs.\n\n"
+        "9. Use targeted searches and bounded file ranges; do not print whole large files, dependency trees, or logs.\n"
+        "10. The bounded context already contains selected file excerpts. Do not re-read an owned file unless an exact omitted section is required.\n"
+        "11. Limit every inspection command to at most 4096 output characters. Use byte-bounded commands such as head -c or tail -c; line counts are unsafe for minified or long-line files.\n\n"
         f"## Owned files\n{owned}\n\n"
         f"## Read-only files\n{read_only}\n\n"
         f"## Protected paths\n{protected}\n\n"
@@ -334,7 +340,13 @@ class CodexGraphRuntime:
             # present in Empy's local context estimate.  A 24k fresh-work cap
             # is large enough for one bounded writer while still preventing
             # the 65k+ fresh-token multi-Agent runs observed in production.
-            fresh_token_limit=max(24_000, node.token_limit),
+            # New plans include the measured Codex harness reserve. Persisted
+            # older plans did not, so derive a compatible floor from the exact
+            # rendered prompt rather than applying the impossible 24k cap.
+            fresh_token_limit=max(
+                node.token_limit,
+                PROVIDER_EXECUTION_OVERHEAD_TOKENS + estimate_tokens(prompt),
+            ),
             reasoning_effort=(
                 "none"
                 if node.agent_role in {"frontend", "backend", "release"}
