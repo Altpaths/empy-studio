@@ -57,7 +57,7 @@ jobs:
             --installer build/release-assets/install-linux-x86_64.sh \
             --package build/release-assets/*.whl \
             --target linux-x86_64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-assets
           path: build/release-assets
@@ -99,7 +99,7 @@ jobs:
             shasum -a 256 "empy-studio-macos-${{ matrix.architecture }}.zip" \
               > "empy-studio-macos-${{ matrix.architecture }}.zip.sha256"
           )
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-app-${{ matrix.architecture }}
           path: build/app/*.zip*
@@ -246,7 +246,7 @@ jobs:
               encoding="utf-8",
           )
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-signed-${{ matrix.architecture }}
           path: build/signed/*
