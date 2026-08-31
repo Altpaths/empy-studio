@@ -69,6 +69,7 @@ class DriverExecutionRequest:
     fresh_token_limit: int | None = None
     reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
     ignore_user_config: bool = True
+    handoff_after_first_file_change: bool = False
 
     def validate(self) -> None:
         self.project.validate()
@@ -82,6 +83,8 @@ class DriverExecutionRequest:
             raise ValueError("fresh_token_limit must be positive when provided")
         if self.reasoning_effort not in {None, "none", "low", "medium", "high"}:
             raise ValueError("unsupported reasoning_effort")
+        if not isinstance(self.handoff_after_first_file_change, bool):
+            raise TypeError("handoff_after_first_file_change must be a boolean")
         for item in self.allowed_paths:
             path = Path(item)
             if path.is_absolute() or ".." in path.parts:

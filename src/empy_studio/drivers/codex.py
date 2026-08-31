@@ -711,6 +711,7 @@ class CodexDriver(BaseDriver):
         thread_id: str | None = None
         parse_error: str | None = None
         budget_exceeded = threading.Event()
+        change_handoff_ready = threading.Event()
         budget_warning_emitted = False
         observed_usage: TokenUsage | None = None
         event_lock = threading.Lock()
@@ -743,6 +744,37 @@ class CodexDriver(BaseDriver):
                     event = cast(dict[str, object], value)
                     with event_lock:
                         events.append(event)
+                    event_type_value = str(event.get("type", ""))
+                    item = event.get("item")
+                    item_type = (
+                        str(item.get("type", "")).lower().replace("_", "")
+                        if isinstance(item, dict)
+                        else ""
+                    )
+                    item_status = (
+                        str(item.get("status", "")).lower()
+                        if isinstance(item, dict)
+                        else ""
+                    )
+                    if (
+                        request.handoff_after_first_file_change
+                        and event_type_value in {"item.completed", "item_completed"}
+                        and item_type in {"filechange", "fileupdate"}
+                        and item_status in {"", "completed"}
+                        and self._changed_files_from_events(tuple(events))
+                    ):
+                        change_handoff_ready.set()
+                        self._emit(
+                            on_progress,
+                            level="info",
+                            event_type="run.change_handoff",
+                            message=(
+                                "The scoped file change is ready; Empy is handing it "
+                                "directly to deterministic Verification."
+                            ),
+                            node_id=node_id,
+                        )
+                        self._terminate_process(process)
                     if request.fresh_token_limit is not None:
                         # Most JSONL events carry no usage at all. Avoid
                         # rescanning the complete event history for every
@@ -946,6 +978,41 @@ class CodexDriver(BaseDriver):
                 changed_files=changed_files,
                 usage=usage,
             )
+
+        if change_handoff_ready.is_set() and changed_files:
+            self._status = "completed"
+            self._emit(
+                on_progress,
+                level="info",
+                event_type="run.completed",
+                message=(
+                    "Codex produced the approved file change; Empy skipped the "
+                    "redundant provider summary turn and continued to Verification."
+                ),
+                node_id=node_id,
+            )
+            result = CodexNodeExecution(
+                node_id=node_id,
+                task_id=request.task_id,
+                status="completed",
+                started_at=started_at,
+                finished_at=self._utc_now(),
+                return_code=0,
+                thread_id=thread_id,
+                summary=(
+                    "The scoped file change was materialized. Empy's deterministic "
+                    "Verification will decide whether the objective passes."
+                ),
+                changed_files=changed_files,
+                event_count=len(events),
+                events_path=str(events_path),
+                stderr_path=str(stderr_path),
+                final_message_path=str(final_message_path),
+                command_path=str(command_path),
+                usage=usage,
+            )
+            result.validate()
+            return result
 
         if budget_exceeded.is_set():
             self._status = "failed"

@@ -41,6 +41,8 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert "sha256" in app_js
     assert 'class="secondary download-link"' in app_js
     assert "verificationReady" in app_js
+    assert "Required checks were detected and will run automatically." in app_js
+    assert 'text().verificationChecks + "</strong><ul>"' not in app_js
     assert 'state.run_status === "completed"' in app_js
     assert 'data-action="choose-zip"' in app_js
     assert "startHere" in app_js

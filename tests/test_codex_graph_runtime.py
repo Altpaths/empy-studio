@@ -220,6 +220,13 @@ def test_runtime_executes_dependency_order(tmp_path: Path) -> None:
     assert all(request.timeout_seconds == 120 for request in driver.requests)
     assert all(request.fresh_token_limit is not None for request in driver.requests)
     assert all(request.fresh_token_limit > 24_000 for request in driver.requests)
+    for node, request in zip(graph.nodes, driver.requests, strict=True):
+        assert request.handoff_after_first_file_change is (
+            node.agent_role in {"frontend", "backend", "security", "release"}
+            and len(node.owned_files) == 1
+            and node.owned_files[0] not in {".", "./"}
+            and not node.owned_files[0].endswith("/")
+        )
     assert result.usage is not None
     assert result.usage.input == sum(10 * index for index in range(1, len(graph.nodes) + 1))
     assert result.usage.output == 3 * len(graph.nodes)

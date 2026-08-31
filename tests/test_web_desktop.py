@@ -1199,7 +1199,7 @@ def test_auto_repair_creates_real_follow_up_plan_once(tmp_path: Path) -> None:
     assert state.task is not None
     assert "علت قطعی شکست قبلی" in state.task.objective
     assert state.plan is not None
-    assert any(step.suggested_agent == "backend" for step in state.plan.steps)
+    assert [step.suggested_agent for step in state.plan.steps] == ["frontend"]
     with pytest.raises(RuntimeError, match="already attempted"):
         state.auto_repair()
 
