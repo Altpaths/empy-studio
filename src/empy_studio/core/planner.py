@@ -725,27 +725,13 @@ def generate_execution_plan(
         include_quality=include_quality,
     )
 
-    # A PHP site can expose its public page as index.php while its visual
-    # surface lives in HTML/CSS assets. A Persian ticket that says
-    # "coordinate the page, links, and buttons" is an implementation request,
-    # not a read-only audit. Ensure the server-side entry point has an owner
-    # whenever the detected application actually has one.
-    task_text = " ".join((task.title, task.objective, *task.requirements))
-    implementation_requested = task.kind in {"bug_fix", "feature", "ui_improvement"} or requests_implementation(
-        task_text
-    )
-    if (
-        implementation_requested
-        and project.descriptor.project_type in {"php", "laravel"}
-        and "frontend" in roles
-        and "backend" not in roles
-        and (project.effective_verification_root / "index.php").is_file()
-        and not (project.effective_verification_root / "index.html").is_file()
-    ):
-        roles_without_quality = tuple(role for role in roles if role != "quality")
-        roles = (*roles_without_quality, "backend")
-        if include_quality:
-            roles = (*roles, "quality")
+    # Do not manufacture a backend Agent merely because a PHP deployment also
+    # contains index.php. Static homepage/navigation tickets are owned by the
+    # frontend writer and may intentionally create index.html (for example
+    # when DirectoryIndex selects it before index.php). Explicit API, route,
+    # database, service, or server-side terms are already routed to backend by
+    # _roles above. The old fallback doubled provider harness cost for a change
+    # that needed only one file and one writer.
 
     base_files = (
         len(task.requirements)

@@ -510,6 +510,48 @@ def test_stops_a_follow_up_turn_after_final_accounting_overage(
     assert result.error_code == "budget_exceeded"
 
 
+def test_single_file_change_hands_off_before_redundant_summary_turn(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "empy_studio.drivers.codex.shutil.which",
+        lambda value: "/usr/local/bin/codex",
+    )
+
+    def process_factory(command: list[str], **kwargs: Any) -> FakeProcess:
+        del kwargs
+        return FakeProcess(
+            stdout=(
+                '{"type":"thread.started","thread_id":"thread-change"}\n'
+                '{"type":"item.completed","item":{"type":"file_change",'
+                '"status":"completed","changes":[{"path":"README.md",'
+                '"kind":"update"}]}}\n'
+            )
+        )
+
+    driver = CodexDriver(
+        artifact_root=tmp_path,
+        command_runner=ready_runner,
+        process_factory=process_factory,
+    )
+    bounded = replace(
+        request(tmp_path),
+        fresh_token_limit=40_000,
+        handoff_after_first_file_change=True,
+    )
+    result = driver.execute_streaming(
+        bounded,
+        node_id="node-single-file",
+        artifact_dir=tmp_path / "run" / "node-single-file",
+    )
+
+    assert result.status == "completed"
+    assert result.error_code is None
+    assert result.changed_files == ("README.md",)
+    assert "deterministic Verification" in result.summary
+
+
 def test_streaming_succeeds_when_usage_is_absent(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

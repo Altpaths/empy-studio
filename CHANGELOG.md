@@ -1,3 +1,26 @@
+## [0.1.50] - 2026-08-31
+
+### End single-file provider work at the real verification handoff
+
+- Stop a single-file writer immediately after Codex reports that its scoped
+  file change was materialized; Empy's Git ownership audit and deterministic
+  Verification now replace the redundant provider summary turn that pushed a
+  completed patch over the fresh-token guard.
+- Route static PHP homepage and navigation tickets to one frontend writer
+  instead of manufacturing a second backend Agent solely because `index.php`
+  also exists. Explicit API, route, database, service, and server-side work
+  still receives a backend owner.
+- Reduce the reproduced Holda homepage plan from two Agents and an 86,398-token
+  ceiling to one Agent and a 44,292-token total ceiling without changing or
+  embedding the customer project.
+- Hide the long Composer/PHP verification-file inventory from the import UI;
+  successful readiness now shows one concise bilingual automatic-check
+  summary while real prerequisite failures remain actionable.
+- Exclude all repository-local `.venv*` directories from source distributions
+  so test environments cannot contaminate downloadable release archives.
+- Add regressions for early file-change handoff, domain routing, runtime request
+  policy, automatic repair, and the simplified browser UI.
+
 ## [0.1.49] - 2026-08-27
 
 ### Bound provider work and preserve useful results at the token limit

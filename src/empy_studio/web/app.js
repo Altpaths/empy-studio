@@ -211,7 +211,7 @@ function renderImportReport() {
   const readinessTitle = readiness.status === "needs_attention" ? text().verificationNeedsAttention : text().verificationReady;
   const readinessDetails = readiness.status === "needs_attention"
     ? "<strong>" + text().verificationDiagnostics + "</strong><ul>" + (readiness.diagnostics || []).map(item => "<li><span>" + escapeHtml(item) + "</span></li>").join("") + "</ul>"
-    : "<strong>" + text().verificationChecks + "</strong><ul>" + (readiness.checks || []).map(item => "<li><span>" + escapeHtml(item) + "</span></li>").join("") + "</ul>";
+    : `<p class="muted">${language === "fa" ? "بررسی‌های لازم شناسایی شده‌اند و هنگام اجرا به‌صورت خودکار انجام می‌شوند." : "Required checks were detected and will run automatically."}</p>`;
   const categoryBlock = report.skipped_files ? "<ul>" + rows + "</ul>" : "";
   return '<section class="import-report warning"><h2>' + text().importReview + '</h2><p>' + escapeHtml(status) + '</p><div class="import-stats"><div><small>' + text().importedFiles + '</small><strong>' + Number(report.copied_files || 0).toLocaleString() + '</strong></div><div><small>' + text().excludedItems + '</small><strong>' + Number(report.skipped_files || 0).toLocaleString() + '</strong></div></div><p class="muted">' + text().importContinue + '</p>' + categoryBlock + '<div class="import-readiness ' + readinessClass + '"><h3>' + readinessTitle + '</h3>' + readinessDetails + '</div></section>';
 }

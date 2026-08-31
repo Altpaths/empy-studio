@@ -353,6 +353,18 @@ class CodexGraphRuntime:
                 else "low"
             ),
             ignore_user_config=True,
+            # A completed Codex file-change event means the patch is already
+            # materialized in the isolated workspace. For a single exact file
+            # there is no useful provider work left: Empy's Git audit and
+            # deterministic Verification are the authoritative handoff. Stop
+            # before Codex starts another expensive turn merely to narrate the
+            # change. Directory and multi-file scopes keep the normal flow.
+            handoff_after_first_file_change=(
+                node.agent_role in {"frontend", "backend", "security", "release"}
+                and len(node.owned_files) == 1
+                and node.owned_files[0] not in {".", "./"}
+                and not node.owned_files[0].endswith("/")
+            ),
         )
         before_snapshot = self._git_snapshot(project.root) if audit_snapshot else None
         node_result = self.driver.execute_streaming(
