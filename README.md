@@ -307,7 +307,7 @@ This source candidate has not been published or declared platform-accepted
 merely because its unit tests pass.
 
 
-**v0.1.54 — Adaptive token economy and OmniRoute connection**
+**v0.1.55 — Ownership-safe persistence scope, adaptive token economy, and OmniRoute connection**
 
 The current release provides a working CLI, adaptive task-graph generation,
 ownership-conflict detection, evidence-backed learning, runtime-aware

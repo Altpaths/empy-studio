@@ -273,8 +273,83 @@ _BACKEND_PARTS: Final[frozenset[str]] = frozenset(
         "service",
         "services",
         "src",
+        "migration",
+        "migrations",
+        "schema",
     }
 )
+
+DATA_MODEL_TERMS: Final[tuple[str, ...]] = (
+    "database",
+    "db",
+    "schema",
+    "migration",
+    "migrations",
+    "table",
+    "tables",
+    "sql",
+    "storage",
+    "persist",
+    "persisted",
+    "save",
+    "store",
+    "stored",
+    "record",
+    "records",
+    "history",
+    "historical",
+    "entity",
+    "entities",
+    "orm",
+    "ذخیره",
+    "ذخیره‌سازی",
+    "تاریخچه",
+    "سوابق",
+    "ثبت",
+    "پایگاه داده",
+    "جدول",
+    "مهاجرت",
+)
+
+DATA_MODEL_PHRASES: Final[tuple[str, ...]] = (
+    "data model",
+    "data-model",
+    "data schema",
+    "پایگاه داده",
+    "ذخیره سازی",
+)
+
+
+def _task_requests_data_model_changes(task_text: str) -> bool:
+    """Detect when persistence files are part of the requested implementation.
+
+    A related schema file is normally read-only context.  A ticket that asks
+    to persist, record, or store data is different: the writer needs an
+    explicit, bounded ownership grant for the matching database/migration/SQL
+    file or the runtime will correctly reject the otherwise necessary edit.
+    """
+
+    normalized = task_text.casefold().replace("\u200c", " ")
+    tokens = _tokens(normalized)
+    single_word_terms = {
+        term.replace("\u200c", " ").casefold()
+        for term in DATA_MODEL_TERMS
+        if " " not in term and "\u200c" not in term
+    }
+    return bool(tokens & single_word_terms) or any(
+        phrase in normalized for phrase in DATA_MODEL_PHRASES
+    )
+
+
+def _is_data_model_candidate(relative_path: str) -> bool:
+    path = Path(relative_path)
+    parts = {part.casefold() for part in path.parts[:-1]}
+    name = path.name.casefold()
+    return (
+        path.suffix.casefold() == ".sql"
+        or bool(parts & {"database", "databases", "migration", "migrations", "schema"})
+        or "schema" in name
+    )
 
 
 @dataclass(frozen=True)
@@ -913,6 +988,14 @@ def _score_candidate(
         reasons.append(f"{role} path signal")
 
     if (
+        role in {"backend", "coordinator"}
+        and _task_requests_data_model_changes(task_text)
+        and _is_data_model_candidate(relative)
+    ):
+        score += 72
+        reasons.append("ticket requests data model changes")
+
+    if (
         role in WRITING_ROLES
         and _task_requests_test_changes(task_text)
         and any(part in TEST_PATH_PARTS for part in path_tokens)
@@ -1338,19 +1421,39 @@ def _build_pack(
             scored.sort(key=lambda item: (-item[0], item[1]))
 
     # Dependency context is read-only. Keep exact editing ownership separate
-    # from the modules needed to understand an interface or its callers.
+    # from the modules needed to understand an interface or its callers. A
+    # persistence ticket is the narrow exception: its matching database/SQL
+    # context is an approved implementation surface, not merely a dependency.
     if brain_index is not None and scored:
         primary_paths = explicit_paths or frozenset((scored[0][1],))
         related = set(brain_index.related_paths(primary_paths))
         scored = [
-            (score, path, reasons + ("direct indexed dependency context (read-only)",), candidate)
-            if path in related and path not in primary_paths
+            (
+                score,
+                path,
+                reasons + ("direct indexed dependency context (read-only)",),
+                candidate,
+            )
+            if (
+                path in related
+                and path not in primary_paths
+                and not (
+                    _task_requests_data_model_changes(task_text)
+                    and _is_data_model_candidate(path)
+                )
+            )
             else (score, path, reasons, candidate)
             for score, path, reasons, candidate in scored
         ]
         selected_paths = {item[1] for item in scored}
         for candidate in candidates:
-            if candidate.relative_path in related - selected_paths:
+            if (
+                candidate.relative_path in related - selected_paths
+                and not (
+                    _task_requests_data_model_changes(task_text)
+                    and _is_data_model_candidate(candidate.relative_path)
+                )
+            ):
                 scored.append((
                     85,
                     candidate.relative_path,

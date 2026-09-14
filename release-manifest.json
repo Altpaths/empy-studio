@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
   "product": "Empy Studio",
-  "version": "0.1.54",
-  "tag": "v0.1.54",
+  "version": "0.1.55",
+  "tag": "v0.1.55",
   "channel": "stable",
-  "release_name": "Empy Studio 0.1.54 \u2014 Adaptive token economy",
+  "release_name": "Empy Studio 0.1.55 \u2014 Ownership-safe persistence fixes",
   "notes_file": "RELEASE_NOTES.md",
   "changelog_file": "CHANGELOG.md",
   "artifacts": [],
-  "previous_version": "0.1.53",
+  "previous_version": "0.1.54",
   "metadata": {
-    "release_scope": "adaptive economy planner with measured deterministic acceptance"
+    "release_scope": "ownership-safe persistence scope with deterministic acceptance"
   }
 }
