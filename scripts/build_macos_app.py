@@ -10,11 +10,50 @@ from __future__ import annotations
 
 import argparse
 import os
+import plistlib
+import re
 import shutil
 import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
+
+
+def bundle_version(source_root: Path) -> str:
+    """Use the version of the source being packaged, never an installed wheel."""
+    document = tomllib.loads((source_root / "pyproject.toml").read_text(encoding="utf-8"))
+    version = document.get("project", {}).get("version")
+    if not isinstance(version, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+        raise ValueError("macOS app builds require a numeric MAJOR.MINOR.PATCH project.version")
+    return version
+
+
+def write_app_spec(source_root: Path, work: Path, architecture: str, clean_workspace: bool) -> Path:
+    """Set bundle metadata before PyInstaller creates its ad-hoc signature."""
+    version = bundle_version(source_root)
+    entrypoint = "macos_clean_app_entrypoint.py" if clean_workspace else "macos_app_entrypoint.py"
+    spec = work / "Empy Studio.spec"
+    spec.write_text(
+        f"a = Analysis([{str(source_root / 'scripts' / entrypoint)!r}], "
+        f"pathex=[{str(source_root / 'src')!r}], "
+        f"datas=[({str(source_root / 'src/empy_studio/web')!r}, 'empy_studio/web')], "
+        "hiddenimports=[], hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=[])\n"
+        "pyz = PYZ(a.pure)\n"
+        "exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='Empy Studio', "
+        "debug=False, bootloader_ignore_signals=False, strip=False, upx=False, console=False, "
+        f"target_arch={None if architecture == 'auto' else architecture!r})\n"
+        "coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='Empy Studio')\n"
+        "app = BUNDLE(coll, name='Empy Studio.app', bundle_identifier='com.altpaths.empystudio', "
+        f"version={version!r}, info_plist={{'CFBundleShortVersionString': {version!r}, "
+        f"'CFBundleVersion': {version!r}}})\n",
+        encoding="utf-8",
+    )
+    return spec
 
 
 def build_macos_app(
@@ -48,36 +87,11 @@ def build_macos_app(
     if work.exists():
         raise FileExistsError(f"Refusing to overwrite build directory: {work}")
     work.mkdir()
+    spec = write_app_spec(source_root, work, architecture, clean_workspace)
     command = [
-        sys.executable,
-        "-m",
-        "PyInstaller",
-        "--noconfirm",
-        "--clean",
-        "--windowed",
-        "--name",
-        "Empy Studio",
-        "--osx-bundle-identifier",
-        "com.altpaths.empystudio",
-        "--distpath",
-        str(work / "dist"),
-        "--workpath",
-        str(work / "work"),
-        "--specpath",
-        str(work / "spec"),
-        "--paths",
-        str(source_root / "src"),
-        "--add-data",
-        f"{source_root / 'src' / 'empy_studio' / 'web'}:empy_studio/web",
+        sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
+        "--distpath", str(work / "dist"), "--workpath", str(work / "work"), str(spec),
     ]
-    if architecture != "auto":
-        command.extend(["--target-architecture", architecture])
-    entrypoint = (
-        "macos_clean_app_entrypoint.py"
-        if clean_workspace
-        else "macos_app_entrypoint.py"
-    )
-    command.append(str(source_root / "scripts" / entrypoint))
     try:
         environment = os.environ.copy()
         environment["PYINSTALLER_CONFIG_DIR"] = str(work / "config")
@@ -85,6 +99,11 @@ def build_macos_app(
         app = work / "dist" / "Empy Studio.app"
         if not app.is_dir():
             raise RuntimeError("PyInstaller completed without producing an .app bundle")
+        with (app / "Contents" / "Info.plist").open("rb") as stream:
+            metadata = plistlib.load(stream)
+        version = bundle_version(source_root)
+        if any(metadata.get(key) != version for key in ("CFBundleShortVersionString", "CFBundleVersion")):
+            raise RuntimeError("Packaged app bundle version does not match project.version")
         shutil.move(str(app), output)
         xattr = shutil.which("xattr")
         if xattr is not None:

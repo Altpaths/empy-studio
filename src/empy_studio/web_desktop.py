@@ -44,6 +44,8 @@ from empy_studio.core.project_brain import (
     ProjectBrainIndex,
     build_load_save_project_brain_index,
 )
+from empy_studio.core.recovery import RecoveryPolicy, RecoveryState, external_block
+from empy_studio.core.token_budget import policy_for_preset
 from empy_studio.dependency_bootstrap import (
     DependencyBootstrapResult,
     prepare_project_dependencies,
@@ -60,6 +62,7 @@ from empy_studio.drivers import (
     CodexGraphRuntime,
     CodexProgressEvent,
 )
+from empy_studio.drivers.omniroute import CodexRouteConfig, OmniRouteCodexDriver
 from empy_studio.platform_support import default_workspace_root
 from empy_studio.project_delivery import (
     MAX_UPLOAD_FILE_BYTES,
@@ -94,7 +97,7 @@ from empy_studio.verification_pipeline import (
 from empy_studio.workspace import SQLiteWorkspaceStore
 
 WEB_ROOT = Path(__file__).with_name("web")
-MAX_AUTOMATIC_REPAIR_ATTEMPTS = 1
+MAX_AUTOMATIC_REPAIR_ATTEMPTS = 10
 MAX_VISIBLE_PROJECTS = 5
 DEFAULT_CONSTRAINTS = (
     "Do not change unrelated features or business behavior.\n"
@@ -406,6 +409,7 @@ class UploadSession:
 @dataclass
 class GuidedState:
     workspace_root: Path
+    restore_session: bool = field(default=True, kw_only=True)
     store: SQLiteWorkspaceStore = field(init=False)
     project_service: DefaultProjectService = field(default_factory=DefaultProjectService)
     active_project_id: str | None = None
@@ -418,6 +422,12 @@ class GuidedState:
     continuation_context: str | None = None
     failure_context: dict[str, Any] | None = None
     repair_attempts: int = 0
+    recovery: RecoveryState = field(default_factory=RecoveryState)
+    recovery_deadline: threading.Timer | None = field(default=None, repr=False)
+    model_route: CodexRouteConfig = field(default_factory=CodexRouteConfig)
+    _starting_run: bool = field(default=False, init=False, repr=False)
+    route_settings_error: str | None = field(default=None, init=False)
+    budget_preset: str = "economy"
     compact_retry: bool = False
     carry_forward_base_revision: str | None = None
     imported: ImportedProject | None = None
@@ -454,12 +464,21 @@ class GuidedState:
         self.workspace_root = self.workspace_root.expanduser().resolve()
         self.workspace_root.mkdir(parents=True, exist_ok=True)
         self.store = SQLiteWorkspaceStore(self.workspace_root / "workspace.sqlite3")
-        self.driver = CodexDriver(artifact_root=self.workspace_root / "codex-runs")
+        saved_route = self.store.get_setting("model-route.v1")
+        try:
+            self.model_route = CodexRouteConfig.from_dict({} if saved_route is None else saved_route)
+        except (TypeError, ValueError):
+            self.model_route = CodexRouteConfig(mode="omniroute")
+            self.route_settings_error = "Saved model connection is invalid; choose and save a connection before running."
+            self.error = self.route_settings_error
+        self.driver = self._route_driver(self.model_route)
         self.review_store = ReviewWorkspaceAdapter(self.workspace_root)
         self.execution_store = CodexExecutionWorkspaceAdapter(self.workspace_root)
         self.verification_store = VerificationWorkspaceAdapter(self.workspace_root)
         saved_language = self.store.get_setting("language", "fa")
         self.language = saved_language if saved_language in {"fa", "en"} else "fa"
+        if not self.restore_session:
+            return
         saved_project = self.store.get_setting("active_project_id")
         if isinstance(saved_project, str):
             try:
@@ -483,6 +502,25 @@ class GuidedState:
                     self.select_task(saved_task, restore=True)
                 except (KeyError, OSError, RuntimeError, TypeError, ValueError):
                     self.store.set_setting("active_task_id", None)
+
+    def _route_driver(self, route: CodexRouteConfig) -> CodexDriver:
+        if route.mode == "omniroute":
+            return OmniRouteCodexDriver(route=route, artifact_root=self.workspace_root / "codex-runs")
+        return CodexDriver(artifact_root=self.workspace_root / "codex-runs")
+
+    def set_model_route(self, value: dict[str, Any]) -> None:
+        with self.lock:
+            if self.running or self._starting_run or (self.recovery.started_at is not None and self.recovery.stop_reason is None):
+                raise RuntimeError("Stop the workflow before changing its model route.")
+            route = CodexRouteConfig.from_dict(value)
+            route.validate()
+            driver = self._route_driver(route)
+            self.store.set_setting("model-route.v1", route.to_dict())
+            self.model_route = route
+            self.route_settings_error = None
+            self.driver = driver
+            self.message = "مسیر مدل ذخیره شد؛ وضعیت اتصال را بررسی کنید."
+            self.error = None
 
     def add_log(self, message: str, level: str = "info") -> None:
         with self.lock:
@@ -674,6 +712,8 @@ class GuidedState:
         return value if isinstance(value, dict) else None
 
     def select_project(self, project_id: str, *, restore: bool = False) -> None:
+        if self.running:
+            raise RuntimeError("Stop the active run before switching projects.")
         project = self.store.get_project(project_id)
         if not Path(project.root).is_dir():
             raise ValueError(
@@ -690,6 +730,10 @@ class GuidedState:
                 self._import_report_setting_key(project.project_id),
                 import_report,
             )
+        recovery = RecoveryState.from_dict(self.store.get_setting(f"recovery.v1.{project.project_id}"))
+        if recovery.status == "running":
+            recovery.stop("interrupted: The application stopped during execution; inspect preserved work and explicitly resume.")
+            self.store.set_setting(f"recovery.v1.{project.project_id}", recovery.to_dict())
         failure_context = self._load_failure_context(project.project_id)
         saved_repair_attempts = self.store.get_setting(
             self._repair_attempts_setting_key(project.project_id),
@@ -735,7 +779,9 @@ class GuidedState:
             self.error = None
             self.continuation_context = None
             self.failure_context = failure_context
-            self.repair_attempts = repair_attempts
+            self.recovery = recovery
+            self.budget_preset = "economy"
+            self.repair_attempts = recovery.attempts or repair_attempts
             self.compact_retry = False
             self.message = "پروژه بازیابی شد." if restore else "پروژه انتخاب شد."
         self.store.set_setting("active_project_id", project.project_id)
@@ -974,7 +1020,7 @@ class GuidedState:
             brain_index=self.brain_index,
             policy=context_policy,
         )
-        budget = lock_token_budget(build_token_budget(plan=plan, selection=context))
+        budget = lock_token_budget(build_token_budget(plan=plan, selection=context, policy=policy_for_preset("economy")))
         graph = build_agent_run_graph(plan=plan, selection=context, budget=budget)
         return plan, context, budget, graph
 
@@ -1016,12 +1062,15 @@ class GuidedState:
         self._capture_failure_context()
 
     def select_task(self, task_id: str, *, restore: bool = False) -> None:
+        if self.running:
+            raise RuntimeError("Stop the active run before switching tickets.")
         if self.active_project_id is None or self.detection is None:
             raise RuntimeError("Choose a project first.")
         saved = self.store.get_task(task_id)
         if saved.project_id != self.active_project_id:
             raise ValueError("task does not belong to the selected project")
         task = self._task_from_contract(saved)
+        self.budget_preset = "economy"
         try:
             plan, context, budget, graph = self._materialize_workflow(task)
         except (OSError, RuntimeError, TypeError, ValueError) as exc:
@@ -1088,7 +1137,12 @@ class GuidedState:
             self.verification = None
             self.review = None
             self.export = restored_export
-            self.repair_attempts = 0
+            if self.recovery.task_id != task.task_id:
+                stored_recovery = self.store.get_setting(f"recovery-task.v1.{task.task_id}")
+                self.recovery = RecoveryState.from_dict(stored_recovery) if stored_recovery else RecoveryState(policy=self.recovery.policy, original_request=saved.request_text, task_id=task.task_id)
+            if self.recovery.status == "running":
+                self.recovery.stop("interrupted: Inspect the saved checkpoint and explicitly resume.")
+            self.repair_attempts = self.recovery.attempts
             self.node_states = {node.node_id: "waiting" for node in graph.nodes}
             self.phase = "plan"
             self.error = None
@@ -1104,6 +1158,7 @@ class GuidedState:
         self._clear_failure_context()
         self.store.set_setting("active_task_id", task.task_id)
         self._restore_task_artifacts(task.task_id)
+        self._save_recovery()
 
     def _run_manifest_path(self, workspace_run_id: str) -> Path:
         return self.workspace_root / "run-manifests" / f"{workspace_run_id}.json"
@@ -1513,7 +1568,7 @@ class GuidedState:
             "failures": rendered_failures,
             "evidence": raw.get("evidence", ""),
             "suggested_ticket": "\n".join(ticket_lines)[:4000],
-            "repair_available": self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS,
+            "repair_available": self.repair_attempts < self.recovery.policy.max_attempts and self.recovery.status != "running",
             "repair_attempts": self.repair_attempts,
         }
 
@@ -1533,7 +1588,7 @@ class GuidedState:
                 output = result.stderr.strip() or result.stdout.strip()
                 detail = _safe_verification_detail(output, roots)
                 lines.append(
-                    f"- {result.check.label} (return code {result.returncode}): {detail}"
+                    f"- {result.check.check_id}: {result.check.label}; command={list(result.check.command)!r} (return code {result.returncode}): {detail}"
                 )
             return "\n".join(lines)[:4000]
         message = self.run.error_message if self.run is not None else self.error
@@ -1572,108 +1627,148 @@ class GuidedState:
             self.message = "یافته‌های شکست قبلی حفظ شد؛ تیکت اصلاحی را وارد کنید."
         self.store.set_setting("active_task_id", None)
 
-    def auto_repair(self) -> None:
-        """Create and run one bounded corrective ticket from the real failure."""
+    def _save_recovery(self) -> None:
+        if self.recovery.task_id:
+            self.store.set_setting(f"recovery-task.v1.{self.recovery.task_id}", self.recovery.to_dict())
+        if self.active_project_id is not None:
+            self.store.set_setting(f"recovery.v1.{self.active_project_id}", self.recovery.to_dict())
+            self.store.set_setting(self._repair_attempts_setting_key(self.active_project_id), self.repair_attempts)
 
+    def set_recovery_policy(self, policy: dict[str, Any]) -> None:
+        if self.running or self.recovery.started_at is not None:
+            raise RuntimeError("Recovery policy is locked for this workflow; create a new ticket to change its bounds.")
+        self.recovery.policy = RecoveryPolicy(**policy)
+        self._save_recovery()
+
+    def _account_recovery_usage(self) -> None:
+        if self.run is not None:
+            usage = self.run.usage
+            known = usage is not None and usage.source == "provider"
+            # A partially observed graph is not a fully measured run.
+            complete = known and all(node.usage is not None and node.usage.source == "provider" for node in self.run.node_results if node.status != "skipped")
+            self.recovery.account(
+                self.run.run_id,
+                usage.uncached_total if known and usage is not None else None,
+                self.budget.total_limit_tokens if self.budget is not None else self.recovery.policy.max_fresh_tokens,
+                complete=complete,
+            )
+            self._save_recovery()
+
+    def _stop_recovery(self, reason: str) -> None:
+        self.recovery.stop(reason)
+        self._save_recovery()
+        self.add_log(reason, "warning")
+
+    def _cancel_recovery_deadline(self) -> None:
+        if self.recovery_deadline is not None:
+            self.recovery_deadline.cancel()
+            self.recovery_deadline = None
+
+    def _recovery_checkpoint(self) -> str:
+        if self.detection is None:
+            return "unknown"
+        root = self.detection.descriptor.root
+        snapshot = CodexGraphRuntime._git_snapshot(root)
+        digest = hashlib.sha256()
+        if snapshot is not None:
+            for path in sorted(snapshot.status):
+                digest.update(path.encode())
+                target = root / path
+                if target.is_file() and not target.is_symlink():
+                    digest.update(hashlib.sha256(target.read_bytes()).digest())
+        return digest.hexdigest()
+
+    def auto_repair(self, *, automatic: bool = False) -> None:
+        """Run a bounded correction using durable evidence and the original scope."""
         if self.detection is None or self.active_project_id is None:
             raise RuntimeError("Choose a project first.")
-        if self.running:
-            raise RuntimeError("Stop the active run before starting automatic repair.")
-        if self.repair_attempts >= MAX_AUTOMATIC_REPAIR_ATTEMPTS:
-            raise RuntimeError(
-                "Automatic repair was already attempted once. Review the exact finding "
-                "or start a new ticket with the required project decision."
-            )
-        self._prepare_clean_worktree_for_run()
+        if self.running or self.recovery.status == "running":
+            raise RuntimeError("A recovery attempt is already active.")
+        if automatic and self.recovery.stop_reason is not None:
+            return
+        if self.verification is not None and self.verification.finalize_allowed:
+            raise RuntimeError("Verification already passed; review the result.")
+        if self.run is not None and self.run.status == "cancelled" and automatic:
+            self._stop_recovery("cancelled: The user stopped this workflow.")
+            return
+        if self.run is not None and self.run.error_code == "scope_violation":
+            scope_reason = "scope_violation: Review unowned changes before any corrective execution."
+            self._stop_recovery(scope_reason)
+            raise RuntimeError(scope_reason)
+        self._account_recovery_usage()
+        reason = self.recovery.limit_reason()
+        if reason:
+            self._stop_recovery(reason)
+            raise RuntimeError(reason)
         context = self._build_continuation_context()
-        original = self.task
-        original_request = (
-            original.objective
-            if original is not None
-            else "Complete the requested project work."
-        )
-        budget_failure = bool(
-            self.run is not None
-            and (
-                self.run.error_code == "budget_exceeded"
-                or "fresh-token limit" in (self.run.error_message or "").casefold()
-                or "سقف مصرف" in (self.run.error_message or "")
-            )
-        )
-        if not budget_failure:
-            failure_text = self.error or ""
-            budget_failure = any(
-                marker in failure_text.casefold()
-                for marker in ("fresh-token limit", "token budget", "token guard", "سقف مصرف")
-            )
-        if budget_failure:
-            compact_context = (
-                "Previous run stopped because Empy's token guard was reached. "
-                "Do not repeat discovery, read external skills, or print large files.\n"
-                f"Confirmed runtime detail: {context}"
-            )[:1600]
-            repair_request = (
-                "[Empy compact retry] فقط همان درخواست اصلی را در کوچک‌ترین اجرای ممکن اصلاح کن.\n"
-                f"درخواست اصلی: {original_request[:1600]}\n"
-                "فقط فایل‌های لازم را بخوان و تغییر بده؛ discovery مجدد، خواندن skill خارجی، "
-                "اجرای تست توسط Provider و چاپ فایل‌ها/لاگ‌های بزرگ ممنوع است.\n"
-                "جزئیات محدود اجرای قبلی توسط Empy در ادامهٔ همین تیکت ضمیمه می‌شود؛ آن را دوباره تولید نکن.\n"
-                "پس از تغییر، Empy خودش Verification واقعی را اجرا می‌کند؛ موفقیت ساختگی اعلام نکن."
-            )
-        else:
-            repair_request = (
-                "ریشه‌ای اصلاح کن و نتیجهٔ واقعی تحویل بده.\n"
-                f"درخواست اصلی: {original_request}\n"
-                "این اصلاح را فقط در کپی ایزولهٔ پروژه انجام بده؛ فایل اصلی کاربر را تغییر نده.\n"
-                "علت قطعی شکست قبلی:\n"
-                f"{context}\n"
-                "فایل یا قرارداد درست پروژه را تشخیص بده، تغییر واقعی را اعمال کن، "
-                "و همان Verification را دوباره اجرا کن. فایل صوری فقط برای سبزکردن تست نساز."
-            )
-        continuation_for_plan = compact_context if budget_failure else context
-        with self.lock:
-            self.continuation_context = continuation_for_plan
-            self.repair_attempts += 1
-            self.compact_retry = budget_failure
-            repair_attempts = self.repair_attempts
-            project_id = self.active_project_id
-        self.store.set_setting(
-            self._repair_attempts_setting_key(project_id),
-            repair_attempts,
-        )
-        self.create_plan(repair_request)
-        self.add_log("Automatic repair started from the confirmed verification failure.")
-        self.start_run()
+        blocker = external_block(context)
+        if blocker:
+            blocker = f"{blocker} Details: {context[:1800]}"
+            self._stop_recovery(blocker)
+            raise RuntimeError(blocker)
+        if not self.recovery.original_request:
+            saved = self.store.get_task(self.active_task_id) if self.active_task_id else None
+            self.recovery.original_request = saved.request_text if saved else (self.task.objective if self.task else "Complete the requested project work.")
+        original_request = self.recovery.original_request
+        self.recovery.task_id = self.active_task_id
+        owner = next((node.agent_role for node in self.graph.nodes if node.agent_role != "quality"), "quality") if self.graph else "quality"
+        # Record each terminal outcome once, including explicit retries of a stopped workflow.
+        if not self.recovery.history or self.recovery.history[-1]["cycle"] != self.recovery.attempts:
+            no_progress = self.recovery.record_failure(context, self._recovery_checkpoint(), owner)
+            self._save_recovery()
+            if no_progress and automatic:
+                self._stop_recovery(no_progress)
+                return
+        strategy = "Inspect the failing contract and root cause; do not repeat the previous patch." if self.recovery.history[-1]["progress"] == "unchanged_failure" else "Fix only the confirmed failure."
+        self._prepare_clean_worktree_for_run()
+        self.continuation_context = (
+            f"Recovery owner: {owner}. {strategy}\n"
+            "Preserve previous fixes and checkpoints. Do not repeat discovery or unrelated analysis. "
+            "Remain within the original request and approved ownership. Empy runs the real verification after this correction.\n"
+            f"علت قطعی شکست قبلی / Exact failing checks:\n{context}"
+        )[:5000]
+        self.compact_retry = _failure_kind(context) == "token_budget"
+        self.recovery.begin()
+        self.repair_attempts = self.recovery.attempts
+        self._save_recovery()  # Reserve the cycle before any work; restart never replays it.
+        try:
+            self.create_plan(original_request, task_id=self.active_task_id)
+            reason = self.recovery.limit_reason(planned_tokens=self.budget.total_limit_tokens if self.budget else 0, check_attempts=False)
+            # The cycle just reserved is allowed even when it consumes the final slot.
+            if reason:
+                raise RuntimeError(reason)
+            self.add_log(f"Recovery cycle {self.repair_attempts}/{self.recovery.policy.max_attempts}: {owner}.")
+            self.start_run()
+        except (OSError, RuntimeError, ValueError) as exc:
+            self._stop_recovery(str(exc))
+            raise
 
     def _maybe_start_automatic_repair(self, *, reason: str) -> None:
-        """Continue once after a recoverable terminal failure.
-
-        A provider/runtime failure is still part of the workflow: preserve the
-        evidence, create one bounded corrective attempt, and only leave the
-        user at the failure screen when that safe retry cannot start or has
-        already been consumed. This avoids both silent abandonment and an
-        infinite retry loop.
-        """
-
         if self.active_project_id is None or self.detection is None:
             return
-        if self.repair_attempts >= MAX_AUTOMATIC_REPAIR_ATTEMPTS:
+        if self.recovery.stop_reason is not None:
             return
-        self.add_log(
-            f"{reason}; starting the bounded automatic repair pass.",
-            "warning",
-        )
+        self.recovery.status = "ready"
+        self.add_log(f"{reason}; evaluating bounded recovery.", "warning")
         try:
-            self.auto_repair()
+            self.auto_repair(automatic=True)
         except (OSError, RuntimeError, ValueError) as exc:
-            self.add_log(f"Automatic repair could not start: {exc}", "error")
+            self.add_log(f"Automatic repair stopped: {exc}", "error")
             with self.lock:
                 self.error = str(exc)
             self._capture_failure_context()
 
-    def create_plan(self, raw_tasks: str, task_id: str | None = None) -> None:
+    def create_plan(self, raw_tasks: str, task_id: str | None = None, *, budget_preset: str | None = None) -> None:
         if self.detection is None or self.active_project_id is None:
             raise RuntimeError("Choose a project first.")
+        if self.running:
+            raise RuntimeError("Stop the active run before editing its plan.")
+        if task_id is not None and self.recovery.task_id == task_id and self.recovery.started_at is not None and self.continuation_context is None:
+            raise RuntimeError("Only draft tickets can be edited; create a new ticket for a changed objective.")
+        if task_id is not None and self.store.get_task(task_id).project_id != self.active_project_id:
+            raise ValueError("task does not belong to the selected project")
+        # Retain the argument for older clients, but never increase the fixed policy.
+        self.budget_preset = "economy"
         raw = raw_tasks.strip()
         if not raw:
             raise ValueError("Enter at least one task.")
@@ -1685,13 +1780,12 @@ class GuidedState:
             with self.lock:
                 self.repair_attempts = 0
                 self.compact_retry = False
+                self.recovery = RecoveryState(policy=self.recovery.policy, original_request=raw)
             self.store.set_setting(
                 self._repair_attempts_setting_key(self.active_project_id),
                 0,
             )
         objective_requirements = list(requirements)
-        if continuation_context:
-            objective_requirements.append(continuation_context)
         task = build_product_task(
             task_id=task_id or uuid.uuid4().hex,
             project_root=str(self.detection.descriptor.root),
@@ -1699,7 +1793,7 @@ class GuidedState:
             title=requirements[0][:96],
             objective="\n".join(objective_requirements),
             requirements_text="\n".join(objective_requirements),
-            constraints_text="\n".join((DEFAULT_CONSTRAINTS, *user_constraints)),
+            constraints_text="\n".join((DEFAULT_CONSTRAINTS, *user_constraints, *((continuation_context,) if continuation_context else ()))),
             definition_of_done_text=DEFAULT_DEFINITION_OF_DONE,
         )
         ready = mark_ready_for_planning(task)
@@ -1753,6 +1847,9 @@ class GuidedState:
             self.continuation_context = None
             self.failure_context = None
             self.message = "برنامه و مالکیت فایل‌ها آماده شد."
+        self.store.set_setting(f"budget-preset.v1.{self.active_project_id}", self.budget_preset)
+        self.recovery.task_id = ready.task_id
+        self._save_recovery()
         self.store.set_setting("active_task_id", ready.task_id)
         if self.active_project_id is not None:
             self.store.set_setting(self._failure_context_setting_key(self.active_project_id), None)
@@ -1887,12 +1984,30 @@ class GuidedState:
             )
 
     def start_run(self) -> None:
+        with self.lock:
+            if self.running or self._starting_run:
+                raise RuntimeError("A run is already active or starting.")
+            self._starting_run = True
+        try:
+            self._start_run()
+        finally:
+            with self.lock:
+                self._starting_run = False
+
+    def _start_run(self) -> None:
+        if self.route_settings_error:
+            raise RuntimeError(self.route_settings_error)
         if self.running:
             raise RuntimeError("A run is already active.")
         if self.graph is None or self.context is None or self.budget is None or self.detection is None:
             raise RuntimeError("Build a plan first.")
+        reason = self.recovery.limit_reason(planned_tokens=self.budget.total_limit_tokens, check_attempts=False)
+        if reason:
+            self._stop_recovery(reason)
+            raise RuntimeError(reason)
         installation = self.driver.inspect(refresh=True)
         if installation.availability != "available" or not installation.authenticated:
+            self._stop_recovery("credentials: " + (installation.remediation or installation.message))
             raise RuntimeError(installation.remediation or installation.message)
         if self.active_project_id is None or self.active_task_id is None:
             raise RuntimeError("Project and task identity are missing.")
@@ -1918,6 +2033,22 @@ class GuidedState:
             self.message = "اجرای Agentها شروع شد."
             self.message_level = "info"
             self.logs.clear()
+        if self.recovery.started_at is None:
+            self.recovery.started_at = time.time()
+        self.recovery.status = "running"
+        self.recovery.stop_reason = None
+        self._save_recovery()
+
+        def deadline() -> None:
+            if self.runtime is not runtime:
+                return
+            self._stop_recovery("time_exhausted: Workflow time allowance exhausted; inspect preserved changes.")
+            cancel_event.set()
+            runtime.cancel()
+
+        self.recovery_deadline = threading.Timer(self.recovery.remaining_seconds(), deadline)
+        self.recovery_deadline.daemon = True
+        self.recovery_deadline.start()
         thread = threading.Thread(target=self._run_worker, args=(run.run_id,), daemon=True, name="empy-web-run")
         thread.start()
 
@@ -1936,7 +2067,7 @@ class GuidedState:
             if node.status == "completed":
                 continue
             if node.status == "failed" and node.error_code == "budget_exceeded":
-                if not node.changed_files or role not in {"frontend", "backend", "security", "release"}:
+                if not node.changed_files or role not in {"frontend", "backend", "coordinator", "security", "release"}:
                     return False
                 has_budget_limited_change = True
                 continue
@@ -2001,6 +2132,8 @@ class GuidedState:
             runtime = self.runtime
             cancel_event = self.cancel_event
             self.message = "درخواست توقف اجرا ثبت شد."
+        self._stop_recovery("cancelled: The user stopped this workflow.")
+        self._cancel_recovery_deadline()
         if cancel_event is not None:
             cancel_event.set()
         runtime.cancel()
@@ -2015,6 +2148,7 @@ class GuidedState:
         review_id: str | None = None,
     ) -> Path:
         self.execution_store.save_run(result)
+        self.store.set_setting(f"run-route.v1.{result.run_id}", self.model_route.to_dict())
         return self._write_run_manifest(
             workspace_run_id,
             codex_run_id=result.run_id,
@@ -2034,6 +2168,13 @@ class GuidedState:
         review_id: str | None = None,
     ) -> None:
         self.run = result
+        self._cancel_recovery_deadline()
+        self._account_recovery_usage()
+        if state == "cancelled" and self.recovery.stop_reason is None:
+            self._stop_recovery("cancelled: The user stopped this workflow.")
+        elif self.recovery.status == "running":
+            self.recovery.status = "ready"
+            self._save_recovery()
         manifest_path = self._save_runtime_result(
             workspace_run_id,
             result,
@@ -2180,6 +2321,10 @@ class GuidedState:
                 else result
             )
             self.run = final_result
+            self._cancel_recovery_deadline()
+            self._account_recovery_usage()
+            self.recovery.status = "verified" if verification.finalize_allowed else "ready"
+            self._save_recovery()
             manifest_path = self._save_runtime_result(
                 workspace_run_id,
                 final_result,
@@ -2294,6 +2439,15 @@ class GuidedState:
         *,
         state: str = "failed",
     ) -> None:
+        self._cancel_recovery_deadline()
+        if self.budget is not None:
+            self.recovery.account(workspace_run_id, None, self.budget.total_limit_tokens)
+            self._save_recovery()
+        if state == "cancelled" and self.recovery.stop_reason is None:
+            self._stop_recovery("cancelled: The user stopped this workflow.")
+        elif self.recovery.status == "running":
+            self.recovery.status = "ready"
+            self._save_recovery()
         try:
             self.store.update_run(workspace_run_id, state=state, summary=message, driver_name="codex")
         except KeyError:
@@ -2340,21 +2494,23 @@ class GuidedState:
         if event.text.strip():
             self.add_log(event.text, "error" if event.stream == "stderr" else "info")
 
-    def decide_all(self, decision: str) -> None:
+    def decide_all(self, decision: str, *, relative_path: str | None = None) -> None:
         if self.review is None:
             raise RuntimeError("Review is not ready.")
         if decision not in {"accept", "revert"}:
             raise ValueError("decision must be accept or revert")
         report = self.review
+        if relative_path is not None and relative_path not in {item.relative_path for item in report.files}:
+            raise ValueError("file does not belong to this review")
         for item in tuple(report.files):
-            if item.decision != "pending":
+            if item.decision != "pending" or relative_path is not None and item.relative_path != relative_path:
                 continue
             report = (
                 self.review_store.accept(report.review_id, item.relative_path)
                 if decision == "accept"
                 else self.review_store.revert(report.review_id, item.relative_path)
             )
-        if decision == "accept":
+        if report.pending_count == 0 and report.accepted_count:
             checkpoint_accepted_changes(
                 report.project_root,
                 (
@@ -2364,8 +2520,28 @@ class GuidedState:
                 ),
             )
         self.review = report
+        if decision == "revert" and self.detection is not None:
+            # A file decision changes the verified tree. Never export using
+            # the passing evidence from the earlier, different file set.
+            self.verification = None
+            self.export = None
+            verification = VerificationRuntime().run(
+                detection=self.detection,
+                evidence_root=self.verification_store.evidence_root,
+                on_event=self._verification_event,
+            )
+            if verification.finalize_allowed:
+                verification = finalize_verification(verification)
+            self.verification = verification
+            self.verification_store.save(verification)
+            if self.active_task_id and self.run:
+                runs = self.store.list_task_runs(self.active_task_id)
+                if runs:
+                    self._write_run_manifest(runs[0].run_id, codex_run_id=self.run.run_id,
+                                             verification_id=verification.verification_id,
+                                             review_id=report.review_id)
         if self.active_task_id is not None:
-            self.store.update_task(self.active_task_id, status="accepted" if decision == "accept" else "reverted")
+            self.store.update_task(self.active_task_id, status="review" if report.pending_count else "accepted" if report.accepted_count else "reverted")
         self.message = "تصمیم روی تغییرات ثبت شد."
 
     def _release_gate(self) -> dict[str, Any]:
@@ -2525,6 +2701,23 @@ class GuidedState:
         if self.active_task_id is not None:
             self.store.update_task(self.active_task_id, status="released")
 
+    def new_ticket(self) -> None:
+        if self.running:
+            raise RuntimeError("Stop the active run before starting another ticket.")
+        if self.active_project_id is None:
+            raise RuntimeError("Choose a project first.")
+        self.active_task_id = None
+        self.task = self.plan = self.context = self.budget = self.graph = None
+        self.run = self.verification = self.review = self.export = None
+        self.benchmark = None
+        self.continuation_context = self.failure_context = None
+        self.error = None
+        self.repair_attempts = 0
+        self.recovery = RecoveryState(policy=self.recovery.policy)
+        self.phase = "task"
+        self.store.set_setting("active_task_id", None)
+        self._save_recovery()
+
     def reset(self) -> None:
         with self.lock:
             if self.running:
@@ -2564,6 +2757,12 @@ class GuidedState:
             inspection = self.driver.inspect(refresh=False)
             project = self._active_project()
             tasks = project["tasks"] if project else []
+            task_request = self.recovery.original_request
+            if self.active_task_id:
+                try:
+                    task_request = self.store.get_task(self.active_task_id).request_text
+                except KeyError:
+                    pass
             plan = None
             if self.graph is not None and self.context is not None and self.budget is not None:
                 plan = {
@@ -2613,6 +2812,10 @@ class GuidedState:
                     "projects": self._project_records(),
                     "active_project": project,
                     "active_task_id": self.active_task_id,
+                    "task_request": task_request,
+                    "budget_preset": self.budget_preset,
+                    "model_route": self.model_route.to_dict(),
+                    "route_locked": self.running or self._starting_run or (self.recovery.started_at is not None and self.recovery.stop_reason is None),
                     "tasks": tasks,
                     "task": asdict(self.task) if self.task is not None else None,
                     "plan": plan,
@@ -2631,14 +2834,15 @@ class GuidedState:
                     "export": self._public_export(),
                     "dependency_bootstrap": self._public_dependency_bootstrap(),
                     "failure_context": self._localized_failure_context(),
+                    "recovery": self.recovery.to_dict(),
                     "import_report": self.import_report,
                     "release_gate": self._release_gate(),
                     "engine": {
                         "provider": inspection.display_name,
                         "availability": inspection.availability,
-                        "ready": inspection.availability == "available" and inspection.authenticated,
+                        "ready": not self.route_settings_error and inspection.availability == "available" and inspection.authenticated,
                         "version": inspection.version,
-                        "message": inspection.message,
+                        "message": self.route_settings_error or inspection.message,
                         "remediation": inspection.remediation,
                     },
                 }
@@ -2766,7 +2970,7 @@ class GuidedState:
             )
         )
         if token_budget_run_failure:
-            repair_available = self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS
+            repair_available = self.repair_attempts < self.recovery.policy.max_attempts and self.recovery.status != "running"
             if self.language == "en":
                 return {
                     "kind": "token_budget",
@@ -2797,7 +3001,7 @@ class GuidedState:
             else self.error or ""
         )
         if _failure_kind(run_error_text) == "dirty_worktree":
-            repair_available = self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS
+            repair_available = self.repair_attempts < self.recovery.policy.max_attempts and self.recovery.status != "running"
             if self.language == "en":
                 return {
                     "kind": "dirty_worktree",
@@ -2855,7 +3059,7 @@ class GuidedState:
                     language=self.language,
                 )
             )
-            repair_available = self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS
+            repair_available = self.repair_attempts < self.recovery.policy.max_attempts and self.recovery.status != "running"
             if self.language == "en":
                 return {
                     "kind": "verification_contract_mismatch",
@@ -2898,7 +3102,7 @@ class GuidedState:
             or self.verification.finalized_at is None
         )
         if verification_failed:
-            repair_available = self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS
+            repair_available = self.repair_attempts < self.recovery.policy.max_attempts and self.recovery.status != "running"
             if self.language == "en":
                 return {
                     "kind": "verification_failed",
@@ -2926,7 +3130,7 @@ class GuidedState:
             }
 
         if self.run is not None and self.run.status != "completed":
-            repair_available = self.repair_attempts < MAX_AUTOMATIC_REPAIR_ATTEMPTS
+            repair_available = self.repair_attempts < self.recovery.policy.max_attempts and self.recovery.status != "running"
             if self.language == "en":
                 return {
                     "kind": "run_failed",
@@ -3081,6 +3285,7 @@ class GuidedState:
         return {
             "run_id": self.run.run_id,
             "provider": self.run.provider,
+            "model_route": self.store.get_setting(f"run-route.v1.{self.run.run_id}"),
             "status": self.run.status,
             "started_at": self.run.started_at,
             "finished_at": self.run.finished_at,
@@ -3092,6 +3297,7 @@ class GuidedState:
             "nodes": node_reports,
             "schedule": [item.to_dict() for item in self.run.schedule],
             "usage": self._provider_usage(),
+            "budget_accounting": self.run.budget_accounting.to_dict() if self.run.budget_accounting else None,
             "estimates": estimates,
             "verification": {
                 "status": self.verification.status if self.verification is not None else "not_run",
@@ -3352,8 +3558,10 @@ class RequestHandler(BaseHTTPRequestHandler):
             state.select_project(str(body["project_id"]))
         elif path == "/api/task/select":
             state.select_task(str(body["task_id"]))
+        elif path == "/api/task/new":
+            state.new_ticket()
         elif path == "/api/plan":
-            state.create_plan(str(body.get("tasks", "")), body.get("task_id"))
+            state.create_plan(str(body.get("tasks", "")), body.get("task_id"), budget_preset=body.get("budget_preset"))
         elif path == "/api/benchmark":
             state.run_benchmark()
         elif path == "/api/run":
@@ -3364,8 +3572,10 @@ class RequestHandler(BaseHTTPRequestHandler):
             state.resume_ticket()
         elif path == "/api/auto-repair":
             state.auto_repair()
+        elif path == "/api/recovery-policy":
+            state.set_recovery_policy(body)
         elif path == "/api/decision":
-            state.decide_all(str(body.get("decision", "")))
+            state.decide_all(str(body.get("decision", "")), relative_path=body.get("relative_path"))
         elif path == "/api/export":
             destination = body.get("destination")
             state.export_project(str(destination) if destination else None)
@@ -3377,6 +3587,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                 raise ValueError("language must be fa or en")
             state.language = language
             state.store.set_setting("language", language)
+        elif path == "/api/model-route":
+            state.set_model_route(body)
         elif path == "/api/refresh-engine":
             state.driver.inspect(refresh=True)
         elif path == "/api/open-engine":
@@ -3394,8 +3606,9 @@ def create_server(
     workspace: str | Path,
     token: str | None = None,
     port: int = 0,
+    restore_session: bool = True,
 ) -> AppServer:
-    state = GuidedState(Path(workspace))
+    state = GuidedState(Path(workspace), restore_session=restore_session)
     return AppServer(("127.0.0.1", port), state, token or secrets.token_urlsafe(24))
 
 
@@ -3405,6 +3618,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--token", default=None)
     parser.add_argument("--no-open", action="store_true")
+    parser.add_argument("--start-page", action="store_true", help="Open the project screen without restoring the last ticket")
     parser.add_argument(
         "--clean",
         action="store_true",
@@ -3416,7 +3630,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.clean
         else args.workspace or default_workspace_root()
     )
-    server = create_server(workspace=workspace, token=args.token, port=args.port)
+    server = create_server(workspace=workspace, token=args.token, port=args.port, restore_session=not args.start_page)
     address = cast(tuple[str, int], server.server_address)
     host, actual_port = address
     url = f"http://{host}:{actual_port}/?token={server.token}"

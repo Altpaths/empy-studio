@@ -1,3 +1,55 @@
+## [0.1.54] - 2026-09-14
+
+- Add an adaptive economy coordinator for low/medium-risk multi-domain work.
+  It keeps the ownership contract while avoiding multiple fixed provider harness
+  calls when a single bounded implementation call is cheaper.
+- Add a deterministic token-efficiency benchmark that reports planned calls and
+  token reduction without contacting a model. Specialist fan-out remains
+  available when explicitly requested or justified by high risk.
+
+## [0.1.53] - 2026-09-14
+
+- Add an experimental explicit free/local OmniRoute connection in the guided UI.
+- Isolate Codex credentials, refuse automatic client fallback, disable provider
+  reconnect retries and web search for this route, and sanitize run artifacts.
+- Cache route status, lock changes during startup/recovery, and preserve route
+  evidence for each run. Corrupt saved settings cannot fall back to account use.
+- Include a bounded synthetic probe and clearly separate free-service failures
+  from mocked routing tests. Real cost savings remain unproven.
+
+## [0.1.52] - 2026-09-07
+
+- Give each extracted macOS installation its own initially empty workspace.
+  Keep subsequent user project history within that installation; do not delete
+  or automatically open the legacy workspace.
+- Open normal Finder launches on the project screen without rescanning the last
+  project. Explicit workspace launches retain resume behavior.
+- Fix guided planning to economy, including requests and settings from older
+  clients; remove budget selection and editable token-cap controls.
+
+## [0.1.51] - 2026-09-06
+
+### Product completion candidate
+
+- Reuse content-validated project records, detecting same-size/same-mtime edits
+  and selecting indexed dependency context without repeating model discovery.
+- Preserve locked per-node token ceilings, expose economy/standard/extended
+  budgets, and persist reported fresh/cached usage with explicit unknown values.
+- Wait for provider completion instead of treating the first single-file edit
+  as proof that all requested changes are finished.
+- Persist bounded multi-cycle repair, the original objective, failure history,
+  checkpoints, cancellation, no-progress stops, and time/usage reservations.
+- Edit the same ticket, create another ticket in the same project, review each
+  file, and rerun verification after a reverted change before export.
+- Permit dependency-free Node verification without manufacturing node_modules.
+- Build the normal persistent macOS app with matching source/bundle versions.
+- Add packaged browser acceptance for two sequential tickets, two automatic
+  corrections per ticket, real Node verification, deployment extraction and
+  exact restart identity. Record failure evidence, including early failures.
+
+Acceptance results accompany the candidate; live-provider billing, Apple
+notarization and live-host deployment require separate evidence.
+
 ## [0.1.50] - 2026-08-31
 
 ### End single-file provider work at the real verification handoff

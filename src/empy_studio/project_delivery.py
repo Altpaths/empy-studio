@@ -149,7 +149,9 @@ def _safe_member_name(
     name: str,
     excluded_names: frozenset[str] = IMPORT_EXCLUDED_NAMES,
 ) -> PurePosixPath | None:
-    normalized = name.replace("\\", "/").strip("/")
+    normalized = name.replace("\\", "/")
+    if normalized.startswith("/") or (len(normalized) >= 2 and normalized[1] == ":"):
+        return None
     if not normalized:
         return None
     relative = PurePosixPath(normalized)
@@ -603,7 +605,10 @@ def verify_project_archive(archive_path: str | Path, manifest: dict[str, Any]) -
     archive = Path(archive_path).expanduser().resolve()
     expected_files = {str(item["path"]): str(item["sha256"]) for item in manifest["files"]}
     with zipfile.ZipFile(archive) as handle:
-        names = set(handle.namelist())
+        archive_names = handle.namelist()
+        names = set(archive_names)
+        if len(names) != len(archive_names):
+            raise ValueError("exported archive contains duplicate paths")
         if any(name.startswith("/") or ".." in PurePosixPath(name).parts for name in names):
             raise ValueError("exported archive contains an unsafe path")
         actual: dict[str, str] = {}
@@ -655,7 +660,10 @@ def export_project_zip(
             "archive_mode": "delta",
             "extraction_root": ".",
             "deployment_instruction": (
-                "Upload this ZIP into the project/domain root in DirectAdmin and extract it there."
+                "Extract this ZIP in the server folder corresponding to the imported project root. "
+                "If ZIP paths start with public_html/, use its parent domain/project folder, "
+                "not public_html itself. If the imported root was public_html, extract there. "
+                "Only listed changed files are replaced; review the manifest and back up those files first."
             ),
             "baseline_snapshot_sha256": delta.baseline_sha256,
             "changed_files": list(delta.changed_files),

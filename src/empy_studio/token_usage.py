@@ -28,7 +28,6 @@ _CACHED_KEYS = (
     "cached_input_tokens",
     "input_cached_tokens",
     "cache_read_input_tokens",
-    "cache_creation_input_tokens",
 )
 _TOTAL_KEYS = ("total_tokens", "total", "tokens_total")
 _ESTIMATE_KEYS = (
@@ -75,7 +74,7 @@ class TokenUsage:
     def uncached_total(self) -> int:
         """A conservative amount of newly processed provider work."""
 
-        return self.fresh_input + self.output
+        return max(self.total - self.cached, self.fresh_input + self.output)
 
     def __post_init__(self) -> None:
         self.validate()

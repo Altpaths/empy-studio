@@ -121,6 +121,20 @@ def _scripts(root: Path, filename: str) -> dict[str, object]:
     return raw if isinstance(raw, dict) else {}
 
 
+def node_dependencies_required(root: Path) -> bool:
+    """Built-in Node scripts need no installation or node_modules directory."""
+    try:
+        value = json.loads((root / "package.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+    if not isinstance(value, dict):
+        return True
+    return any(value.get(key) for key in (
+        "dependencies", "devDependencies", "optionalDependencies", "peerDependencies",
+        "bundleDependencies", "bundledDependencies", "workspaces",
+    ))
+
+
 def composer_dependencies_required(root: Path) -> bool:
     """Return whether Composer's generated autoloader is part of the contract."""
 
@@ -251,7 +265,7 @@ def dependency_bootstrap_plan(
     package_scripts = _scripts(root, "package.json")
     node_needed = any(name in package_scripts for name in ("test", "build", "lint"))
     node_modules = root / "node_modules"
-    if package_json.is_file() and node_needed and not node_modules.is_dir():
+    if package_json.is_file() and node_needed and node_dependencies_required(root) and not node_modules.is_dir():
         package_lock = root / "package-lock.json"
         reason = "Node verification dependencies are missing from the isolated copy."
         if not package_lock.is_file():

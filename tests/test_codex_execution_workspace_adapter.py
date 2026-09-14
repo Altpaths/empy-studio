@@ -150,3 +150,22 @@ def test_round_trip_persists_host_readiness_error_code(tmp_path: Path) -> None:
     assert loaded == run
     assert loaded is not None
     assert loaded.installation.error_code == "sandbox_error"
+
+
+def test_provider_budget_survives_restart_without_turning_unknown_into_zero(tmp_path: Path) -> None:
+    from empy_studio.core.token_budget import ProviderBudgetReport, ProviderNodeBudgetReport
+
+    run = replace(sample_run(tmp_path), budget_accounting=ProviderBudgetReport(
+        budget_id="budget", planned_total_limit_tokens=100,
+        nodes=(ProviderNodeBudgetReport(node_id="node-1", step_id="step-1",
+               planned_limit_tokens=90, effective_fresh_limit_tokens=90,
+               cap_source="locked", executed=True),),
+    ))
+    store = CodexExecutionWorkspaceAdapter(tmp_path / "execution.json")
+    store.save_run(run)
+    restored = CodexExecutionWorkspaceAdapter(tmp_path / "execution.json").get_run(run.run_id)
+    assert restored is not None
+    assert restored.budget_accounting == run.budget_accounting
+    report = restored.to_dict()["budget_accounting"]
+    assert report["usage_complete"] is False
+    assert report["unknown_usage_node_ids"] == ["node-1"]

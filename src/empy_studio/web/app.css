@@ -12,3 +12,10 @@
 .import-readiness{margin-top:16px;padding:14px 16px;border-radius:12px;border:1px solid #ccefe0;background:#effbf6;color:#185f49}.import-readiness.needs-attention{border-color:#f0c4c4;background:#fff6f6;color:#6e2525}.import-readiness h3{margin:0 0 8px}.import-readiness ul{margin-top:8px}.import-readiness li{background:rgba(255,255,255,.72);word-break:break-word}
 .release-gate-explanation{margin:12px 0 18px;padding:15px 17px;border:1px solid #f3d0d0;border-radius:14px;background:#fff6f6;color:#8a3030;line-height:1.8}.release-gate-explanation strong{display:block;margin-bottom:5px}.release-gate-explanation ul{margin:6px 0 0;padding-inline-start:22px}.export-files{margin:12px 0;text-align:start;border:1px solid var(--line);border-radius:12px;padding:10px 14px}.export-files summary{cursor:pointer;color:var(--muted);font-weight:700}.export-files ul{margin:8px 0 0;padding-inline-start:22px}.export-digest code{direction:ltr;word-break:break-all;font-size:11px}
 .dependency-status{margin:16px 0;padding:14px 16px;border-radius:14px;border:1px solid #ccefe0;background:#effbf6;color:#185f49}.dependency-status.blocked{border-color:#f0c4c4;background:#fff6f6;color:#6e2525}.dependency-status strong,.dependency-status p,.dependency-status small{display:block}.dependency-status p{margin:6px 0;line-height:1.8}.dependency-status small{color:var(--muted);direction:ltr;text-align:start}
+
+.recovery-policy { margin-block: 1rem; padding: 1rem; border: 1px solid var(--border, #dedede); border-radius: 12px; }
+.recovery-fields { display: flex; flex-wrap: wrap; gap: 1rem; margin-block: 1rem; }
+.recovery-fields label { flex: 1 1 160px; }
+.recovery-fields input { display: block; width: 100%; margin-block-start: .4rem; }
+
+#budget-preset { display: block; min-width: 12rem; margin-bottom: 16px; padding: 10px 12px; border: 1px solid #ccd4e2; border-radius: 10px; background: white; font: inherit; }

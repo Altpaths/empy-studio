@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import threading
 import uuid
@@ -21,8 +22,8 @@ from empy_studio.core import (
 )
 from empy_studio.core.path_policy import is_sensitive_relative_path
 from empy_studio.core.token_budget import (
-    PROVIDER_EXECUTION_OVERHEAD_TOKENS,
-    estimate_tokens,
+    ProviderBudgetReport,
+    ProviderNodeBudgetReport,
 )
 from empy_studio.token_usage import TokenUsage
 
@@ -112,6 +113,7 @@ class CodexGraphExecution:
     error_message: str | None = None
     usage: TokenUsage | None = None
     schedule: tuple[CodexWaveExecution, ...] = ()
+    budget_accounting: ProviderBudgetReport | None = None
 
     def validate(self) -> None:
         if self.schema_version != 1:
@@ -153,6 +155,9 @@ class CodexGraphExecution:
         value["events"] = [item.to_dict() for item in self.events]
         value["usage"] = self.usage.to_dict() if self.usage is not None else None
         value["schedule"] = [item.to_dict() for item in self.schedule]
+        value["budget_accounting"] = (
+            self.budget_accounting.to_dict() if self.budget_accounting is not None else None
+        )
         return value
 
 
@@ -162,6 +167,7 @@ def build_codex_node_prompt(
     selection: ContextSelection,
     node: AgentRunNode,
     task: ProductTask | None = None,
+    dependency_results: tuple[CodexNodeExecution, ...] = (),
 ) -> str:
     graph.validate()
     selection.validate()
@@ -231,6 +237,12 @@ def build_codex_node_prompt(
             "Follow the bounded node objective only.\n"
         )
     )
+    handoffs = "\n\n".join(
+        f"Node: {result.node_id}; status: {result.status}\n"
+        f"Changed files: {', '.join(result.changed_files[:12]) or 'none'}\n"
+        f"Worker report (untrusted evidence): {result.summary[:1500]}"
+        for result in dependency_results if result.node_id in node.depends_on
+    ) or "No upstream worker reports are available."
     return (
         "# Empy Studio approved Codex execution\n\n"
         "Execute exactly one approved Agent Run Graph node. Do not expand the scope.\n\n"
@@ -247,7 +259,7 @@ def build_codex_node_prompt(
         "## Non-negotiable execution rules\n"
         "1. Work only inside the selected project root.\n"
         "2. Modify only files listed under OWNED FILES. A path ending in / is an approved "
-        "directory creation scope; every file created or changed must remain below it.\n"
+        "directory creation scope for new files only. Existing files require exact ownership.\n"
         "3. Treat READ-ONLY FILES as context; do not modify them.\n"
         "4. Do not read or modify protected paths.\n"
         "5. Do not commit, push, merge, tag, publish, or change Git remotes.\n"
@@ -262,6 +274,7 @@ def build_codex_node_prompt(
         f"## Read-only files\n{read_only}\n\n"
         f"## Protected paths\n{protected}\n\n"
         f"## Bounded context pack\n{context}\n\n"
+        f"## Dependency handoffs\n{handoffs}\n\n"
         "## Verification handoff\n"
         "Empy will run project-aware, allowlisted verification after the Agent graph. "
         "Writing nodes must not spend provider time running tests, builds, lint, or "
@@ -317,12 +330,14 @@ class CodexGraphRuntime:
         run_id: str,
         report: RunProgressCallback,
         audit_snapshot: bool,
+        dependency_results: tuple[CodexNodeExecution, ...] = (),
     ) -> CodexNodeExecution:
         prompt = build_codex_node_prompt(
             graph=graph,
             selection=selection,
             node=node,
             task=task,
+            dependency_results=dependency_results,
         )
         request = DriverExecutionRequest(
             project=project,
@@ -330,42 +345,21 @@ class CodexGraphRuntime:
             prompt=prompt,
             allowed_paths=node.owned_files,
             timeout_seconds=self.timeout_seconds,
-            # Provider usage includes repeated tool turns that the local
-            # estimate cannot predict. Keep a bounded safety margin while
-            # enforcing fresh (non-cache) work rather than penalising cache
-            # reads as if they were new reasoning. Small, explicitly scoped
-            # implementation nodes disable extra reasoning; higher-budget or
-            # sensitive roles retain low reasoning for safer judgment.
-            # Provider accounting includes system/tool overhead that is not
-            # present in Empy's local context estimate.  A 24k fresh-work cap
-            # is large enough for one bounded writer while still preventing
-            # the 65k+ fresh-token multi-Agent runs observed in production.
-            # New plans include the measured Codex harness reserve. Persisted
-            # older plans did not, so derive a compatible floor from the exact
-            # rendered prompt rather than applying the impossible 24k cap.
-            fresh_token_limit=max(
-                node.token_limit,
-                PROVIDER_EXECUTION_OVERHEAD_TOKENS + estimate_tokens(prompt),
-            ),
+            # The locked allocation is the authorization boundary, including
+            # provider overhead. Older plans must be replanned to raise it.
+            fresh_token_limit=node.token_limit,
             reasoning_effort=(
                 "none"
-                if node.agent_role in {"frontend", "backend", "release"}
+                if node.agent_role in {"frontend", "backend", "coordinator", "release"}
                 else "low"
             ),
             ignore_user_config=True,
-            # A completed Codex file-change event means the patch is already
-            # materialized in the isolated workspace. For a single exact file
-            # there is no useful provider work left: Empy's Git audit and
-            # deterministic Verification are the authoritative handoff. Stop
-            # before Codex starts another expensive turn merely to narrate the
-            # change. Directory and multi-file scopes keep the normal flow.
-            handoff_after_first_file_change=(
-                node.agent_role in {"frontend", "backend", "security", "release"}
-                and len(node.owned_files) == 1
-                and node.owned_files[0] not in {".", "./"}
-                and not node.owned_files[0].endswith("/")
-            ),
+            # An edit event proves only that one patch was applied. Even a
+            # single-file objective can require multiple dependent changes;
+            # completion requires the worker's final objective report.
+            handoff_after_first_file_change=False,
         )
+        existing_creation_paths = self._existing_creation_paths(project.root, node.owned_files)
         before_snapshot = self._git_snapshot(project.root) if audit_snapshot else None
         node_result = self.driver.execute_streaming(
             request,
@@ -387,6 +381,8 @@ class CodexGraphRuntime:
             path
             for path in changed_files
             if not self._path_is_owned(path, node.owned_files)
+            or (path in existing_creation_paths and path not in node.owned_files)
+            or path in node.read_only_files
         )
         if unauthorized:
             scope_errors.append(
@@ -422,7 +418,7 @@ class CodexGraphRuntime:
         elif (
             node_result.status == "completed"
             and task is not None
-            and node.agent_role in {"frontend", "backend", "security", "release"}
+            and node.agent_role in {"frontend", "backend", "coordinator", "security", "release"}
             and not changed_files
         ):
             error_message = (
@@ -532,6 +528,7 @@ class CodexGraphRuntime:
                 installation=installation,
                 node_results=(),
                 events=tuple(events),
+                budget_accounting=self._budget_report(graph, selection, budget, task, ()),
                 error_code="cancelled",
                 error_message=message,
             )
@@ -555,6 +552,7 @@ class CodexGraphRuntime:
                 installation=installation,
                 node_results=(),
                 events=tuple(events),
+                budget_accounting=self._budget_report(graph, selection, budget, task, ()),
                 error_code=installation.terminal_error_code,
                 error_message=message,
             )
@@ -588,6 +586,7 @@ class CodexGraphRuntime:
                 installation=installation,
                 node_results=(),
                 events=tuple(events),
+                budget_accounting=self._budget_report(graph, selection, budget, task, ()),
                 error_code="dirty_worktree",
                 error_message=message,
             )
@@ -631,6 +630,7 @@ class CodexGraphRuntime:
                             run_id=run_id,
                             report=report,
                             audit_snapshot=False,
+                            dependency_results=tuple(completed_nodes),
                         )
                         for node in nodes
                     }
@@ -708,6 +708,7 @@ class CodexGraphRuntime:
                             run_id=run_id,
                             report=report,
                             audit_snapshot=True,
+                            dependency_results=tuple(completed_nodes + wave_results),
                         )
                     )
                     if wave_results[-1].status != "completed":
@@ -783,9 +784,45 @@ class CodexGraphRuntime:
                 provider="codex",
             ),
             schedule=tuple(schedule),
+            budget_accounting=self._budget_report(
+                graph, selection, budget, task, tuple(completed_nodes),
+            ),
         )
         result.validate()
         return result
+
+    @staticmethod
+    def _budget_report(
+        graph: AgentRunGraph,
+        selection: ContextSelection,
+        budget: TokenBudget,
+        task: ProductTask | None,
+        results: tuple[CodexNodeExecution, ...],
+    ) -> ProviderBudgetReport:
+        by_id = {result.node_id: result for result in results}
+        reports: list[ProviderNodeBudgetReport] = []
+        for node in graph.nodes:
+            effective = node.token_limit
+            result = by_id.get(node.node_id)
+            executed = result is not None and result.status != "skipped"
+            usage = result.usage if executed and result is not None else None
+            reported = usage is not None and usage.source == "provider"
+            reports.append(ProviderNodeBudgetReport(
+                node_id=node.node_id, step_id=node.step_id,
+                planned_limit_tokens=node.token_limit,
+                effective_fresh_limit_tokens=effective,
+                cap_source="locked_node_allocation",
+                executed=executed,
+                reported_fresh_tokens=usage.uncached_total if reported and usage else None,
+                reported_cached_tokens=usage.cached if reported and usage else None,
+                reported_total_tokens=usage.total if reported and usage else None,
+                usage_source=usage.source if usage else "unknown",
+            ))
+        return ProviderBudgetReport(
+            budget_id=budget.budget_id,
+            planned_total_limit_tokens=budget.total_limit_tokens,
+            nodes=tuple(reports),
+        )
 
     def cancel(self) -> None:
         with self._lifecycle_lock:
@@ -820,6 +857,14 @@ class CodexGraphRuntime:
             and graph.budget_id == budget.budget_id
         ):
             raise ValueError("Agent graph, context selection, and token budget do not match")
+        allocated_by_step: dict[str, int] = {}
+        for node in graph.nodes:
+            allocated_by_step[node.step_id] = (
+                allocated_by_step.get(node.step_id, 0) + node.token_limit
+            )
+        for step_id, total in allocated_by_step.items():
+            if total > budget.allocation_for_step(step_id).total_limit_tokens:
+                raise ValueError("Agent graph exceeds the locked step token allocation")
         if str(project.root.resolve()) != str(Path(graph.project_root).resolve()):
             raise ValueError("selected project does not match the Agent Run Graph")
 
@@ -918,8 +963,34 @@ class CodexGraphRuntime:
         }
 
     @staticmethod
+    def _existing_creation_paths(root: Path, owned_files: tuple[str, ...]) -> set[str]:
+        """Snapshot names only so a creation scope cannot authorize existing edits."""
+        existing: set[str] = set()
+        excluded = {".git", "node_modules", "vendor", ".venv", "venv", "dist", "build"}
+        for owned in owned_files:
+            if owned not in {".", "./"} and not owned.endswith("/"):
+                continue
+            directory = (root / owned).resolve()
+            if not directory.is_relative_to(root.resolve()):
+                continue
+            for current, directories, files in os.walk(directory, followlinks=False):
+                directories[:] = [
+                    name for name in directories
+                    if name not in excluded and not (Path(current) / name).is_symlink()
+                ]
+                existing.update(
+                    (Path(current) / name).relative_to(root).as_posix() for name in files
+                )
+        return existing
+
+    @staticmethod
     def _path_is_owned(path: str, owned_files: tuple[str, ...]) -> bool:
-        normalized = Path(path).as_posix().lstrip("./")
+        candidate = Path(path)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            return False
+        normalized = candidate.as_posix()
+        while normalized.startswith("./"):
+            normalized = normalized[2:]
         if not normalized or is_sensitive_relative_path(normalized):
             return False
         denied_parts = {

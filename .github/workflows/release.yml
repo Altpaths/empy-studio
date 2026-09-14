@@ -86,8 +86,7 @@ jobs:
           mkdir -p build/app
           python scripts/build_macos_app.py \
             --output "build/app/Empy Studio.app" \
-            --architecture "${{ matrix.architecture }}" \
-            --clean-workspace
+            --architecture "${{ matrix.architecture }}"
           test -x "build/app/Empy Studio.app/Contents/MacOS/Empy Studio"
           "build/app/Empy Studio.app/Contents/MacOS/Empy Studio" --help
           codesign --verify --deep --strict "build/app/Empy Studio.app"

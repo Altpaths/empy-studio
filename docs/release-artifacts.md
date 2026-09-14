@@ -30,8 +30,7 @@ same release manifest:
 ```bash
 python scripts/build_macos_app.py \
   --output "build/app/Empy Studio.app" \
-  --architecture arm64 \
-  --clean-workspace
+  --architecture arm64
 ditto -c -k --norsrc --noextattr --noqtn --keepParent \
   "build/app/Empy Studio.app" build/app/empy-studio-macos-arm64.zip
 ```
@@ -48,9 +47,11 @@ The Finder-launchable app is built only on macOS with the release extra:
 python -m pip install ".[release]"
 python scripts/build_macos_app.py \
   --output "build/Empy Studio.app" \
-  --architecture auto \
-  --clean-workspace
+  --architecture auto
 ```
+
+Normal app builds preserve the workspace across launches. Use `--clean-workspace`
+only for an explicitly disposable trial.
 
 `auto`, `arm64`, `x86_64`, and `universal2` are accepted. The command fails if
 PyInstaller is unavailable or if it does not produce a real `.app` bundle; a
