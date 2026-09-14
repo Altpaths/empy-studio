@@ -1,4 +1,4 @@
-# Experimental OmniRoute connection and adaptive token economy (0.1.54)
+# Experimental OmniRoute connection and adaptive token economy (0.1.55)
 
 Choose **Model connection: direct or OmniRoute** on the project screen. Direct
 keeps the existing Codex account route; its normal account usage applies.
@@ -29,6 +29,15 @@ PYTHONPATH=src python scripts/benchmark_token_efficiency.py \
 The benchmark makes zero provider calls and reports planned reductions only.
 Real quality and cost comparisons still require the same fixture, a working
 provider, and usage events from that provider.
+
+## Persistence ownership safety
+
+When a backend ticket asks to store, persist, record, or keep history, Empy
+marks matching `database/`, `migrations/`, `schema/`, and `.sql` files as the
+bounded implementation surface for that backend node. A related schema file
+stays read-only for tickets that do not request persistence. The runtime
+ownership audit remains the final guard and still rejects any genuinely
+unowned edit.
 
 A dedicated API-key environment variable NAME can be configured if the gateway
 requires authentication. Never enter a key value. GUI launches must inherit that

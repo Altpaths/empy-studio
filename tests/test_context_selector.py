@@ -288,6 +288,89 @@ def test_frontend_writer_pack_excludes_sql_and_uses_head_tail_excerpt(
     assert frontend_node.owned_files == ("public_html/index.html",)
 
 
+def test_backend_owns_related_schema_for_persistence_ticket(tmp_path: Path) -> None:
+    public_html = tmp_path / "public_html"
+    (public_html / "src").mkdir(parents=True)
+    (public_html / "database").mkdir(parents=True)
+    (public_html / "assets.php").write_text("<?php echo 'assets';\n", encoding="utf-8")
+    (public_html / "src" / "FinanceService.php").write_text(
+        "<?php class FinanceService {}\n", encoding="utf-8"
+    )
+    (public_html / "database" / "schema.sql").write_text(
+        "CREATE TABLE assets (id INT);\n", encoding="utf-8"
+    )
+    project = DefaultProjectService().detect(tmp_path)
+    task = ProductTask(
+        task_id="backend-persistence-schema",
+        project_root=str(tmp_path.resolve()),
+        kind="custom",
+        title="Add a live price history",
+        objective="Store price history safely and update the finance service and database schema",
+        requirements=("Persist the new history",),
+        constraints=("Do not change unrelated files",),
+        definition_of_done=("The backend verification passes",),
+        status="ready_for_planning",
+    )
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+
+    selection = build_context_selection(task=task, project=project, plan=plan)
+    budget = lock_token_budget(build_token_budget(plan=plan, selection=selection))
+    graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+
+    backend = next(node for node in graph.nodes if node.agent_role == "backend")
+    assert "public_html/database/schema.sql" in backend.owned_files
+    assert "public_html/database/schema.sql" not in backend.read_only_files
+
+
+def test_backend_keeps_unrequested_schema_as_read_only_context(tmp_path: Path) -> None:
+    public_html = tmp_path / "public_html"
+    (public_html / "src").mkdir(parents=True)
+    (public_html / "database").mkdir(parents=True)
+    (public_html / "src" / "FinanceService.php").write_text(
+        "<?php class FinanceService {}\n", encoding="utf-8"
+    )
+    (public_html / "database" / "schema.sql").write_text(
+        "CREATE TABLE assets (id INT);\n", encoding="utf-8"
+    )
+    project = DefaultProjectService().detect(tmp_path)
+    task = ProductTask(
+        task_id="backend-schema-read-only",
+        project_root=str(tmp_path.resolve()),
+        kind="custom",
+        title="Improve backend finance error handling",
+        objective="Improve the backend FinanceService error handling",
+        requirements=("Keep existing behavior",),
+        constraints=("Do not change unrelated files",),
+        definition_of_done=("The backend verification passes",),
+        status="ready_for_planning",
+    )
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+
+    selection = build_context_selection(task=task, project=project, plan=plan)
+    budget = lock_token_budget(build_token_budget(plan=plan, selection=selection))
+    graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+
+    backend = next(node for node in graph.nodes if node.agent_role == "backend")
+    assert "public_html/database/schema.sql" not in backend.owned_files
+    assert not any(
+        item.relative_path == "public_html/database/schema.sql"
+        and item.owner_node_id == backend.node_id
+        for item in graph.ownership
+    )
+
+
+def test_restore_word_does_not_request_data_model_ownership() -> None:
+    from empy_studio.core.context_selector import _task_requests_data_model_changes
+
+    assert not _task_requests_data_model_changes("Improve the restore flow")
+
+
 def test_documentation_ticket_keeps_named_readme_in_writer_context(
     tmp_path: Path,
 ) -> None:

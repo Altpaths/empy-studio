@@ -194,6 +194,10 @@ def default_agent_registry() -> AgentRegistry:
                     "app/**",
                     "routes/**",
                     "database/**",
+                    "**/database/**",
+                    "**/migrations/**",
+                    "**/schema/**",
+                    "**/*.sql",
                     "api/**",
                     "server/**",
                     "src/**/*.py",
@@ -515,6 +519,16 @@ def _matches_ownership_pattern(agent: AgentDefinition, relative_path: str) -> bo
     )
 
 
+def _is_data_model_path(relative_path: str) -> bool:
+    path = Path(relative_path)
+    parts = {part.casefold() for part in path.parts[:-1]}
+    return (
+        path.suffix.casefold() == ".sql"
+        or bool(parts & {"database", "databases", "migration", "migrations", "schema"})
+        or "schema" in path.name.casefold()
+    )
+
+
 def _pack_by_step(selection: ContextSelection) -> dict[str, ContextPack]:
     values = {pack.step_id: pack for pack in selection.packs}
     if len(values) != len(selection.packs):
@@ -551,6 +565,11 @@ def _build_ownership(
                 step.suggested_agent in WRITING_ROLES
                 and "direct indexed dependency context (read-only)" not in context_file.reasons
                 and _matches_ownership_pattern(agent, context_file.relative_path)
+                and (
+                    not _is_data_model_path(context_file.relative_path)
+                    or "ticket requests data model changes" in context_file.reasons
+                    or "explicitly named in ticket" in context_file.reasons
+                )
             ):
                 file_candidates.setdefault(context_file.relative_path, []).append(
                     (step.step_id, context_file.score)

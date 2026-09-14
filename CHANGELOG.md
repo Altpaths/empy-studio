@@ -1,3 +1,12 @@
+## [0.1.55] - 2026-09-15
+
+- Fix PHP persistence tickets whose backend node needs to update a related
+  database schema or SQL migration. Matching data-model files are now explicitly
+  owned only when the ticket requests persistence, while unrelated schema
+  context remains read-only.
+- Add regression coverage for ownership construction and preserve the runtime
+  scope guard for genuinely unowned files.
+
 ## [0.1.54] - 2026-09-14
 
 - Add an adaptive economy coordinator for low/medium-risk multi-domain work.
