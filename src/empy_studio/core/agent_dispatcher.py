@@ -41,6 +41,14 @@ ROLE_CAPABILITIES: Final[dict[AgentRole, tuple[AgentCapability, ...]]] = {
         "modify-backend",
         "bounded-execution",
     ),
+    "coordinator": (
+        "read-context",
+        "modify-frontend",
+        "modify-backend",
+        "audit-security",
+        "prepare-release",
+        "bounded-execution",
+    ),
     "quality": (
         "read-context",
         "verify-quality",
@@ -59,7 +67,7 @@ ROLE_CAPABILITIES: Final[dict[AgentRole, tuple[AgentCapability, ...]]] = {
 }
 
 WRITING_ROLES: Final[frozenset[AgentRole]] = frozenset(
-    {"frontend", "backend", "security", "release"}
+    {"frontend", "backend", "coordinator", "security", "release"}
 )
 
 
@@ -213,6 +221,14 @@ def default_agent_registry() -> AgentRegistry:
                     "*.php",
                     "**/*.php",
                 ),
+            ),
+            AgentDefinition(
+                agent_id="coordinator-agent",
+                display_name="Economy Coordinator Agent",
+                role="coordinator",
+                capabilities=ROLE_CAPABILITIES["coordinator"],
+                ownership_patterns=("**",),
+                priority=90,
             ),
             AgentDefinition(
                 agent_id="security-agent",
@@ -533,6 +549,7 @@ def _build_ownership(
             readers.setdefault(context_file.relative_path, set()).add(agent.agent_id)
             if (
                 step.suggested_agent in WRITING_ROLES
+                and "direct indexed dependency context (read-only)" not in context_file.reasons
                 and _matches_ownership_pattern(agent, context_file.relative_path)
             ):
                 file_candidates.setdefault(context_file.relative_path, []).append(
@@ -595,7 +612,11 @@ def _build_ownership(
             for item in writer_pack.files
         )
 
-    if len(writing_steps) == 1 and not bounded_frontend_entry:
+    exact_ticket_scope = len(writing_steps) == 1 and any(
+        "explicitly named in ticket" in item.reasons
+        for item in packs[writing_steps[0].step_id].files
+    )
+    if len(writing_steps) == 1 and not bounded_frontend_entry and not exact_ticket_scope:
         # A single implementation Agent must be able to create a required
         # module, not merely edit whichever existing file happened to rank
         # first.  Grant the detected application root as a bounded creation

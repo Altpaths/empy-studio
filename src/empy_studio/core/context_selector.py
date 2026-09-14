@@ -135,6 +135,17 @@ ROLE_KEYWORDS: Final[dict[str, tuple[str, ...]]] = {
         "migration",
         "backend",
     ),
+    "coordinator": (
+        "app",
+        "src",
+        "public",
+        "api",
+        "route",
+        "component",
+        "template",
+        "test",
+        "release",
+    ),
     "quality": (
         "test",
         "tests",
@@ -203,7 +214,7 @@ TEST_CHANGE_ACTIONS: Final[frozenset[str]] = frozenset(
     }
 )
 WRITING_ROLES: Final[frozenset[str]] = frozenset(
-    {"frontend", "backend", "security", "release"}
+    {"frontend", "backend", "coordinator", "security", "release"}
 )
 
 _CODE_SUFFIXES: Final[frozenset[str]] = frozenset(
@@ -1077,7 +1088,7 @@ def _is_writable_candidate_for_role(
             or name in {"pyproject.toml", "package.json", "composer.json", "cargo.toml", "go.mod", "dockerfile", "changelog.md"}
             or ("release" in path_parts and suffix in TEXT_EXTENSIONS)
         )
-    return False
+    return role == "coordinator"
 
 
 def _virtual_writer_target(
@@ -1094,7 +1105,7 @@ def _virtual_writer_target(
     imported project root.
     """
 
-    if role not in {"frontend", "backend"}:
+    if role not in {"frontend", "backend", "coordinator"}:
         return None
     if not requests_implementation(task_text):
         return None
@@ -1325,6 +1336,32 @@ def _build_pack(
                     )
                 )
             scored.sort(key=lambda item: (-item[0], item[1]))
+
+    # Dependency context is read-only. Keep exact editing ownership separate
+    # from the modules needed to understand an interface or its callers.
+    if brain_index is not None and scored:
+        primary_paths = explicit_paths or frozenset((scored[0][1],))
+        related = set(brain_index.related_paths(primary_paths))
+        scored = [
+            (score, path, reasons + ("direct indexed dependency context (read-only)",), candidate)
+            if path in related and path not in primary_paths
+            else (score, path, reasons, candidate)
+            for score, path, reasons, candidate in scored
+        ]
+        selected_paths = {item[1] for item in scored}
+        for candidate in candidates:
+            if candidate.relative_path in related - selected_paths:
+                scored.append((
+                    85,
+                    candidate.relative_path,
+                    ("direct indexed dependency context (read-only)",),
+                    candidate,
+                ))
+        scored.sort(key=lambda item: (
+            0 if item[1] in primary_paths else 1,
+            0 if item[1] in related else 1,
+            -item[0], item[1],
+        ))
 
     files: list[ContextFile] = [virtual_target] if virtual_target is not None else []
     total_bytes = 0

@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
   "product": "Empy Studio",
-  "version": "0.1.0",
-  "tag": "v0.1.0",
+  "version": "0.1.54",
+  "tag": "v0.1.54",
   "channel": "stable",
-  "release_name": "Empy Studio 0.1.0 — Developer Preview",
+  "release_name": "Empy Studio 0.1.54 \u2014 Adaptive token economy",
   "notes_file": "RELEASE_NOTES.md",
   "changelog_file": "CHANGELOG.md",
   "artifacts": [],
-  "previous_version": null,
+  "previous_version": "0.1.53",
   "metadata": {
-    "release_scope": "open-source developer preview"
+    "release_scope": "adaptive economy planner with measured deterministic acceptance"
   }
 }

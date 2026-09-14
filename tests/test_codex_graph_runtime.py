@@ -221,12 +221,12 @@ def test_runtime_executes_dependency_order(tmp_path: Path) -> None:
     assert all(request.fresh_token_limit is not None for request in driver.requests)
     assert all(request.fresh_token_limit > 24_000 for request in driver.requests)
     for node, request in zip(graph.nodes, driver.requests, strict=True):
-        assert request.handoff_after_first_file_change is (
-            node.agent_role in {"frontend", "backend", "security", "release"}
-            and len(node.owned_files) == 1
-            and node.owned_files[0] not in {".", "./"}
-            and not node.owned_files[0].endswith("/")
-        )
+        assert request.handoff_after_first_file_change is False
+        assert request.fresh_token_limit == node.token_limit
+    accounting = result.to_dict()["budget_accounting"]
+    assert accounting["cap_adjustment_tokens"] == 0
+    assert accounting["usage_complete"] is True
+    assert accounting["reported_cached_tokens"] == 2 * len(graph.nodes)
     assert result.usage is not None
     assert result.usage.input == sum(10 * index for index in range(1, len(graph.nodes) + 1))
     assert result.usage.output == 3 * len(graph.nodes)
@@ -413,3 +413,36 @@ def test_runtime_fails_node_that_changes_unowned_file(
     assert result.node_results[0].error_code == "scope_violation"
     assert "unowned.txt" in (result.node_results[0].error_message or "")
     assert len(driver.requests) == 1
+
+
+def test_failed_usage_is_unknown_not_zero(tmp_path: Path) -> None:
+    detection, selection, budget, graph = prepared(tmp_path)
+    result = CodexGraphRuntime(driver=FakeDriver(fail_first=True), run_root=tmp_path / "runs").run(
+        graph=graph, selection=selection, budget=budget, project=detection.descriptor,
+    )
+    accounting = result.to_dict()["budget_accounting"]
+    assert accounting["usage_complete"] is False
+    assert accounting["unknown_usage_node_ids"] == [graph.nodes[0].node_id]
+    assert accounting["nodes"][0]["reported_fresh_tokens"] is None
+
+
+def test_small_locked_cap_is_preserved(tmp_path: Path) -> None:
+    detection, selection, budget, graph = prepared(tmp_path)
+    graph = replace(graph, nodes=tuple(replace(node, token_limit=100) for node in graph.nodes))
+    driver = FakeDriver()
+    result = CodexGraphRuntime(driver=driver, run_root=tmp_path / "runs").run(
+        graph=graph, selection=selection, budget=budget, project=detection.descriptor,
+    )
+    assert all(request.fresh_token_limit == 100 for request in driver.requests)
+    assert result.to_dict()["budget_accounting"]["cap_adjustment_tokens"] == 0
+
+
+def test_graph_cannot_raise_locked_allocation(tmp_path: Path) -> None:
+    detection, selection, budget, graph = prepared(tmp_path)
+    graph = replace(graph, nodes=tuple(
+        replace(node, token_limit=node.token_limit + 1) for node in graph.nodes
+    ))
+    with pytest.raises(ValueError, match="locked step token allocation"):
+        CodexGraphRuntime(driver=FakeDriver(), run_root=tmp_path / "runs").run(
+            graph=graph, selection=selection, budget=budget, project=detection.descriptor,
+        )

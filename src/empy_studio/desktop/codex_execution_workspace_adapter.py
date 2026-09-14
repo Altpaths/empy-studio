@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Literal, cast
 
+from empy_studio.core.token_budget import ProviderBudgetReport, ProviderNodeBudgetReport
 from empy_studio.drivers import (
     CodexAvailability,
     CodexErrorCode,
@@ -214,6 +215,14 @@ class CodexExecutionWorkspaceAdapter:
                 )
             )
 
+        budget_report = None
+        raw_budget = value.get("budget_accounting")
+        if isinstance(raw_budget, dict):
+            budget_report = ProviderBudgetReport(
+                budget_id=str(raw_budget["budget_id"]),
+                planned_total_limit_tokens=_as_int(raw_budget["planned_total_limit_tokens"], "budget.total"),
+                nodes=tuple(ProviderNodeBudgetReport(**node) for node in raw_budget.get("nodes", [])),
+            )
         raw_error_code = value.get("error_code")
         run = CodexGraphExecution(
             schema_version=_as_int(value["schema_version"], "schema_version"),
@@ -236,6 +245,7 @@ class CodexExecutionWorkspaceAdapter:
             error_message=_optional_string(value.get("error_message")),
             usage=_usage(value.get("usage")),
             schedule=tuple(schedule),
+            budget_accounting=budget_report,
         )
         run.validate()
         return run

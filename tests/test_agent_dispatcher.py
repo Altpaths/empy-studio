@@ -246,6 +246,7 @@ def test_default_registry_is_deterministic() -> None:
         "discovery",
         "frontend",
         "backend",
+        "coordinator",
         "quality",
         "security",
         "release",

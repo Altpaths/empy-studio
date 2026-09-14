@@ -93,13 +93,16 @@ boundary.
 
 ### macOS without Terminal
 
-The release also provides a Finder-launchable macOS app trial. Download the
+The release also provides a Finder-launchable macOS app. Download the
 `empy-studio-macos-arm64.zip` asset for Apple Silicon (or the x86_64 asset for
 Intel), double-click the ZIP to extract it, then right-click `Empy Studio.app`
 and choose **Open**. If macOS blocks it, open System Settings → Privacy &
-Security and choose **Open Anyway** for Empy Studio. This clean trial app
-starts with an empty workspace on every launch; it does not reuse the normal
-Empy Studio history.
+Security and choose **Open Anyway** for Empy Studio. Each newly extracted app starts empty and opens on the project screen.
+The same installation preserves user-imported projects and tickets between launches.
+Moving across volumes or replacing the executable starts a separate workspace;
+existing data is retained on disk. Guided planning always uses economy.
+An optional clean trial build is available to developers with `--clean-workspace`;
+it uses a separate session and never deletes the normal workspace.
 
 ### Try the included sample project
 
@@ -298,9 +301,18 @@ See `docs/plugin-package-manager-v1.md` for the complete architecture.
 
 ## Status
 
-**v0.1.44 — Developer Preview**
+See [the five-goal workflow](docs/five-goal-workflow.md) for project memory,
+scoped workers, recovery limits, usage evidence, and DirectAdmin extraction.
+This source candidate has not been published or declared platform-accepted
+merely because its unit tests pass.
 
-The current release provides a working CLI, task-graph generation, ownership-conflict detection, evidence-backed learning, runtime-aware verification, and a Finder-launchable clean macOS trial app. Public interfaces may evolve before v1.0.
+
+**v0.1.54 — Adaptive token economy and OmniRoute connection**
+
+The current release provides a working CLI, adaptive task-graph generation,
+ownership-conflict detection, evidence-backed learning, runtime-aware
+verification, deterministic token-efficiency measurement, and a Finder-launchable
+persistent macOS app. Public interfaces may evolve before v1.0.
 
 ## Principles and documentation
 
@@ -359,3 +371,5 @@ Windows, plus matching uninstallers and direct GitHub Release download maps.
 ```
 
 See `docs/distribution-installer-v1.md`.
+
+Experimental OmniRoute setup and limitations: [docs/omniroute.md](docs/omniroute.md).

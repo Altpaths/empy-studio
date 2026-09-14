@@ -71,7 +71,7 @@ def test_php_runtime_config_and_logs_are_skipped_but_examples_are_indexed(
     assert "storage/logs/app.log" in result.skipped_paths
 
 
-def test_reuses_unchanged_records_without_rereading_and_reports_removed(
+def test_reuses_unchanged_analysis_after_hashing_and_reports_removed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -80,9 +80,9 @@ def test_reuses_unchanged_records_without_rereading_and_reports_removed(
     first = build_project_brain_index(tmp_path)
 
     def fail_read(*_args: object, **_kwargs: object) -> bytes:
-        raise AssertionError("unchanged file content should not be read")
+        raise AssertionError("unchanged file should not be analyzed again")
 
-    monkeypatch.setattr(Path, "read_bytes", fail_read)
+    monkeypatch.setattr("empy_studio.core.project_brain._build_record", fail_read)
     second = build_project_brain_index(tmp_path, previous=first.index)
 
     assert second.reused_paths == ("src.py",)
@@ -130,3 +130,34 @@ def test_symlinks_and_scan_bounds_are_not_indexed(tmp_path: Path) -> None:
     assert len(result.index.records) == 1
     assert "link.py" not in indexed_paths
     assert result.index.scan_limit_reached
+
+
+def test_hash_detects_changed_content_with_same_size_and_mtime(tmp_path: Path) -> None:
+    import os
+
+    source = tmp_path / "app.py"
+    source.write_text("class Before: pass\n")
+    first = build_project_brain_index(tmp_path)
+    stat = source.stat()
+    source.write_text("class Afterx: pass\n")
+    os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    second = build_project_brain_index(tmp_path, previous=first.index)
+    assert second.changed_paths == ("app.py",)
+    assert second.index.records[0].sha256 != first.index.records[0].sha256
+    assert second.index.content_scanned_files == 1
+    assert second.index.metadata_scanned_files == 1
+    third = build_project_brain_index(tmp_path, previous=second.index)
+    assert third.reused_paths == ("app.py",)
+    assert third.index.stats()["locally_reanalyzed_files"] == 0
+
+
+def test_related_paths_reuse_current_import_hints(tmp_path: Path) -> None:
+    (tmp_path / "main.py").write_text("import service\n")
+    (tmp_path / "service.py").write_text("def run(): pass\n")
+    first = build_project_brain_index(tmp_path)
+    assert first.index.related_paths(("main.py",)) == ("service.py",)
+    assert first.index.related_paths(("service.py",)) == ("main.py",)
+    (tmp_path / "main.py").write_text("import outside\n")
+    second = build_project_brain_index(tmp_path, previous=first.index)
+    assert second.index.related_paths(("service.py",)) == ()
+    assert second.reused_paths == ("service.py",)

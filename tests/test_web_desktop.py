@@ -802,11 +802,12 @@ def test_failed_verification_is_visible_and_can_seed_a_follow_up_ticket(tmp_path
     assert "public_html/index.html" in follow_up["suggested_ticket"]
     state.create_plan("Update index.html to address the reported project entry page issue")
     assert state.task is not None
-    assert "Previous Empy verification findings" in state.task.objective
+    assert "Previous Empy verification findings" in "\n".join(state.task.constraints)
+    assert "Previous Empy verification findings" not in state.task.objective
 
     reopened = GuidedState(tmp_path / "workspace")
     # Starting a new corrective plan consumes the old failure banner; the
-    # findings remain part of the new task objective and are not rendered a
+    # findings remain in the new task constraints and are not rendered a
     # second time on the plan screen.
     assert reopened.public()["failure_context"] is None
 
@@ -880,7 +881,7 @@ def test_runtime_failure_has_an_automatic_continuation_hook(tmp_path: Path) -> N
     state.create_plan("Update the README")
     calls: list[str] = []
 
-    def fake_auto_repair() -> None:
+    def fake_auto_repair(*, automatic: bool = False) -> None:
         calls.append("auto-repair")
 
     state.auto_repair = fake_auto_repair  # type: ignore[method-assign]
@@ -1001,8 +1002,8 @@ def test_token_budget_run_has_clear_guidance_and_no_false_verification_failure(t
 
     assert state.compact_retry is True
     assert state.task is not None
-    assert "token guard" in state.task.objective
-    assert state.task.objective.count("Confirmed runtime detail") == 1
+    assert state.task.objective == "Update the README"
+    assert "fresh-token limit" in "\n".join(state.task.constraints)
 
 
 def test_budget_limited_scoped_change_is_kept_for_local_verification(
@@ -1197,10 +1198,11 @@ def test_auto_repair_creates_real_follow_up_plan_once(tmp_path: Path) -> None:
 
     assert state.repair_attempts == 1
     assert state.task is not None
-    assert "علت قطعی شکست قبلی" in state.task.objective
+    assert "علت قطعی شکست قبلی" not in state.task.objective
+    assert "علت قطعی شکست قبلی" in "\n".join(state.task.constraints)
     assert state.plan is not None
     assert [step.suggested_agent for step in state.plan.steps] == ["frontend"]
-    with pytest.raises(RuntimeError, match="already attempted"):
+    with pytest.raises(RuntimeError, match="already active"):
         state.auto_repair()
 
 

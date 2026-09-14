@@ -720,3 +720,54 @@ def apply_budget_usage(
         reason=reason,
         step_id=step_id,
     )
+
+
+@dataclass(frozen=True)
+class ProviderNodeBudgetReport:
+    """Observed provider work, separate from allocations and reservations."""
+
+    node_id: str
+    step_id: str
+    planned_limit_tokens: int
+    effective_fresh_limit_tokens: int
+    cap_source: str
+    executed: bool = False
+    reported_fresh_tokens: int | None = None
+    reported_cached_tokens: int | None = None
+    reported_total_tokens: int | None = None
+    usage_source: str = "unknown"
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class ProviderBudgetReport:
+    budget_id: str
+    planned_total_limit_tokens: int
+    nodes: tuple[ProviderNodeBudgetReport, ...]
+    schema_version: int = 1
+
+    def to_dict(self) -> dict[str, object]:
+        executed = tuple(node for node in self.nodes if node.executed)
+        unknown = tuple(node.node_id for node in executed if node.usage_source != "provider")
+        return {
+            "schema_version": self.schema_version,
+            "budget_id": self.budget_id,
+            "planned_total_limit_tokens": self.planned_total_limit_tokens,
+            "planned_node_limit_tokens": sum(node.planned_limit_tokens for node in self.nodes),
+            "effective_fresh_limit_tokens": sum(
+                node.effective_fresh_limit_tokens for node in self.nodes
+            ),
+            "cap_adjustment_tokens": sum(
+                node.effective_fresh_limit_tokens - node.planned_limit_tokens
+                for node in self.nodes
+            ),
+            "reported_fresh_tokens": sum(node.reported_fresh_tokens or 0 for node in executed),
+            "reported_cached_tokens": sum(node.reported_cached_tokens or 0 for node in executed),
+            "reported_total_tokens": sum(node.reported_total_tokens or 0 for node in executed),
+            "usage_complete": bool(executed) and not unknown,
+            "unknown_usage_node_ids": list(unknown),
+            "enforcement": "per-node fresh provider usage; checked when usage events arrive",
+            "nodes": [node.to_dict() for node in self.nodes],
+        }

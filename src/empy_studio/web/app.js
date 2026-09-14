@@ -4,6 +4,7 @@ let language = "fa";
 let poller = null;
 let taskDraft = "";
 let taskDraftProjectId = null;
+let taskDraftId = null;
 
 const t = {
   fa: {
@@ -177,8 +178,13 @@ function projectList() {
     return `<button type="button" class="project ${project.id === state.active_project?.id ? "active" : ""}" data-action="select-project" data-project-id="${escapeHtml(project.id)}"><strong>${escapeHtml(project.name)}</strong><small>${escapeHtml(project.type)} · ${project.tasks.length} ${language === "fa" ? "تیکت" : "tickets"}</small></button>`;
   }).join("");
 }
+function renderModelRoute() {
+  const route = state.model_route || {}; const fa = language === "fa";
+  const disabled = state.route_locked ? "disabled" : "";
+  return `<details class="model-route"><summary>${fa ? "اتصال مدل: مستقیم یا OmniRoute" : "Model connection: direct or OmniRoute"}</summary><p class="muted">${fa ? "مدل رایگان/محلی به‌صورت پیش‌فرض مجاز است. برای مدل پولی باید همین‌جا صریحاً اجازه دهید؛ Empy هیچ fallback یا نگاشت خودکاری انجام نمی‌دهد." : "Free/local models are allowed by default. Paid model IDs require explicit opt-in here; Empy never applies automatic fallback or remapping."}</p><label>${fa ? "مسیر" : "Route"}<select id="model-route-mode" ${disabled}><option value="direct" ${route.mode !== "omniroute" ? "selected" : ""}>Codex — ${fa ? "حساب فعلی؛ مصرف طبق حساب" : "current account; account usage applies"}</option><option value="omniroute" ${route.mode === "omniroute" ? "selected" : ""}>OmniRoute — ${fa ? "محلی / انتخاب‌شده" : "local / selected model"}</option></select></label><label>${fa ? "نشانی OmniRoute روی همین مک" : "OmniRoute URL on this Mac"}<input id="model-route-url" value="${escapeHtml(route.base_url || "http://127.0.0.1:20129/v1")}" ${disabled}></label><label>${fa ? "شناسهٔ مدل مشخص" : "Explicit model ID"}<input id="model-route-model" value="${escapeHtml(route.model || "oc/north-mini-code-free")}" ${disabled}></label><label><input id="model-route-paid" type="checkbox" ${route.allow_paid === true ? "checked" : ""} ${disabled}> ${fa ? "اجازهٔ صریح مدل پولی" : "Explicitly allow a paid model"}</label><label>${fa ? "نام متغیر محیطی کلید، اختیاری؛ خود کلید را ننویسید" : "Optional key environment variable NAME; never enter the key"}<input id="model-route-env" value="${escapeHtml(route.env_key || "")}" placeholder="EMPY_OMNIROUTE_API_KEY" ${disabled}></label><button type="button" class="secondary" data-action="save-model-route" ${disabled}>${fa ? "ذخیرهٔ اتصال" : "Save connection"}</button></details>`;
+}
 function renderEngine(engine) {
-  return `<div class="engine"><div class="row"><strong>${text().engine}: ${engine.ready ? text().ready : text().unavailable}</strong><span class="status-pill ${engine.ready ? "completed" : "failed"}">${engine.ready ? text().ready : text().unavailable}</span></div><small>${escapeHtml(engine.message || "")}</small>${engine.remediation ? `<small class="engine-help">${escapeHtml(engine.remediation)}</small>` : `<small class="engine-help">${text().engineHelp}</small>`}<div class="actions"><button type="button" class="secondary" data-action="refresh-engine">${text().refresh}</button><button type="button" class="secondary" data-action="open-engine">${text().openCodex}</button></div></div>`;
+  return `<div class="engine"><div class="row"><strong>${escapeHtml(engine.provider || text().engine)}: ${engine.ready ? text().ready : text().unavailable}</strong><span class="status-pill ${engine.ready ? "completed" : "failed"}">${engine.ready ? text().ready : text().unavailable}</span></div><small>${escapeHtml(engine.message || "")}</small>${engine.remediation ? `<small class="engine-help">${escapeHtml(engine.remediation)}</small>` : `<small class="engine-help">${text().engineHelp}</small>`}<div class="actions"><button type="button" class="secondary" data-action="refresh-engine">${text().refresh}</button><button type="button" class="secondary" data-action="open-engine">${text().openCodex}</button></div>${renderModelRoute()}</div>`;
 }
 function renderProject() {
   const engine = state.engine || {};
@@ -232,6 +238,14 @@ function renderRecoveryActions(context) {
   const secondary = primaryAction === "resume-ticket" ? "" : `<button type="button" class="secondary" data-action="resume-ticket">${text().continueTicket}</button>`;
   return `<button type="button" class="primary" data-action="${primaryAction}">${primaryLabel}</button>${secondary}`;
 }
+function renderRecoveryPolicy() {
+  const recovery = state.recovery || {}; const policy = recovery.policy || {};
+  const fa = language === "fa"; const locked = state.running || recovery.started_at != null;
+  const disabled = locked ? "disabled" : "";
+  const reasonLabels = fa ? {attempts_exhausted:"تعداد تلاش‌های مجاز تمام شد", time_exhausted:"زمان مجاز تمام شد", budget_exhausted:"بودجهٔ توکن کافی نیست", no_progress:"همان خطا تکرار شد؛ علت اصلی را بررسی کنید", credentials:"ورود یا کلید معتبر لازم است", environment:"پیش‌نیاز محیط را برطرف کنید", cancelled:"با درخواست شما متوقف شد", interrupted:"اجرا قطع شد؛ برای ادامه وضعیت را بررسی کنید"} : {};
+  const reasonKey = String(recovery.stop_reason || "").split(":")[0];
+  return `<section class="recovery-policy"><h2>${fa ? "اصلاح خودکار محدود" : "Bounded automatic repair"}</h2><p class="muted">${fa ? "پس از شکست، خطا تشخیص داده می‌شود و اصلاح و بررسی دوباره تا سقف‌های زیر ادامه می‌یابد." : "After failure, diagnose, repair and verify again within these limits."}</p><div class="recovery-fields"><label>${fa ? "تلاش اصلاحی (۰ تا ۱۰)" : "Repair attempts (0–10)"}<input id="recovery-attempts" type="number" min="0" max="10" value="${policy.max_attempts ?? 3}" ${disabled}></label><label>${fa ? "زمان کل (دقیقه)" : "Total minutes"}<input id="recovery-minutes" type="number" min="1" max="240" value="${policy.max_minutes ?? 30}" ${disabled}></label></div><p class="muted">${fa ? "توقف توکن با دریافت گزارش مصرف انجام می‌شود؛ گزارش دیرهنگام یا ناقص provider می‌تواند از بودجه عبور کند." : "Token stops depend on provider usage events; delayed or missing reports can exceed the budget."}</p>${locked ? "" : `<button type="button" class="secondary" data-action="save-recovery-policy">${fa ? "ذخیره سقف‌ها" : "Save limits"}</button>`}<p>${fa ? "تلاش" : "Attempts"}: ${recovery.attempts || 0} / ${policy.max_attempts ?? 3} · ${fa ? "توکن تازهٔ ثبت‌شده" : "Known fresh tokens"}: ${Number(recovery.known_fresh_tokens || 0).toLocaleString()}${recovery.usage_complete === false ? (fa ? " · مصرف کامل نامشخص است" : " · complete usage unknown") : ""}</p>${recovery.stop_reason ? `<p role="status">${escapeHtml(reasonLabels[reasonKey] || recovery.stop_reason)}</p>` : ""}</section>`;
+}
 function renderTask() {
   const tasks = state.tasks || [];
   const projectId = state.active_project?.id || null;
@@ -240,7 +254,7 @@ function renderTask() {
 }
 function renderPlan() {
   const plan = state.plan || {}; const nodes = plan.nodes || [];
-  return `<div class="card"><h1>${language === "fa" ? "برنامه آماده است" : "Plan is ready"}</h1><div class="stats"><div><small>${text().files}</small><strong>${plan.selected_files || 0}</strong></div><div><small>${text().tokens}</small><strong>${Number(plan.token_limit || 0).toLocaleString()}</strong></div><div><small>${language === "fa" ? "ایجنت" : "agents"}</small><strong>${plan.agents || 0}</strong></div></div>${renderBenchmark()}<div class="node-list">${nodes.map(node => `<div class="node"><span>${escapeHtml(node.role)}</span><strong>${escapeHtml(node.title)}</strong><small>${node.owned_files?.length || 0} ${text().files}</small></div>`).join("")}</div><div class="actions"><button type="button" class="primary" data-action="start-run" ${state.engine?.ready ? "" : "disabled"}>${text().start}</button><button type="button" class="secondary" data-action="run-benchmark">${text().runBenchmark}</button><button type="button" class="secondary" data-action="go-task">${language === "fa" ? "ویرایش تیکت" : "Edit ticket"}</button></div></div>`;
+  return `<div class="card"><h1>${language === "fa" ? "برنامه آماده است" : "Plan is ready"}</h1><div class="stats"><div><small>${text().files}</small><strong>${plan.selected_files || 0}</strong></div><div><small>${text().tokens}</small><strong>${Number(plan.token_limit || 0).toLocaleString()}</strong></div><div><small>${language === "fa" ? "ایجنت" : "agents"}</small><strong>${plan.agents || 0}</strong></div></div>${renderBenchmark()}${renderRecoveryPolicy()}<div class="node-list">${nodes.map(node => `<div class="node"><span>${escapeHtml(node.role)}</span><strong>${escapeHtml(node.title)}</strong><small>${node.owned_files?.length || 0} ${text().files}</small></div>`).join("")}</div><div class="actions"><button type="button" class="primary" data-action="start-run" ${state.engine?.ready ? "" : "disabled"}>${text().start}</button><button type="button" class="secondary" data-action="run-benchmark">${text().runBenchmark}</button><button type="button" class="secondary" data-action="go-task">${language === "fa" ? "ویرایش تیکت" : "Edit ticket"}</button></div></div>`;
 }
 function renderBenchmark() {
   const brain = state.brain || {}; const budget = state.budget || {}; const benchmark = state.benchmark || null; const usage = state.provider_usage || {};
@@ -275,6 +289,10 @@ function renderReleaseGateExplanation(gate, verification, review) {
     ? `<ul>${blockers.map(item => `<li>${escapeHtml(localizeMessage(item))}</li>`).join("")}</ul>`
     : `<p>${escapeHtml(releaseGateLabel(gate || {}, verification || {}, review || {}))}</p>`;
   return `<section class="release-gate-explanation" role="alert"><strong>${text().gateReason}</strong>${details}</section>`;
+}
+function renderBudgetAccounting(report) {
+  const b = report.budget_accounting; if (!b) return ""; const fa = language === "fa";
+  return `<p class="muted">${fa ? "سقف برنامه / سقف مؤثر" : "Planned / effective cap"}: ${Number(b.planned_total_limit_tokens).toLocaleString()} / ${Number(b.effective_fresh_limit_tokens).toLocaleString()} · ${fa ? "مصرف تازهٔ ثبت‌شده" : "Observed fresh usage"}: ${Number(b.reported_fresh_tokens).toLocaleString()} · ${fa ? "ورودی Cache" : "Cached input"}: ${Number(b.reported_cached_tokens).toLocaleString()}${b.usage_complete ? "" : ` · ${fa ? "مصرف کامل نامعلوم است" : "Complete usage unknown"}`}</p>`;
 }
 function renderUsage(usage) {
   if (!usage) return `<span class="usage unavailable">${text().notReported}</span>`;
@@ -325,7 +343,7 @@ function renderRunReport() {
   const nodeDetails = nodes
     ? `<details class="technical-details"><summary>${text().technicalDetails}</summary><div class="report-node-list">${nodes}</div></details>`
     : `<p class="muted">${text().noReport}</p>`;
-  return `<section class="report"><div class="row"><div><h2>${text().report}</h2><p class="muted">${escapeHtml(report.provider || "")} · ${escapeHtml(statusLabel(report.status))}</p></div><strong>${formatDuration(report.duration_seconds)}</strong></div><div class="report-stats"><div><small>${text().newTokens}</small><strong>${usage.available ? Number(actualNewWork).toLocaleString() : "—"}</strong><span>${usage.available ? `${text().actual} · ${escapeHtml(usage.source || "provider")}` : text().notReported}</span></div><div><small>${text().estimate}</small><strong>${estimate}</strong><span>${text().bounded}</span></div><div><small>${text().saved}</small><strong>${savings}</strong><span>${text().benchmark}</span></div><div><small>${text().verification}</small><strong>${escapeHtml(statusLabel(verification.status))}</strong><span>${verification.passed_checks || 0}/${verification.total_checks || 0}</span></div><div><small>${text().review}</small><strong>${review.pending || 0}</strong><span>${text().pending}</span></div><div><small>${text().exportReady}</small><strong>${exportStatus}</strong><span>${escapeHtml(exportDetail)}</span></div></div><p class="muted report-schedule">${escapeHtml(scheduleText)}</p>${gateDetails ? `<section class="verification-details"><h3>${text().releaseGate}</h3><ul>${gateDetails}</ul></section>` : ""}${verificationDetails}${nodeDetails}</section>`;
+  return `<section class="report"><div class="row"><div><h2>${text().report}</h2><p class="muted">${escapeHtml(report.provider || "")} · ${escapeHtml(statusLabel(report.status))}</p></div><strong>${formatDuration(report.duration_seconds)}</strong></div><div class="report-stats"><div><small>${text().newTokens}</small><strong>${usage.available ? Number(actualNewWork).toLocaleString() : "—"}</strong><span>${usage.available ? `${text().actual} · ${escapeHtml(usage.source || "provider")}` : text().notReported}</span></div><div><small>${text().estimate}</small><strong>${estimate}</strong><span>${text().bounded}</span></div><div><small>${text().saved}</small><strong>${savings}</strong><span>${text().benchmark}</span></div><div><small>${text().verification}</small><strong>${escapeHtml(statusLabel(verification.status))}</strong><span>${verification.passed_checks || 0}/${verification.total_checks || 0}</span></div><div><small>${text().review}</small><strong>${review.pending || 0}</strong><span>${text().pending}</span></div><div><small>${text().exportReady}</small><strong>${exportStatus}</strong><span>${escapeHtml(exportDetail)}</span></div></div><p class="muted report-schedule">${escapeHtml(scheduleText)}</p>${gateDetails ? `<section class="verification-details"><h3>${text().releaseGate}</h3><ul>${gateDetails}</ul></section>` : ""}${verificationDetails}${nodeDetails}${renderBudgetAccounting(report)}</section>`;
 }
 function renderRun() {
   const nodes = state.plan?.nodes || [];
@@ -360,7 +378,7 @@ function renderResult() {
   const gateExplanation = renderReleaseGateExplanation(gate, verification, review);
   const waitingForReview = gate.status === "awaiting_review" || Boolean(review.pending_count && !gateReady);
   const qualityClass = gateReady || gate.status === "exported" ? "pass" : waitingForReview ? "pending" : "fail";
-  return `<div class="card"><h1>${text().result}</h1>${renderFailureContext(state.failure_context, true)}${renderRunReport()}<div class="quality ${qualityClass}">${escapeHtml(gateStatus)}</div>${gateExplanation}<div class="file-list">${(review.files || []).map(file => `<div class="file"><strong>${escapeHtml(file.relative_path)}</strong><small>${escapeHtml(file.decision)}</small><pre>${escapeHtml(file.diff_text || "")}</pre></div>`).join("") || `<p class="muted">${language === "fa" ? "تغییری ثبت نشده است. در صورت عبور از گیت، خروجی باید با دکمه زیر تولید شود." : "No changes recorded. If the gate passes, create the ZIP with the button below."}</p>`}</div><div class="actions">${continuation}<button type="button" class="primary" data-action="decide" data-decision="accept" ${review.pending_count ? "" : "disabled"}>${text().accept}</button><button type="button" class="danger" data-action="decide" data-decision="revert" ${review.pending_count ? "" : "disabled"}>${text().revert}</button><button type="button" class="secondary" data-action="export-project" ${gateReady ? "" : "disabled"}>${text().export}</button></div></div>`;
+  return `<div class="card"><h1>${text().result}</h1>${renderFailureContext(state.failure_context, true)}${renderRunReport()}${renderRecoveryPolicy()}<div class="quality ${qualityClass}">${escapeHtml(gateStatus)}</div>${gateExplanation}<div class="file-list">${(review.files || []).map(file => `<div class="file"><strong>${escapeHtml(file.relative_path)}</strong><small>${escapeHtml(file.decision)}</small>${file.decision === "pending" ? `<div class="actions"><button type="button" class="secondary" data-action="decide-file" data-relative-path="${escapeHtml(file.relative_path)}" data-decision="accept">${text().accept}</button><button type="button" class="danger" data-action="decide-file" data-relative-path="${escapeHtml(file.relative_path)}" data-decision="revert">${text().revert}</button></div>` : ""}<pre>${escapeHtml(file.diff_text || "")}</pre></div>`).join("") || `<p class="muted">${language === "fa" ? "تغییری ثبت نشده است. در صورت عبور از گیت، خروجی باید با دکمه زیر تولید شود." : "No changes recorded. If the gate passes, create the ZIP with the button below."}</p>`}</div><div class="actions"><button type="button" class="secondary" data-action="new-ticket">${text().tasks}</button>${continuation}<button type="button" class="primary" data-action="decide" data-decision="accept" ${review.pending_count ? "" : "disabled"}>${text().accept}</button><button type="button" class="danger" data-action="decide" data-decision="revert" ${review.pending_count ? "" : "disabled"}>${text().revert}</button><button type="button" class="secondary" data-action="export-project" ${gateReady ? "" : "disabled"}>${text().export}</button></div></div>`;
 }
 function enhanceReportUi() {
   const report = document.querySelector(".report");
@@ -394,7 +412,7 @@ function renderSaved() {
   const digest = archive.sha256 ? `<p class="muted export-digest"><strong>${text().sha256}:</strong> <code>${escapeHtml(archive.sha256)}</code></p>` : "";
   const root = archive.extraction_root ? `<p class="muted"><strong>${text().extractionRoot}:</strong> <code>${escapeHtml(archive.extraction_root)}</code></p>` : "";
   const fileList = changedFiles ? `<details class="export-files"><summary>${text().changedFilesList}</summary><ul>${changedFiles}</ul></details>` : "";
-  return `<div class="card center"><h1>✓</h1><h2>${language === "fa" ? "خروجی آماده است" : "Export is ready"}</h2><p class="muted">${language === "fa" ? `${fileCount} فایل تغییرکرده در ZIP قرار گرفت.` : `${fileCount} changed file(s) are in the ZIP.`}<br><strong>${escapeHtml(archiveName || "project.zip")}</strong></p><p class="muted export-instructions">${text().deltaDownloadHint}</p>${root}${digest}${fileList}<div class="actions centered-actions"><a class="secondary download-link" href="${downloadUrl}" download="${escapeHtml(archiveName || "project.zip")}">${text().download}</a>${sidecars}<button type="button" class="secondary" data-action="reveal-export">${text().revealExport}</button><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div></div>`;
+  return `<div class="card center"><h1>✓</h1><h2>${language === "fa" ? "خروجی آماده است" : "Export is ready"}</h2><p class="muted">${language === "fa" ? `${fileCount} فایل تغییرکرده در ZIP قرار گرفت.` : `${fileCount} changed file(s) are in the ZIP.`}<br><strong>${escapeHtml(archiveName || "project.zip")}</strong></p><p class="muted export-instructions">${text().deltaDownloadHint}</p>${root}${digest}${fileList}<div class="actions centered-actions"><a class="secondary download-link" href="${downloadUrl}" download="${escapeHtml(archiveName || "project.zip")}">${text().download}</a>${sidecars}<button type="button" class="secondary" data-action="new-ticket">${text().tasks}</button><button type="button" class="secondary" data-action="reveal-export">${text().revealExport}</button><button type="button" class="secondary" data-action="reset-project">${text().newProject}</button></div></div>`;
 }
 function render() {
   if (!state) return; language = state.language || language; banner(); let html = "";
@@ -403,13 +421,18 @@ function render() {
   enhanceReportUi();
   enhanceImportUi();
   document.querySelector("#screen").setAttribute("aria-busy", "false");
-  if (state.running && !poller) poller = setInterval(refresh, 900); if (!state.running && poller) { clearInterval(poller); poller = null; }
+  // A repair may be queued between two provider runs. Keep observing that
+  // transition even when the just-finished run briefly reports running=false.
+  const workflowActive = state.running || state.recovery?.status === "running" ||
+    (state.phase === "run" && state.recovery?.status === "ready" && !state.recovery?.stop_reason);
+  if (workflowActive && !poller) poller = setInterval(refresh, 900);
+  if (!workflowActive && poller) { clearInterval(poller); poller = null; }
 }
 async function refresh() { try { state = await api("/api/state"); render(); } catch (error) { document.querySelector("#notice").textContent = localizeMessage(error.message); document.querySelector("#notice").classList.remove("hidden"); } }
 function loading() { document.querySelector("#screen").setAttribute("aria-busy", "true"); document.querySelector("#screen").innerHTML = `<div class="card center"><div class="spinner" role="progressbar" aria-label="${language === "fa" ? "در حال پردازش" : "Processing"}"></div><p>${language === "fa" ? "لطفاً صبر کنید…" : "Please wait…"}</p></div>`; }
 async function runAction(action) {
   loading();
-  try { state = await action(); render(); } catch (error) { await refresh(); }
+  try { state = await action(); render(); } catch (error) { await refresh(); if (!state.error) { state.error = String(error.message || error); render(); } }
 }
 async function handleAction(action, target) {
   switch (action) {
@@ -428,6 +451,11 @@ async function handleAction(action, target) {
       if (input) { input.value = ""; input.click(); }
       break;
     }
+    case "save-model-route": {
+      const route = {mode: document.querySelector("#model-route-mode").value, base_url: document.querySelector("#model-route-url").value.trim(), model: document.querySelector("#model-route-model").value.trim(), env_key: document.querySelector("#model-route-env").value.trim() || null, allow_paid: document.querySelector("#model-route-paid").checked};
+      await runAction(() => api("/api/model-route", route));
+      break;
+    }
     case "refresh-engine": await runAction(() => api("/api/refresh-engine", {})); break;
     case "open-engine": await runAction(() => api("/api/open-engine", {})); break;
     case "select-project": await runAction(() => api("/api/project/select", {project_id: target.dataset.projectId})); break;
@@ -440,9 +468,15 @@ async function handleAction(action, target) {
       }
       const tasks = (taskDraftProjectId === (state?.active_project?.id || null) ? taskDraft : "").trim();
       if (!tasks) { state = {...state, error: text().fieldRequired}; render(); break; }
-      await runAction(() => api("/api/plan", {tasks}));
+      await runAction(() => api("/api/plan", {tasks, ...(taskDraftId ? {task_id: taskDraftId} : {})}));
       break;
     }
+    case "save-recovery-policy": {
+      const policy = {max_attempts: Number(document.querySelector("#recovery-attempts").value), max_minutes: Number(document.querySelector("#recovery-minutes").value)};
+      await runAction(() => api("/api/recovery-policy", policy)); break;
+    }
+    case "new-ticket": taskDraft = ""; taskDraftId = null; taskDraftProjectId = state.active_project?.id || null; await runAction(() => api("/api/task/new", {})); break;
+    case "decide-file": await runAction(() => api("/api/decision", {decision: target.dataset.decision, relative_path: target.dataset.relativePath})); break;
     case "run-benchmark": await runAction(() => api("/api/benchmark", {})); break;
     case "start-run": await runAction(() => api("/api/run", {})); break;
     case "cancel-run": await runAction(() => api("/api/cancel", {})); break;
@@ -451,8 +485,8 @@ async function handleAction(action, target) {
     case "decide": await runAction(() => api("/api/decision", {decision: target.dataset.decision})); break;
     case "export-project": await runAction(() => api("/api/export", {})); break;
     case "reveal-export": await runAction(() => api("/api/reveal-export", {})); break;
-    case "reset-project": taskDraft = ""; taskDraftProjectId = null; await runAction(() => api("/api/reset", {})); break;
-    case "go-task": state.phase = "task"; render(); break;
+    case "reset-project": taskDraftId = null; taskDraft = ""; taskDraftProjectId = null; await runAction(() => api("/api/reset", {})); break;
+    case "go-task": taskDraft = state.task_request || state.recovery?.original_request || ""; taskDraftId = state.active_task_id; taskDraftProjectId = state.active_project?.id || null; state.phase = "task"; render(); break;
     default: break;
   }
 }

@@ -8,11 +8,20 @@ browser session when the user launches the app from Finder. The app contains
 the web assets, including the Empy logo, and does not require a terminal during
 normal operation.
 
-The clean trial build is an unsigned candidate when Apple Developer
-credentials are unavailable. The user flow is still Finder-based: extract the
-ZIP, right-click the app, choose **Open**, and if Gatekeeper blocks it, use
-System Settings → Privacy & Security → **Open Anyway**. The clean app passes
-`--clean` to the web desktop and creates a new empty workspace for each launch.
+The standard app preserves its workspace, project knowledge and ticket history
+between launches. A disposable trial is available only through the explicit
+`--clean-workspace` build option; it starts a new workspace each time.
+
+A locally built app has an ad-hoc signature, not Apple Developer ID
+notarization. Treat it as a candidate until the release gates below pass.
+Source `project.version`, `CFBundleVersion` and `CFBundleShortVersionString`
+must agree. See [packaged acceptance](macos-app-acceptance.md) for the two-ticket
+and automatic recovery checks.
+
+Build outside a cloud-synchronized FileProvider folder if it injects Finder
+metadata into the bundle: that metadata can invalidate codesign. Verify the
+actual archived-and-extracted app with `codesign --verify --deep --strict`.
+Do not suppress a failed signature check or treat it as notarization.
 
 ## Build stages
 

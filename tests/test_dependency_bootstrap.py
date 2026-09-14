@@ -106,7 +106,7 @@ def test_prepares_npm_dependencies_without_running_lifecycle_scripts(
     project = tmp_path / "node-project"
     project.mkdir()
     (project / "package.json").write_text(
-        '{"name":"demo","scripts":{"test":"node test.js"}}\n',
+        '{"name":"demo","dependencies":{"example":"1.0.0"},"scripts":{"test":"node test.js"}}\n',
         encoding="utf-8",
     )
     (project / "package-lock.json").write_text("{}\n", encoding="utf-8")
@@ -128,3 +128,14 @@ def test_prepares_npm_dependencies_without_running_lifecycle_scripts(
     assert result.generated_scope == "node_modules/"
     assert "--ignore-scripts" in result.command
     assert (project / "node_modules" / ".marker").is_file()
+
+
+def test_dependency_free_node_script_needs_no_fake_node_modules(tmp_path: Path, monkeypatch) -> None:
+    project = tmp_path / "node-project"
+    project.mkdir()
+    (project / "package.json").write_text('{"name":"demo","scripts":{"test":"node test.js"}}')
+    (project / "test.js").write_text("console.log('ok')")
+    monkeypatch.setenv("PATH", os.fspath(tmp_path / "no-install-tools"))
+    result = prepare_project_dependencies(DefaultProjectService().detect(project))
+    assert result.status == "not_needed"
+    assert not (project / "node_modules").exists()

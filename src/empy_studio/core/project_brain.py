@@ -6,7 +6,7 @@ import json
 import os
 import re
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Final
 
@@ -196,6 +196,8 @@ class ProjectBrainIndex:
     reused_paths: tuple[str, ...] = ()
     skipped_paths: tuple[str, ...] = ()
     scan_limit_reached: bool = False
+    metadata_scanned_files: int = 0
+    content_scanned_files: int = 0
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -207,6 +209,8 @@ class ProjectBrainIndex:
             "reused_paths": list(self.reused_paths),
             "skipped_paths": list(self.skipped_paths),
             "scan_limit_reached": self.scan_limit_reached,
+            "metadata_scanned_files": self.metadata_scanned_files,
+            "content_scanned_files": self.content_scanned_files,
         }
 
     @classmethod
@@ -226,11 +230,17 @@ class ProjectBrainIndex:
             reused_paths=_string_tuple(data.get("reused_paths")),
             skipped_paths=_string_tuple(data.get("skipped_paths")),
             scan_limit_reached=bool(data.get("scan_limit_reached", False)),
+            metadata_scanned_files=int(str(data.get("metadata_scanned_files", 0))),
+            content_scanned_files=int(str(data.get("content_scanned_files", 0))),
         )
 
     def stats(self) -> dict[str, object]:
         return {
             "source": "local_project_brain_index",
+            "metadata_scanned_files": self.metadata_scanned_files,
+            "content_scanned_files": self.content_scanned_files,
+            "locally_reanalyzed_files": len(self.changed_paths),
+            "provider_reanalyzed_files": 0,
             "file_count": len(self.records),
             "total_bytes": sum(record.size for record in self.records),
             "indexed_files": len(self.records),
@@ -243,6 +253,50 @@ class ProjectBrainIndex:
 
     def record_map(self) -> dict[str, ProjectBrainRecord]:
         return {record.relative_path: record for record in self.records}
+
+    def related_paths(self, paths: Iterable[str]) -> tuple[str, ...]:
+        """Return direct indexed imports and importers, without another scan.
+
+        Resolve only known project modules. External packages and ambiguous
+        bare module names do not pull arbitrary files into a context pack.
+        """
+        records = self.record_map()
+        aliases: dict[str, set[str]] = {}
+        for relative in records:
+            module = str(Path(relative).with_suffix("")).replace("\\", "/")
+            names = {module}
+            if module.endswith(("/__init__", "/index")):
+                names.add(module.rsplit("/", 1)[0])
+            if module.startswith("src/"):
+                names.update(name[4:] for name in tuple(names))
+            for name in names:
+                aliases.setdefault(name, set()).add(relative)
+        selected = set(paths)
+        related: set[str] = set()
+        for relative, record in records.items():
+            dependencies: set[str] = set()
+            for imported in record.imports:
+                if record.language == "python":
+                    dots = len(imported) - len(imported.lstrip("."))
+                    module = imported[dots:].replace(".", "/")
+                    base = Path(relative).parent
+                    for _ in range(max(0, dots - 1)):
+                        base = base.parent
+                    key = (base / module).as_posix() if dots else module
+                elif imported.startswith("."):
+                    key = os.path.normpath(str(Path(relative).parent / imported))
+                    if Path(key).suffix:
+                        key = str(Path(key).with_suffix(""))
+                else:
+                    key = imported.replace("\\", "/")
+                matches = aliases.get(key, set())
+                if len(matches) == 1:
+                    dependencies.update(matches)
+            if relative in selected:
+                related.update(dependencies)
+            if dependencies & selected:
+                related.add(relative)
+        return tuple(sorted(related - selected))
 
     @property
     def files(self) -> tuple[ProjectBrainRecord, ...]:
@@ -297,13 +351,21 @@ def build_project_brain_index(
         raise ValueError("max_file_bytes must be positive")
 
     project_root = Path(root).expanduser().resolve()
-    previous_records = previous.record_map() if previous else {}
+    previous_records = (
+        previous.record_map()
+        if previous is not None
+        and previous.schema_version == SCHEMA_VERSION
+        and Path(previous.project_root).resolve() == project_root
+        else {}
+    )
     indexed_paths: set[str] = set()
     changed_paths: list[str] = []
     reused_paths: list[str] = []
     skipped_paths: list[str] = []
     records: list[ProjectBrainRecord] = []
     scan_limit_reached = False
+    metadata_scanned_files = 0
+    content_scanned_files = 0
 
     for path in _iter_candidate_paths(project_root):
         relative = path.relative_to(project_root).as_posix()
@@ -314,6 +376,7 @@ def build_project_brain_index(
 
         try:
             stat = path.stat()
+            metadata_scanned_files += 1
         except OSError:
             skipped_paths.append(relative)
             continue
@@ -327,22 +390,27 @@ def build_project_brain_index(
             continue
 
         previous_record = previous_records.get(relative)
-        if (
-            previous_record is not None
-            and previous_record.size == stat.st_size
-            and previous_record.mtime_ns == stat.st_mtime_ns
-        ):
-            records.append(previous_record)
-            reused_paths.append(relative)
-            indexed_paths.add(relative)
-            continue
-
         try:
-            record = _build_record(path, relative, stat.st_size, stat.st_mtime_ns)
-        except OSError:
-            skipped_paths.append(relative)
-            continue
-        except UnicodeError:
+            # Metadata is only a hint: editors and restore tools can preserve
+            # both size and mtime. Hash bounded local bytes before reusing any
+            # analysis; this never invokes a provider or repeats hint parsing.
+            with path.open("rb") as handle:
+                raw = handle.read(max_file_bytes + 1)
+            content_scanned_files += 1
+            if len(raw) > max_file_bytes:
+                skipped_paths.append(relative)
+                continue
+            digest = hashlib.sha256(raw).hexdigest()
+            if previous_record is not None and previous_record.sha256 == digest:
+                reused_record = previous_record
+                if reused_record.size != len(raw) or reused_record.mtime_ns != stat.st_mtime_ns:
+                    reused_record = replace(reused_record, size=len(raw), mtime_ns=stat.st_mtime_ns)
+                records.append(reused_record)
+                reused_paths.append(relative)
+                indexed_paths.add(relative)
+                continue
+            record = _build_record(path, relative, len(raw), stat.st_mtime_ns, raw=raw)
+        except (OSError, UnicodeError):
             skipped_paths.append(relative)
             continue
         if record is None:
@@ -363,6 +431,8 @@ def build_project_brain_index(
         reused_paths=tuple(sorted(reused_paths)),
         skipped_paths=tuple(sorted(dict.fromkeys(skipped_paths))),
         scan_limit_reached=scan_limit_reached,
+        metadata_scanned_files=metadata_scanned_files,
+        content_scanned_files=content_scanned_files,
     )
     return ProjectBrainBuildResult(
         index=index,
@@ -440,12 +510,13 @@ def _build_record(
     relative_path: str,
     size: int,
     mtime_ns: int,
+    *,
+    raw: bytes | None = None,
 ) -> ProjectBrainRecord | None:
-    with path.open("rb") as handle:
-        probe = handle.read(DEFAULT_BINARY_PROBE_BYTES)
-    if _looks_binary(path, probe):
+    if raw is None:
+        raw = path.read_bytes()
+    if _looks_binary(path, raw[:DEFAULT_BINARY_PROBE_BYTES]):
         return None
-    raw = path.read_bytes()
     language = _detect_language(path)
     text = raw.decode("utf-8", errors="replace")
     imports, symbols = _extract_hints(language, text)

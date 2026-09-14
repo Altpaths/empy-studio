@@ -62,6 +62,7 @@ AgentRole = Literal[
     "discovery",
     "frontend",
     "backend",
+    "coordinator",
     "quality",
     "security",
     "release",
@@ -474,6 +475,9 @@ def _roles(
         (
             "ui",
             "page",
+            "homepage",
+            "html",
+            "htm",
             "font",
             "image",
             "layout",
@@ -548,6 +552,37 @@ def _roles(
         or requests_implementation(text)
     ):
         roles.append("backend")
+
+    implementation_roles = {
+        "frontend",
+        "backend",
+        "security",
+        "release",
+    }
+    explicit_specialist_request = _contains_any_term(
+        text,
+        (
+            "separate agents",
+            "specialist agents",
+            "independent agents",
+            "ایجنت‌های جدا",
+            "ایجنت متخصص",
+            "نقش‌های جدا",
+        ),
+    )
+    # Every provider process pays a large, mostly fixed harness cost. For a
+    # low/medium-risk ticket that touches three or more domains, several
+    # serial writer calls cost more than they save. Keep the specialist
+    # ownership contract in the graph, but execute the implementation through
+    # one bounded coordinator unless the ticket explicitly asks for separate
+    # agents or the risk is high enough to justify the extra calls.
+    if (
+        len(set(roles) & implementation_roles) >= 3
+        and risk != "high"
+        and not explicit_specialist_request
+    ):
+        roles = [role for role in roles if role not in implementation_roles]
+        roles.append("coordinator")
 
     if include_quality:
         roles.append("quality")

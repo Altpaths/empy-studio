@@ -123,6 +123,64 @@ def test_plain_php_plan_includes_application_and_test_scopes(
     assert "tests/" in value.likely_paths
 
 
+def test_multi_domain_economy_ticket_uses_one_coordinator_call(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"scripts":{"test":"node test.js"}}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "public").mkdir()
+    project = DefaultProjectService().detect(tmp_path)
+    current = ProductTask(
+        task_id="economy-coordinator-ticket",
+        project_root=str(tmp_path.resolve()),
+        kind="release",
+        title="Update frontend backend release",
+        objective="Update the frontend, backend integration and release files together",
+        requirements=("Keep the existing tests passing",),
+        constraints=(),
+        definition_of_done=("The requested changes are verified",),
+        status="ready_for_planning",
+    )
+
+    value = generate_execution_plan(task=current, project=project)
+
+    assert [step.suggested_agent for step in value.steps] == ["coordinator"]
+
+
+def test_explicit_specialist_request_keeps_domain_roles(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"scripts":{"test":"node test.js"}}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "public").mkdir()
+    project = DefaultProjectService().detect(tmp_path)
+    current = ProductTask(
+        task_id="specialist-ticket",
+        project_root=str(tmp_path.resolve()),
+        kind="release",
+        title="Update frontend backend release",
+        objective="Use separate specialist agents for frontend, backend and release",
+        requirements=("Keep the existing tests passing",),
+        constraints=(),
+        definition_of_done=("The requested changes are verified",),
+        status="ready_for_planning",
+    )
+
+    value = generate_execution_plan(task=current, project=project)
+
+    assert {step.suggested_agent for step in value.steps} == {
+        "frontend",
+        "backend",
+        "release",
+    }
+
+
 def test_persian_php_homepage_ticket_uses_one_frontend_writer(
     tmp_path: Path,
 ) -> None:
