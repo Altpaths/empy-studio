@@ -18,6 +18,7 @@ from empy_studio.core import (
     generate_execution_plan,
     lock_token_budget,
 )
+from empy_studio.core.agent_dispatcher import _path_matches_ownership_pattern
 
 
 def _prepared_inputs(
@@ -375,3 +376,63 @@ def test_explicit_test_update_is_owned_by_the_writer(tmp_path: Path) -> None:
         for node in graph.nodes
         if node.agent_role == "quality"
     )
+
+
+def test_ownership_patterns_cover_modern_web_paths_without_stealing_node_sources() -> None:
+    assert _path_matches_ownership_pattern("app/page.tsx", "app/page.*")
+    assert _path_matches_ownership_pattern("src/components/Card.vue", "src/components/**")
+    assert _path_matches_ownership_pattern("src/components/Card.svelte", "src/components/**")
+    assert _path_matches_ownership_pattern("src/widgets/chart.astro", "src/**/*.astro")
+    assert _path_matches_ownership_pattern("app/api/route.ts", "app/**")
+    assert _path_matches_ownership_pattern("src/server.ts", "src/*.ts")
+    assert not _path_matches_ownership_pattern("src/server.ts", "src/components/**")
+    assert not _path_matches_ownership_pattern("src/file.ts", "src/*.tsx")
+
+
+def test_graph_rejects_an_empty_writing_node_and_generic_root_scope(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    plan, selection, budget = _prepared_inputs(root, rich_task=True)
+    graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+    frontend = next(node for node in graph.nodes if node.agent_role == "frontend")
+    writer = replace(
+        frontend,
+        owned_files=(),
+    )
+    altered_nodes = tuple(
+        writer if node.node_id == frontend.node_id else node for node in graph.nodes
+    )
+    altered_ownership = tuple(
+        item for item in graph.ownership if item.owner_node_id != frontend.node_id
+    )
+    with pytest.raises(ValueError, match="no exact file or bounded creation scope"):
+        replace(graph, nodes=altered_nodes, ownership=altered_ownership).validate()
+
+    root_scope = replace(
+        frontend,
+        read_only_files=("./",),
+    )
+    with pytest.raises(ValueError, match="project-root scope"):
+        replace(
+            graph,
+            nodes=tuple(
+                root_scope if node.node_id == frontend.node_id else node
+                for node in graph.nodes
+            ),
+        ).validate()
+
+
+def test_graph_rejects_symlinked_scope_even_when_target_points_inside_project(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "src").mkdir()
+    (root / "real").mkdir()
+    plan, selection, budget = _prepared_inputs(root, rich_task=False)
+    graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+    (root / "src" / "alias.py").symlink_to(root / "real" / "alias.py")
+    quality = next(node for node in graph.nodes if node.agent_role == "quality")
+    altered = replace(quality, read_only_files=("src/alias.py",))
+    with pytest.raises(ValueError, match="symlink"):
+        replace(graph, nodes=tuple(altered if node.node_id == quality.node_id else node for node in graph.nodes)).validate()

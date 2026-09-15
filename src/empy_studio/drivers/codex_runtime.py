@@ -20,10 +20,19 @@ from empy_studio.core import (
     ProjectDescriptor,
     TokenBudget,
 )
-from empy_studio.core.path_policy import is_sensitive_relative_path
+from empy_studio.core.path_policy import (
+    is_agent_denied_relative_path,
+    is_directory_scope,
+    is_root_scope,
+    normalize_relative_path,
+    project_path,
+    scope_contains,
+    scopes_overlap,
+)
 from empy_studio.core.token_budget import (
     ProviderBudgetReport,
     ProviderNodeBudgetReport,
+    estimate_tokens,
 )
 from empy_studio.token_usage import TokenUsage
 
@@ -114,6 +123,7 @@ class CodexGraphExecution:
     usage: TokenUsage | None = None
     schedule: tuple[CodexWaveExecution, ...] = ()
     budget_accounting: ProviderBudgetReport | None = None
+    prompt_estimates: tuple[tuple[str, int], ...] = ()
 
     def validate(self) -> None:
         if self.schema_version != 1:
@@ -136,6 +146,11 @@ class CodexGraphExecution:
             event.validate()
         for wave in self.schedule:
             wave.validate()
+        prompt_node_ids = [node_id for node_id, _tokens in self.prompt_estimates]
+        if len(prompt_node_ids) != len(set(prompt_node_ids)):
+            raise ValueError("Codex graph prompt estimates must have unique node IDs")
+        if any(tokens < 0 for _node_id, tokens in self.prompt_estimates):
+            raise ValueError("Codex graph prompt estimates cannot be negative")
         if self.status == "completed" and any(
             node.status != "completed" for node in self.node_results
         ):
@@ -155,9 +170,19 @@ class CodexGraphExecution:
         value["events"] = [item.to_dict() for item in self.events]
         value["usage"] = self.usage.to_dict() if self.usage is not None else None
         value["schedule"] = [item.to_dict() for item in self.schedule]
-        value["budget_accounting"] = (
+        budget_value = (
             self.budget_accounting.to_dict() if self.budget_accounting is not None else None
         )
+        if budget_value is not None:
+            budget_value["prompt_estimates"] = [
+                {"node_id": node_id, "prompt_tokens": tokens}
+                for node_id, tokens in self.prompt_estimates
+            ]
+        value["budget_accounting"] = budget_value
+        value["prompt_estimates"] = [
+            {"node_id": node_id, "prompt_tokens": tokens}
+            for node_id, tokens in self.prompt_estimates
+        ]
         return value
 
 
@@ -318,6 +343,44 @@ class CodexGraphRuntime:
         self.max_parallel_nodes = max_parallel_nodes
         self._cancel_requested = threading.Event()
         self._lifecycle_lock = threading.Lock()
+        self._prompt_measurements: dict[str, int] = {}
+        self._prompt_measurement_lock = threading.Lock()
+
+    def _preflight_failure_result(
+        self,
+        *,
+        graph: AgentRunGraph,
+        node: AgentRunNode,
+        run_id: str,
+        error_code: CodexErrorCode,
+        message: str,
+    ) -> CodexNodeExecution:
+        timestamp = self._utc_now()
+        node_dir = self.run_root / run_id / "nodes" / node.node_id
+        result = CodexNodeExecution(
+            node_id=node.node_id,
+            task_id=f"{graph.task_id}:{node.step_id}",
+            status="failed",
+            started_at=timestamp,
+            finished_at=timestamp,
+            return_code=None,
+            thread_id=None,
+            summary="Empy blocked the node during deterministic preflight.",
+            changed_files=(),
+            event_count=0,
+            events_path=str(node_dir / "events.jsonl"),
+            stderr_path=str(node_dir / "stderr.log"),
+            final_message_path=str(node_dir / "final-message.md"),
+            command_path=str(node_dir / "command.json"),
+            error_code=error_code,
+            error_message=message,
+        )
+        result.validate()
+        return result
+
+    def _prompt_estimates(self) -> tuple[tuple[str, int], ...]:
+        with self._prompt_measurement_lock:
+            return tuple(sorted(self._prompt_measurements.items()))
 
     def _execute_node(
         self,
@@ -339,11 +402,41 @@ class CodexGraphRuntime:
             task=task,
             dependency_results=dependency_results,
         )
+        prompt_tokens = estimate_tokens(prompt)
+        with self._prompt_measurement_lock:
+            self._prompt_measurements[node.node_id] = prompt_tokens
+        if prompt_tokens > node.token_limit:
+            message = (
+                f"The serialized node prompt is estimated at {prompt_tokens:,} fresh "
+                f"tokens, above the locked node budget of {node.token_limit:,}. "
+                "Empy stopped before calling the provider; compact the task context "
+                "or allocate a larger approved budget."
+            )
+            result = self._preflight_failure_result(
+                graph=graph,
+                node=node,
+                run_id=run_id,
+                error_code="budget_exceeded",
+                message=message,
+            )
+            report(
+                CodexProgressEvent(
+                    timestamp=self._utc_now(),
+                    level="error",
+                    event_type="run.prompt_budget_exceeded",
+                    message=message,
+                    node_id=node.node_id,
+                )
+            )
+            return result
         request = DriverExecutionRequest(
             project=project,
             task_id=f"{graph.task_id}:{node.step_id}",
             prompt=prompt,
-            allowed_paths=node.owned_files,
+            allowed_paths=tuple(
+                normalize_relative_path(path, allow_directory=True)
+                for path in node.owned_files
+            ),
             timeout_seconds=self.timeout_seconds,
             # The locked allocation is the authorization boundary, including
             # provider overhead. Older plans must be replanned to raise it.
@@ -368,7 +461,10 @@ class CodexGraphRuntime:
             on_progress=report,
         )
         after_snapshot = self._git_snapshot(project.root) if audit_snapshot else None
-        audited_changes = self._snapshot_delta(before_snapshot, after_snapshot)
+        audited_changes = {
+            self._normalize_changed_path(path, project.root)
+            for path in self._snapshot_delta(before_snapshot, after_snapshot)
+        }
         provider_changes = {
             self._normalize_changed_path(path, project.root)
             for path in node_result.changed_files
@@ -380,9 +476,15 @@ class CodexGraphRuntime:
         unauthorized = tuple(
             path
             for path in changed_files
-            if not self._path_is_owned(path, node.owned_files)
-            or (path in existing_creation_paths and path not in node.owned_files)
-            or path in node.read_only_files
+            if not self._path_is_owned(path, node.owned_files, root=project.root)
+            or (
+                path in existing_creation_paths
+                and not self._path_is_exactly_owned(path, node.owned_files)
+            )
+            or any(
+                self._path_is_owned(path, (read_only,), root=project.root)
+                for read_only in node.read_only_files
+            )
         )
         if unauthorized:
             scope_errors.append(
@@ -474,7 +576,11 @@ class CodexGraphRuntime:
         if not bool(getattr(self.driver, "supports_parallel_nodes", False)):
             return False
         owned: list[str] = [path for node in nodes for path in node.owned_files]
-        return len(owned) == len(set(owned))
+        return not any(
+            scopes_overlap(left, right)
+            for index, left in enumerate(owned)
+            for right in owned[index + 1 :]
+        )
 
     def run(
         self,
@@ -487,6 +593,8 @@ class CodexGraphRuntime:
         on_progress: RunProgressCallback | None = None,
     ) -> CodexGraphExecution:
         self._validate_inputs(graph, selection, budget, project, task)
+        with self._prompt_measurement_lock:
+            self._prompt_measurements.clear()
         with self._lifecycle_lock:
             cancelled_before_start = self._cancel_requested.is_set()
             if not cancelled_before_start:
@@ -636,16 +744,42 @@ class CodexGraphRuntime:
                     }
                     wave_results = [futures[node.node_id].result() for node in nodes]
                 after_wave_snapshot = self._git_snapshot(project.root)
-                audited_changes = self._snapshot_delta(
-                    wave_snapshot,
-                    after_wave_snapshot,
+                audited_changes = {
+                    self._normalize_changed_path(path, project.root)
+                    for path in self._snapshot_delta(
+                        wave_snapshot,
+                        after_wave_snapshot,
+                    )
+                }
+                all_owned_scopes = tuple(
+                    path for node in nodes for path in node.owned_files
                 )
-                allowed_paths = {
+                existing_scope_paths = {
                     path
                     for node in nodes
-                    for path in node.owned_files
+                    for path in self._existing_creation_paths(
+                        project.root,
+                        node.owned_files,
+                    )
                 }
-                unauthorized = tuple(sorted(audited_changes - allowed_paths))
+                unauthorized = tuple(
+                    sorted(
+                        path
+                        for path in audited_changes
+                        if not self._path_is_owned(
+                            path,
+                            all_owned_scopes,
+                            root=project.root,
+                        )
+                        or (
+                            path in existing_scope_paths
+                            and not self._path_is_exactly_owned(
+                                path,
+                                all_owned_scopes,
+                            )
+                        )
+                    )
+                )
                 history_changed = (
                     wave_snapshot is not None
                     and after_wave_snapshot is not None
@@ -653,9 +787,22 @@ class CodexGraphRuntime:
                 )
                 for index, node_result in enumerate(wave_results):
                     node = nodes[index]
-                    owned_changes = set(node_result.changed_files) | (
-                        audited_changes & set(node.owned_files)
-                    )
+                    owned_changes = set(node_result.changed_files) | {
+                        path
+                        for path in audited_changes
+                        if self._path_is_owned(
+                            path,
+                            node.owned_files,
+                            root=project.root,
+                        )
+                        and not (
+                            path in existing_scope_paths
+                            and not self._path_is_exactly_owned(
+                                path,
+                                node.owned_files,
+                            )
+                        )
+                    }
                     wave_results[index] = replace(
                         node_result,
                         changed_files=tuple(sorted(owned_changes)),
@@ -787,6 +934,7 @@ class CodexGraphRuntime:
             budget_accounting=self._budget_report(
                 graph, selection, budget, task, tuple(completed_nodes),
             ),
+            prompt_estimates=self._prompt_estimates(),
         )
         result.validate()
         return result
@@ -857,6 +1005,23 @@ class CodexGraphRuntime:
             and graph.budget_id == budget.budget_id
         ):
             raise ValueError("Agent graph, context selection, and token budget do not match")
+        project_root = project.root.expanduser().resolve()
+        for node in graph.nodes:
+            for scope in (*node.owned_files, *node.read_only_files):
+                if is_root_scope(scope):
+                    raise ValueError(
+                        f"agent node {node.node_id} cannot receive project-root scope"
+                    )
+                if is_agent_denied_relative_path(scope):
+                    raise ValueError(
+                        f"agent node {node.node_id} received a generated or protected scope: {scope}"
+                    )
+                try:
+                    project_path(project_root, scope, allow_directory=True)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"agent node {node.node_id} received an unsafe scope {scope}: {exc}"
+                    ) from exc
         allocated_by_step: dict[str, int] = {}
         for node in graph.nodes:
             allocated_by_step[node.step_id] = (
@@ -917,16 +1082,25 @@ class CodexGraphRuntime:
 
     @staticmethod
     def _normalize_changed_path(path: str, root: Path) -> str:
-        normalized = path.replace("\\", "/")
+        normalized = str(path).replace("\\", "/").strip()
         candidate = Path(normalized)
         if candidate.is_absolute():
             try:
-                return candidate.resolve().relative_to(root.resolve()).as_posix()
+                lexical = candidate.absolute().relative_to(root.expanduser().resolve())
+                relative = lexical.as_posix()
+                # Preserve the project-relative spelling for the scope audit;
+                # _path_is_owned will reject a symlink component below.
+                return relative
             except ValueError:
                 return candidate.as_posix()
         while normalized.startswith("./"):
             normalized = normalized[2:]
-        return normalized
+        try:
+            return normalize_relative_path(normalized)
+        except ValueError:
+            # Keep an unsafe report visible to the audit rather than silently
+            # collapsing it to a different path.
+            return normalized
 
     @staticmethod
     def _parse_git_status(output: str) -> dict[str, str]:
@@ -966,53 +1140,86 @@ class CodexGraphRuntime:
     def _existing_creation_paths(root: Path, owned_files: tuple[str, ...]) -> set[str]:
         """Snapshot names only so a creation scope cannot authorize existing edits."""
         existing: set[str] = set()
-        excluded = {".git", "node_modules", "vendor", ".venv", "venv", "dist", "build"}
+        excluded = {
+            ".git",
+            "node_modules",
+            "vendor",
+            ".venv",
+            "venv",
+            "dist",
+            "build",
+            ".empy",
+            ".next",
+            ".nuxt",
+            ".cache",
+            ".turbo",
+            ".tox",
+            ".nox",
+            "coverage",
+            "__pycache__",
+        }
+        canonical_root = root.expanduser().resolve()
         for owned in owned_files:
-            if owned not in {".", "./"} and not owned.endswith("/"):
+            if not is_directory_scope(owned) or is_root_scope(owned):
                 continue
-            directory = (root / owned).resolve()
-            if not directory.is_relative_to(root.resolve()):
+            try:
+                directory = project_path(canonical_root, owned, allow_directory=True)
+            except ValueError:
                 continue
             for current, directories, files in os.walk(directory, followlinks=False):
                 directories[:] = [
                     name for name in directories
-                    if name not in excluded and not (Path(current) / name).is_symlink()
+                    if name.casefold() not in excluded
+                    and not (Path(current) / name).is_symlink()
+                    and not is_agent_denied_relative_path(
+                        (Path(current) / name).relative_to(canonical_root).as_posix()
+                        + "/"
+                    )
                 ]
-                existing.update(
-                    (Path(current) / name).relative_to(root).as_posix() for name in files
-                )
+                for name in files:
+                    file_path = Path(current) / name
+                    if file_path.is_symlink():
+                        continue
+                    relative = file_path.relative_to(canonical_root).as_posix()
+                    if not is_agent_denied_relative_path(relative):
+                        existing.add(relative)
         return existing
 
     @staticmethod
-    def _path_is_owned(path: str, owned_files: tuple[str, ...]) -> bool:
-        candidate = Path(path)
-        if candidate.is_absolute() or ".." in candidate.parts:
-            return False
-        normalized = candidate.as_posix()
-        while normalized.startswith("./"):
-            normalized = normalized[2:]
-        if not normalized or is_sensitive_relative_path(normalized):
-            return False
-        denied_parts = {
-            ".git",
-            "vendor",
-            "node_modules",
-            "dist",
-            "build",
-            "coverage",
-            "__pycache__",
-        }
-        if set(Path(normalized).parts) & denied_parts:
+    def _path_is_exactly_owned(path: str, owned_files: tuple[str, ...]) -> bool:
+        try:
+            normalized = normalize_relative_path(path)
+        except ValueError:
             return False
         for owned in owned_files:
-            if owned in {".", "./"}:
-                return True
-            normalized_owned = Path(owned).as_posix().rstrip("/").lstrip("./")
-            if normalized == normalized_owned:
-                return True
-            if owned.endswith("/") and normalized.startswith(f"{normalized_owned}/"):
-                return True
+            if is_directory_scope(owned) or is_root_scope(owned):
+                continue
+            try:
+                if normalized == normalize_relative_path(owned):
+                    return True
+            except ValueError:
+                continue
         return False
+
+    @staticmethod
+    def _path_is_owned(
+        path: str,
+        owned_files: tuple[str, ...],
+        *,
+        root: Path | None = None,
+    ) -> bool:
+        try:
+            normalized = normalize_relative_path(path)
+        except ValueError:
+            return False
+        if is_agent_denied_relative_path(normalized):
+            return False
+        if root is not None:
+            try:
+                project_path(root, normalized, allow_directory=False)
+            except ValueError:
+                return False
+        return any(scope_contains(owned, normalized) for owned in owned_files)
 
     @staticmethod
     def _summary_declares_failure(summary: str) -> bool:

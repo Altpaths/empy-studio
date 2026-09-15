@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -278,3 +279,67 @@ def test_workspace_change_after_review_aborts_before_write(tmp_path: Path) -> No
     with pytest.raises(ValueError, match="workspace changed before apply"):
         apply_sync_report(report)
     assert target.read_text() == "external\n"
+
+
+def _directory_scope_graph(root: Path) -> AgentRunGraph:
+    graph = _graph(root)
+    node = graph.nodes[0]
+    scoped_node = replace(node, owned_files=("new/",))
+    ownership = replace(graph.ownership[0], relative_path="new/")
+    return replace(graph, nodes=(scoped_node,), ownership=(ownership,))
+
+
+def test_directory_scope_allows_new_file_but_denies_existing_descendant_edits(
+    tmp_path: Path,
+) -> None:
+    graph = _directory_scope_graph(tmp_path)
+    target = tmp_path / "new" / "created.py"
+    report = build_sync_report(
+        graph=graph,
+        patches=(_patch("new/created.py", None, "created\n", operation="create"),),
+    )
+    assert report.status == "ready"
+    apply_sync_report(report)
+    assert target.read_text(encoding="utf-8") == "created\n"
+
+    existing = tmp_path / "new" / "existing.py"
+    existing.write_text("current\n", encoding="utf-8")
+    blocked = build_sync_report(
+        graph=graph,
+        patches=(_patch("new/existing.py", content_sha256("current\n"), "changed\n"),),
+    )
+    assert blocked.status == "blocked"
+    assert "ownership-violation" in {item.kind for item in blocked.conflicts}
+    for conflict in blocked.conflicts:
+        blocked = resolve_sync_conflict(
+            blocked,
+            conflict_id=conflict.conflict_id,
+            choice="apply-patch",
+        )
+    with pytest.raises(ValueError, match="non-overridable scope"):
+        apply_sync_report(blocked)
+    assert existing.read_text(encoding="utf-8") == "current\n"
+
+
+def test_protected_directory_scope_blocks_descendant_patch(tmp_path: Path) -> None:
+    graph = replace(_graph(tmp_path), protected_exclusions=("config/",))
+    report = build_sync_report(
+        graph=graph,
+        patches=(_patch("config/runtime.json", None, "{}\n", operation="create"),),
+    )
+    assert "protected-file" in {item.kind for item in report.conflicts}
+
+
+def test_sync_rejects_symlink_target_even_after_resolution(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "escape.py").write_text("escape\n", encoding="utf-8")
+    (tmp_path / "link").symlink_to(outside, target_is_directory=True)
+    graph = _directory_scope_graph(tmp_path)
+    report = build_sync_report(
+        graph=graph,
+        patches=(_patch("link/escape.py", None, "overwrite\n", operation="create"),),
+    )
+    assert "unsafe-path" in {item.kind for item in report.conflicts}
+    with pytest.raises(ValueError, match="unresolved conflicts"):
+        apply_sync_report(report)

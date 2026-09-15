@@ -549,3 +549,114 @@ def test_graph_cannot_raise_locked_allocation(tmp_path: Path) -> None:
         CodexGraphRuntime(driver=FakeDriver(), run_root=tmp_path / "runs").run(
             graph=graph, selection=selection, budget=budget, project=detection.descriptor,
         )
+
+
+def test_prompt_guard_stops_before_provider_and_records_serialized_size(tmp_path: Path) -> None:
+    detection, selection, budget, graph = prepared(tmp_path)
+    constrained = replace(
+        graph,
+        nodes=tuple(replace(node, token_limit=1) for node in graph.nodes),
+    )
+    driver = FakeDriver()
+    result = CodexGraphRuntime(
+        driver=driver,
+        run_root=tmp_path / "runs",
+    ).run(
+        graph=constrained,
+        selection=selection,
+        budget=budget,
+        project=detection.descriptor,
+    )
+
+    assert result.status == "failed"
+    assert result.error_code == "budget_exceeded"
+    assert result.node_results[0].error_code == "budget_exceeded"
+    assert driver.requests == []
+    assert result.prompt_estimates
+    node_id, prompt_tokens = result.prompt_estimates[0]
+    assert node_id == constrained.nodes[0].node_id
+    assert prompt_tokens > constrained.nodes[0].token_limit
+    accounting = result.to_dict()["budget_accounting"]
+    assert accounting["prompt_estimates"] == [
+        {"node_id": node_id, "prompt_tokens": prompt_tokens}
+    ]
+
+
+def test_parallelization_rejects_ancestor_and_descendant_scopes(tmp_path: Path) -> None:
+    _, _, _, graph = prepared(tmp_path)
+    runtime = CodexGraphRuntime(driver=FakeDriver(), run_root=tmp_path / "runs")
+    first = graph.nodes[0]
+    second = replace(first, node_id=f"{first.node_id}-second")
+    runtime.driver.supports_parallel_nodes = True  # type: ignore[attr-defined]
+
+    assert not runtime._can_parallelize(
+        (
+            replace(first, owned_files=("src/",)),
+            replace(second, owned_files=("src/components/Button.tsx",)),
+        )
+    )
+    assert runtime._can_parallelize(
+        (
+            replace(first, owned_files=("src/",)),
+            replace(second, owned_files=("public/",)),
+        )
+    )
+
+
+def test_directory_creation_scope_never_authorizes_existing_file_edits(tmp_path: Path) -> None:
+    detection, _, _, _ = prepared(tmp_path)
+    existing = detection.descriptor.root / "src" / "existing.ts"
+    existing.write_text("current\n", encoding="utf-8")
+    runtime = CodexGraphRuntime(driver=FakeDriver(), run_root=tmp_path / "runs")
+
+    existing_paths = runtime._existing_creation_paths(
+        detection.descriptor.root,
+        ("src/",),
+    )
+    assert "src/existing.ts" in existing_paths
+    assert runtime._path_is_owned(
+        "src/new.ts",
+        ("src/",),
+        root=detection.descriptor.root,
+    )
+    assert runtime._path_is_owned(
+        "src/existing.ts",
+        ("src/",),
+        root=detection.descriptor.root,
+    )
+    assert not runtime._path_is_exactly_owned("src/existing.ts", ("src/",))
+
+
+def test_provider_reported_symlink_change_fails_scope_audit(tmp_path: Path) -> None:
+    detection, selection, budget, graph = prepared(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "escape.py").write_text("print('escape')\n", encoding="utf-8")
+    (detection.descriptor.root / "src" / "link.py").symlink_to(
+        outside / "escape.py"
+    )
+
+    class SymlinkReportDriver(FakeDriver):
+        def execute_streaming(self, request, *, node_id, artifact_dir, on_progress=None):
+            result = super().execute_streaming(
+                request,
+                node_id=node_id,
+                artifact_dir=artifact_dir,
+                on_progress=on_progress,
+            )
+            return replace(result, changed_files=("src/link.py",))
+
+    driver = SymlinkReportDriver()
+    result = CodexGraphRuntime(
+        driver=driver,
+        run_root=tmp_path / "runs",
+    ).run(
+        graph=graph,
+        selection=selection,
+        budget=budget,
+        project=detection.descriptor,
+    )
+
+    assert result.status == "failed"
+    assert result.error_code == "scope_violation"
+    assert "src/link.py" in (result.error_message or "")

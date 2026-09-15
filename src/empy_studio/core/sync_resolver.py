@@ -5,10 +5,17 @@ import os
 import tempfile
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Literal
 
 from .agent_dispatcher import AgentRunGraph
+from .path_policy import (
+    is_agent_denied_relative_path,
+    is_directory_scope,
+    normalize_relative_path,
+    project_path,
+    scope_contains,
+)
 
 PatchOperation = Literal["create", "modify", "delete"]
 PatchState = Literal["queued", "ready", "conflict", "applied", "skipped"]
@@ -18,6 +25,7 @@ ConflictKind = Literal[
     "stale-base",
     "duplicate-write",
     "invalid-operation",
+    "unsafe-path",
 ]
 ResolutionChoice = Literal["apply-patch", "keep-current", "manual-content"]
 SyncStatus = Literal["ready", "blocked", "applied"]
@@ -38,20 +46,16 @@ def content_sha256(content: str | None) -> str | None:
 
 
 def file_sha256(path: Path) -> str | None:
-    if not path.is_file():
+    if path.is_symlink() or not path.is_file():
         return None
     return _sha256_bytes(path.read_bytes())
 
 
 def _normalize_relative_path(value: str) -> str:
-    candidate = value.replace("\\", "/").strip()
-    path = PurePosixPath(candidate)
-    if not candidate or path.is_absolute() or ".." in path.parts:
-        raise ValueError(f"unsafe patch path: {value}")
-    normalized = path.as_posix()
-    if normalized in {".", ""}:
-        raise ValueError(f"unsafe patch path: {value}")
-    return normalized
+    try:
+        return normalize_relative_path(value)
+    except ValueError as exc:
+        raise ValueError(f"unsafe patch path: {value}") from exc
 
 
 @dataclass(frozen=True)
@@ -111,6 +115,7 @@ class SyncConflict:
             "stale-base",
             "duplicate-write",
             "invalid-operation",
+            "unsafe-path",
         }:
             raise ValueError(f"unsupported conflict kind: {self.kind}")
         if self.resolution == "manual-content" and self.manual_content is None:
@@ -236,8 +241,14 @@ def build_sync_report(
     graph.validate()
     root = Path(graph.project_root).expanduser().resolve()
     node_by_id = {node.node_id: node for node in graph.nodes}
-    ownership = {item.relative_path: item for item in graph.ownership}
-    protected = set(graph.protected_exclusions)
+    ownership = {
+        normalize_relative_path(item.relative_path, allow_directory=True): item
+        for item in graph.ownership
+    }
+    protected = {
+        normalize_relative_path(path, allow_directory=True)
+        for path in graph.protected_exclusions
+    }
     node_order = {node.node_id: node.sequence for node in graph.nodes}
 
     validated: list[AgentPatch] = []
@@ -254,11 +265,29 @@ def build_sync_report(
     queue: list[PatchQueueItem] = []
     for order, patch in enumerate(validated, start=1):
         patch_conflicts: list[SyncConflict] = []
-        target = root / patch.relative_path
-        current = file_sha256(target)
+        try:
+            target = project_path(root, patch.relative_path, allow_directory=False)
+            current = file_sha256(target)
+        except ValueError as exc:
+            target = root / patch.relative_path
+            current = None
+            _append_sync_conflict(
+                destination=patch_conflicts,
+                preceding_count=len(conflicts),
+                patch=patch,
+                current_sha256=current,
+                kind="unsafe-path",
+                message=(
+                    "Patch target is outside the project or crosses a symlink: "
+                    f"{exc}"
+                ),
+            )
         node = node_by_id.get(patch.node_id)
 
-        if patch.relative_path in protected:
+        if any(
+            scope_contains(scope, patch.relative_path)
+            for scope in protected
+        ):
             _append_sync_conflict(
                 destination=patch_conflicts,
                 preceding_count=len(conflicts),
@@ -266,6 +295,17 @@ def build_sync_report(
                 current_sha256=current,
                 kind="protected-file",
                 message="Patch targets a protected file excluded from agent execution.",
+            )
+        elif is_agent_denied_relative_path(patch.relative_path):
+            _append_sync_conflict(
+                destination=patch_conflicts,
+                preceding_count=len(conflicts),
+                patch=patch,
+                current_sha256=current,
+                kind="protected-file",
+                message=(
+                    "Patch targets a generated, dependency, or delivery-excluded path."
+                ),
             )
         if node is None or node.agent_id != patch.agent_id or node.step_id != patch.step_id:
             _append_sync_conflict(
@@ -278,14 +318,34 @@ def build_sync_report(
             )
         else:
             record = ownership.get(patch.relative_path)
-            if record is None or record.owner_node_id != patch.node_id or patch.relative_path not in node.owned_files:
+            node_owned_paths = {
+                normalize_relative_path(path, allow_directory=True)
+                for path in node.owned_files
+            }
+            exact_owned = (
+                record is not None
+                and record.owner_node_id == patch.node_id
+                and patch.relative_path in node_owned_paths
+            )
+            creation_owned = (
+                current is None
+                and any(
+                    is_directory_scope(scope)
+                    and scope_contains(scope, patch.relative_path)
+                    for scope in node.owned_files
+                )
+            )
+            if not exact_owned and not creation_owned:
                 _append_sync_conflict(
                     destination=patch_conflicts,
                     preceding_count=len(conflicts),
                     patch=patch,
                     current_sha256=current,
                     kind="ownership-violation",
-                    message="Agent does not own the target file.",
+                    message=(
+                        "Agent does not own the target file. A directory scope can "
+                        "authorize creation only when the target does not already exist."
+                    ),
                 )
 
         competing = tuple(item for item in path_patch_ids[patch.relative_path] if item != patch.patch_id)
@@ -419,6 +479,13 @@ def apply_sync_report(report: SyncReport) -> SyncReport:
             skipped.append(item.patch.patch_id)
             continue
         related = conflicts_by_patch.get(item.patch.patch_id, [])
+        if any(conflict.kind == "unsafe-path" for conflict in related):
+            raise ValueError("sync contains an unsafe path conflict")
+        if any(
+            conflict.kind in {"ownership-violation", "protected-file"}
+            for conflict in related
+        ):
+            raise ValueError("sync contains a non-overridable scope conflict")
         manual = next((value.manual_content for value in related if value.resolution == "manual-content"), None)
         content = manual if manual is not None else item.patch.content
         operations.append((item, content))
@@ -427,7 +494,10 @@ def apply_sync_report(report: SyncReport) -> SyncReport:
     for item, _ in operations:
         related = conflicts_by_patch.get(item.patch.patch_id, [])
         forced = any(value.resolution in {"apply-patch", "manual-content"} for value in related)
-        current = file_sha256(root / item.patch.relative_path)
+        target = project_path(root, item.patch.relative_path, allow_directory=False)
+        if is_agent_denied_relative_path(item.patch.relative_path):
+            raise ValueError(f"sync target is generated or protected: {item.patch.relative_path}")
+        current = file_sha256(target)
         if not forced and current != item.patch.base_sha256:
             raise ValueError(f"workspace changed before apply: {item.patch.relative_path}")
 
@@ -435,7 +505,11 @@ def apply_sync_report(report: SyncReport) -> SyncReport:
     applied: list[str] = []
     try:
         for item, content in operations:
-            target = root / item.patch.relative_path
+            target = project_path(root, item.patch.relative_path, allow_directory=False)
+            if is_agent_denied_relative_path(item.patch.relative_path):
+                raise ValueError(
+                    f"sync target is generated or protected: {item.patch.relative_path}"
+                )
             backups.setdefault(target, target.read_bytes() if target.is_file() else None)
             if item.patch.operation == "delete":
                 target.unlink()

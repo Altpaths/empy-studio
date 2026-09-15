@@ -5,10 +5,18 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from functools import cache
 from pathlib import Path
 from typing import Final, Literal
 
 from .context_selector import ContextPack, ContextSelection
+from .path_policy import (
+    is_agent_denied_relative_path,
+    is_root_scope,
+    normalize_relative_path,
+    project_path,
+    scopes_overlap,
+)
 from .planner import AgentRole, ExecutionPlan, PlanStep
 from .token_budget import AgentTokenAllocation, TokenBudget
 
@@ -173,22 +181,46 @@ def default_agent_registry() -> AgentRegistry:
                     "**/assets/**",
                     "templates/**",
                     "views/**",
+                    "app/page.*",
+                    "app/layout.*",
+                    "app/**/page.*",
+                    "app/**/layout.*",
+                    "app/components/**",
+                    "app/**/components/**",
+                    "pages/**",
+                    "components/**",
+                    "src/app/**",
                     "src/components/**",
                     "src/pages/**",
-                    "src/**/*.js",
-                    "src/**/*.ts",
                     "src/**/*.css",
                     "src/**/*.scss",
                     "src/**/*.tsx",
                     "src/**/*.jsx",
+                    "src/**/*.vue",
+                    "src/**/*.svelte",
+                    "src/**/*.astro",
                     "public/**/*.js",
                     "public/**/*.ts",
+                    "public/**/*.mjs",
+                    "public/**/*.cjs",
+                    "public/**/*.jsx",
+                    "public/**/*.tsx",
+                    "public/**/*.vue",
+                    "public/**/*.svelte",
+                    "public/**/*.astro",
                     "*.js",
-                    "**/*.js",
+                    "*.mjs",
+                    "*.cjs",
                     "*.ts",
-                    "**/*.ts",
+                    "*.jsx",
+                    "*.tsx",
+                    "*.vue",
+                    "*.svelte",
+                    "*.astro",
                     "*.css",
+                    "**/*.css",
                     "*.scss",
+                    "**/*.scss",
                     "*.html",
                     "**/*.html",
                     "*.htm",
@@ -217,10 +249,21 @@ def default_agent_registry() -> AgentRegistry:
                     "src/**/*.java",
                     "src/**/*.ts",
                     "src/**/*.js",
+                    "src/**/*.mjs",
+                    "src/**/*.cjs",
                     "src/*.py",
                     "src/*.php",
                     "src/*.js",
+                    "src/*.ts",
+                    "src/*.mjs",
+                    "src/*.cjs",
+                    "src/*.go",
+                    "src/*.rs",
+                    "src/*.java",
                     "lib/**",
+                    "functions/**",
+                    "pages/api/**",
+                    "app/api/**",
                     "test/**",
                     "tests/**",
                     "**/test_*.py",
@@ -229,6 +272,8 @@ def default_agent_registry() -> AgentRegistry:
                     "**/*Test.php",
                     "**/*Test.js",
                     "**/*Test.ts",
+                    "**/*Test.mjs",
+                    "**/*Test.cjs",
                     "README.md",
                     "*.md",
                     "docs/**",
@@ -253,9 +298,21 @@ def default_agent_registry() -> AgentRegistry:
                     "security/**",
                     "auth/**",
                     "middleware/**",
+                    "**/middleware/**",
                     "**/auth.py",
                     "**/auth.php",
+                    "**/auth.js",
+                    "**/auth.jsx",
+                    "**/auth.mjs",
+                    "**/auth.cjs",
+                    "**/auth.ts",
+                    "**/auth.tsx",
+                    "**/auth.vue",
+                    "**/auth.svelte",
                     "**/permissions.py",
+                    "**/permissions.js",
+                    "**/permissions.ts",
+                    "**/permissions.php",
                     "**/policies/**",
                 ),
             ),
@@ -299,6 +356,16 @@ class FileOwnership:
     def validate(self) -> None:
         if not self.relative_path:
             raise ValueError("owned file path cannot be empty")
+        if is_root_scope(self.relative_path):
+            raise ValueError("project-root ownership scope is not allowed")
+        try:
+            normalize_relative_path(self.relative_path, allow_directory=True)
+        except ValueError as exc:
+            raise ValueError(f"unsafe ownership path: {self.relative_path}") from exc
+        if is_agent_denied_relative_path(self.relative_path):
+            raise ValueError(
+                f"generated or protected ownership path is not allowed: {self.relative_path}"
+            )
         owner_values = (
             self.owner_node_id,
             self.owner_agent_id,
@@ -351,6 +418,27 @@ class AgentRunNode:
             raise ValueError("a node cannot own and read the same file")
         if self.agent_role not in WRITING_ROLES and self.owned_files:
             raise ValueError("read-only agent role cannot own files")
+        normalized_owned: list[str] = []
+        normalized_read_only: list[str] = []
+        for path in (*self.owned_files, *self.read_only_files):
+            if is_root_scope(path):
+                raise ValueError("project-root scope is not allowed in an agent node")
+            try:
+                normalized = normalize_relative_path(path, allow_directory=True)
+            except ValueError as exc:
+                raise ValueError(f"unsafe agent scope: {path}") from exc
+            if is_agent_denied_relative_path(path):
+                raise ValueError(f"generated or protected agent scope is not allowed: {path}")
+            if path in self.owned_files:
+                normalized_owned.append(normalized)
+            else:
+                normalized_read_only.append(normalized)
+        if len(set(normalized_owned)) != len(normalized_owned):
+            raise ValueError("agent owned file paths must be unique")
+        if len(set(normalized_read_only)) != len(normalized_read_only):
+            raise ValueError("agent read-only file paths must be unique")
+        if set(normalized_owned) & set(normalized_read_only):
+            raise ValueError("a node cannot own and read the same file")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -392,6 +480,9 @@ class AgentRunGraph:
         self.registry.validate()
         if not self.nodes:
             raise ValueError("agent run graph must contain nodes")
+        project_root = Path(self.project_root).expanduser().resolve()
+        if not project_root.is_dir():
+            raise ValueError("agent run graph project root is not a directory")
 
         node_ids = {node.node_id for node in self.nodes}
         step_ids = {node.step_id for node in self.nodes}
@@ -401,9 +492,24 @@ class AgentRunGraph:
             raise ValueError("agent run step IDs must be unique")
 
         registry_ids = {agent.agent_id for agent in self.registry.agents}
-        protected = set(self.protected_exclusions)
+        protected: set[str] = set()
+        for path in self.protected_exclusions:
+            if is_root_scope(path):
+                raise ValueError("project-root protected scope is not allowed")
+            try:
+                normalized = normalize_relative_path(path, allow_directory=True)
+            except ValueError as exc:
+                raise ValueError(f"unsafe protected exclusion {path}: {exc}") from exc
+            protected.add(normalized)
+        if len(protected) != len(self.protected_exclusions):
+            raise ValueError("protected exclusion paths must be unique")
         for node in self.nodes:
             node.validate()
+            for path in (*node.owned_files, *node.read_only_files):
+                try:
+                    project_path(project_root, path, allow_directory=True)
+                except ValueError as exc:
+                    raise ValueError(f"unsafe agent scope {path}: {exc}") from exc
             if node.agent_id not in registry_ids:
                 raise ValueError("run node references an unregistered agent")
             agent = self.registry.get(node.agent_id)
@@ -413,7 +519,11 @@ class AgentRunGraph:
                 raise ValueError("run node contains an unknown dependency")
             if node.node_id in node.depends_on:
                 raise ValueError("run node cannot depend on itself")
-            if protected & (set(node.owned_files) | set(node.read_only_files)):
+            if any(
+                scopes_overlap(protected_path, node_path)
+                for protected_path in protected
+                for node_path in (*node.owned_files, *node.read_only_files)
+            ):
                 raise ValueError("protected file reached an agent run node")
 
         flattened_waves = tuple(node_id for wave in self.waves for node_id in wave)
@@ -432,13 +542,17 @@ class AgentRunGraph:
             if any(wave_by_node[dependency] >= node.wave for dependency in node.depends_on):
                 raise ValueError("dependency sequencing is invalid")
 
-        ownership_paths = [item.relative_path for item in self.ownership]
+        ownership_paths = [
+            normalize_relative_path(item.relative_path, allow_directory=True)
+            for item in self.ownership
+        ]
         if len(ownership_paths) != len(set(ownership_paths)):
             raise ValueError("each file must have one ownership record")
         node_by_id = {node.node_id: node for node in self.nodes}
-        for item in self.ownership:
+        ownership_by_path = dict(zip(ownership_paths, self.ownership))
+        for normalized_item_path, item in zip(ownership_paths, self.ownership):
             item.validate()
-            if item.relative_path in protected:
+            if normalized_item_path in protected:
                 raise ValueError("protected file cannot have an ownership record")
             if item.owner_node_id is None:
                 continue
@@ -447,8 +561,30 @@ class AgentRunGraph:
             owner = node_by_id[item.owner_node_id]
             if item.owner_agent_id != owner.agent_id or item.owner_step_id != owner.step_id:
                 raise ValueError("file owner identity is inconsistent")
-            if item.relative_path not in owner.owned_files:
+            normalized_owner_paths = {
+                normalize_relative_path(path, allow_directory=True)
+                for path in owner.owned_files
+            }
+            if normalized_item_path not in normalized_owner_paths:
                 raise ValueError("file ownership is missing from owner node")
+            if any(
+                scopes_overlap(normalized_item_path, protected_path)
+                for protected_path in protected
+            ):
+                raise ValueError("protected scope has an ownership record")
+
+        for node in self.nodes:
+            if node.agent_role in WRITING_ROLES and not node.owned_files:
+                raise ValueError(
+                    f"writing node {node.node_id} has no exact file or bounded creation scope"
+                )
+            for path in node.owned_files:
+                normalized_path = normalize_relative_path(path, allow_directory=True)
+                record = ownership_by_path.get(normalized_path)
+                if record is None or record.owner_node_id != node.node_id:
+                    raise ValueError(
+                        f"node {node.node_id} owns a path without a matching ownership record: {path}"
+                    )
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -515,16 +651,71 @@ def _ownership_score(
         (
             _pattern_specificity(pattern)
             for pattern in agent.ownership_patterns
-            if fnmatch.fnmatch(relative_path, pattern)
+            if _path_matches_ownership_pattern(relative_path, pattern)
         ),
         default=0,
     )
     return pattern_score, context_score, -sequence
 
 
+def _path_matches_ownership_pattern(relative_path: str, pattern: str) -> bool:
+    """Match normalized project paths without treating ``./`` as a scope.
+
+    ``fnmatch`` treats ``*`` as a slash-crossing wildcard and therefore makes
+    patterns such as ``src/*.ts`` surprisingly broad.  The registry keeps
+    explicit recursive patterns, so use segment-aware matching and a small
+    compatibility expansion for the historical ``**/`` form.
+    """
+
+    try:
+        path = normalize_relative_path(relative_path).casefold()
+        normalized_pattern = normalize_relative_path(
+            pattern,
+            allow_directory=True,
+        ).rstrip("/").casefold()
+    except ValueError:
+        return False
+    path_parts = path.split("/")
+
+    def match(candidate: str, candidate_pattern: str) -> bool:
+        candidate_parts = candidate.split("/")
+        pattern_parts = candidate_pattern.split("/")
+        if len(candidate_parts) != len(pattern_parts):
+            return False
+        return all(
+            part == "**"
+            or fnmatch.fnmatchcase(value, part)
+            for value, part in zip(candidate_parts, pattern_parts)
+        )
+
+    if match(path, normalized_pattern):
+        return True
+    # A recursive segment may represent zero or more path components.
+    pattern_parts = normalized_pattern.split("/")
+    if "**" not in pattern_parts:
+        return False
+    @cache
+    def recursive(index: int, path_index: int) -> bool:
+        if index == len(pattern_parts):
+            return path_index == len(path_parts)
+        part = pattern_parts[index]
+        if part == "**":
+            return any(
+                recursive(index + 1, consumed)
+                for consumed in range(path_index, len(path_parts) + 1)
+            )
+        if path_index >= len(path_parts) or not fnmatch.fnmatchcase(
+            path_parts[path_index], part
+        ):
+            return False
+        return recursive(index + 1, path_index + 1)
+
+    return recursive(0, 0)
+
+
 def _matches_ownership_pattern(agent: AgentDefinition, relative_path: str) -> bool:
     return any(
-        fnmatch.fnmatch(relative_path, pattern)
+        _path_matches_ownership_pattern(relative_path, pattern)
         for pattern in agent.ownership_patterns
     )
 
@@ -630,62 +821,11 @@ def _build_ownership(
             )
         )
 
-    writing_steps = tuple(
-        step for step in plan.steps if step.suggested_agent in WRITING_ROLES
-    )
-    bounded_frontend_entry = False
-    if len(writing_steps) == 1 and writing_steps[0].suggested_agent == "frontend":
-        writer_pack = packs[writing_steps[0].step_id]
-        bounded_frontend_entry = bool(writer_pack.files) and all(
-            Path(item.relative_path).name.casefold() in {"index.html", "index.htm"}
-            for item in writer_pack.files
-        )
-
-    exact_ticket_scope = len(writing_steps) == 1 and any(
-        "explicitly named in ticket" in item.reasons
-        for item in packs[writing_steps[0].step_id].files
-    )
-    if len(writing_steps) == 1 and not bounded_frontend_entry and not exact_ticket_scope:
-        # A single implementation Agent must be able to create a required
-        # module, not merely edit whichever existing file happened to rank
-        # first.  Grant the detected application root as a bounded creation
-        # scope.  Runtime auditing still rejects secrets, dependencies,
-        # generated files, Git metadata, and every path outside this scope.
-        # A homepage-only frontend pack is intentionally exempt: its concrete
-        # index target is already writable, and widening it to the complete
-        # deployment root would defeat the ticket's bounded scope.
-        writing_step = writing_steps[0]
-        marker = next(
-            (
-                item.split(":", 1)[1]
-                for item in selection.project_brain.markers
-                if item.startswith("verification-root:")
-            ),
-            None,
-        )
-        if marker:
-            application_scope = marker.rstrip("/") + "/"
-        elif plan.project_type in {"python", "node", "rust"} and (
-            Path(plan.project_root) / "src"
-        ).is_dir():
-            application_scope = "src/"
-        else:
-            application_scope = "./"
-        if application_scope not in {item.relative_path for item in ownership}:
-            owner = assignments[writing_step.step_id]
-            ownership.append(
-                FileOwnership(
-                    relative_path=application_scope,
-                    owner_node_id=f"node-{writing_step.step_id}",
-                    owner_agent_id=owner.agent_id,
-                    owner_step_id=writing_step.step_id,
-                    reader_agent_ids=(),
-                    reason=(
-                        "single-writer application creation scope; protected and "
-                        "generated paths remain denied by runtime policy"
-                    ),
-                )
-            )
+    # A missing target must be represented by a concrete virtual file from the
+    # context selector.  Widening a writer to the application root makes a
+    # typo or an incomplete plan look executable and lets a provider create
+    # unrelated files.  The per-node validation below turns this into an
+    # actionable planning error instead of a broad ``./`` permission.
     return tuple(ownership)
 
 
@@ -787,12 +927,12 @@ def build_agent_run_graph(
         for node in nodes
         if node.agent_role in WRITING_ROLES
     )
-    if writing_nodes and not any(node.owned_files for node in writing_nodes):
-        roles = ", ".join(sorted({node.agent_role for node in writing_nodes}))
-        raise ValueError(
-            "approved implementation plan has no writable files for "
-            f"writing roles ({roles}); refine the task scope or project index"
-        )
+    for node in writing_nodes:
+        if not node.owned_files:
+            raise ValueError(
+                f"writing node {node.node_id} has no exact file or bounded creation "
+                "scope; refine the task scope or project index"
+            )
 
     node_waves = tuple(
         tuple(node_id_by_step[step_id] for step_id in wave)
