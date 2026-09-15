@@ -396,6 +396,109 @@ def test_release_gate_blocks_failed_verification_before_export(tmp_path: Path) -
         state.export_project(str(tmp_path / "blocked.zip"))
 
 
+def test_release_gate_blocks_file_drift_after_review(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("before\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "empy-workspace")
+    state.import_path(str(source))
+    state.create_plan("Update the README")
+    assert state.detection is not None
+    root = state.detection.descriptor.root
+    (root / "README.md").write_text("after review\n", encoding="utf-8")
+    state.review = state.review_store.create(root)
+    state.decide_all("accept")
+    state.run = SimpleNamespace(status="completed")
+    check = VerificationCheck(
+        check_id="review-drift",
+        label="Review drift check",
+        category="tests",
+        command=("true",),
+    )
+    state.verification = VerificationReport(
+        schema_version=1,
+        verification_id="verification-review-drift",
+        project_root=str(root),
+        project_type="generic",
+        status="pass",
+        started_at="now",
+        finished_at="now",
+        results=(
+            VerificationResult(
+                check=check,
+                status="pass",
+                returncode=0,
+                stdout="ok\n",
+                stderr="",
+                started_at="now",
+                finished_at="now",
+            ),
+        ),
+        evidence_path=str(tmp_path / "evidence"),
+        finalized_at="now",
+    )
+    (root / "README.md").write_text("changed after review\n", encoding="utf-8")
+
+    gate = state._release_gate()
+
+    assert gate["status"] == "blocked"
+    assert gate["ready"] is False
+    assert any("changed after Review" in item for item in gate["blockers"])
+
+
+def test_restart_does_not_restore_a_tampered_v3_release(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("before\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "empy-workspace")
+    state.import_path(str(source))
+    state.create_plan("Update the README")
+    assert state.detection is not None
+    root = state.detection.descriptor.root
+    (root / "README.md").write_text("after\n", encoding="utf-8")
+    state.review = ReviewReport(
+        schema_version=1,
+        review_id="review-release-restore",
+        project_root=str(root),
+        base_revision="HEAD",
+        created_at="now",
+        updated_at="now",
+        status="complete",
+        files=(),
+    )
+    state.verification = VerificationReport(
+        schema_version=1,
+        verification_id="verification-release-restore",
+        project_root=str(root),
+        project_type="generic",
+        status="pass",
+        started_at="now",
+        finished_at="now",
+        results=(
+            VerificationResult(
+                check=VerificationCheck("release", "Release", "build", ("true",)),
+                status="pass",
+                returncode=0,
+                stdout="ok\n",
+                stderr="",
+                started_at="now",
+                finished_at="now",
+            ),
+        ),
+        evidence_path=str(tmp_path / "evidence"),
+        finalized_at="now",
+    )
+    archive = tmp_path / "release.zip"
+    state.export_project(str(archive))
+    archive.write_bytes(b"tampered")
+
+    reopened = GuidedState(tmp_path / "empy-workspace")
+
+    assert reopened.export is None
+    assert reopened.error is not None
+    assert "was not restored" in reopened.error
+
+
 def test_release_gate_distinguishes_pending_review_from_a_blocked_run(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
@@ -584,6 +687,31 @@ def test_benchmark_endpoint_requires_auth_and_valid_plan(tmp_path: Path) -> None
         assert "Build a plan" in str(exc)
     else:
         raise AssertionError("benchmark without a plan succeeded")
+
+
+def test_provider_is_not_inspected_when_verification_preflight_is_blocked(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("demo\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+    state.create_plan("Update the README")
+    calls: list[str] = []
+
+    class DriverStub:
+        def inspect(self, *, refresh: bool = False) -> object:
+            del refresh
+            calls.append("inspect")
+            raise AssertionError("provider inspection must not run before verification preflight")
+
+    state.driver = DriverStub()  # type: ignore[assignment]
+
+    with pytest.raises(RuntimeError, match="Verification preflight blocked"):
+        state.start_run()
+
+    assert calls == []
 
 
 def test_cancel_run_requests_runtime_stop(tmp_path: Path) -> None:

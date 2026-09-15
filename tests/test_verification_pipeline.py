@@ -16,6 +16,7 @@ from empy_studio.verification_pipeline import (
     VerificationRuntime,
     finalize_verification,
     map_project_verification,
+    static_web_diagnostics,
     verification_contract_signature,
     verification_preflight,
     verification_staleness_reason,
@@ -329,3 +330,84 @@ def test_manifest_rejects_unknown_category(tmp_path: Path) -> None:
     detection = DefaultProjectService().detect(tmp_path)
     with pytest.raises(ValueError, match="tests, build, or lint"):
         map_project_verification(detection)
+
+
+def test_manifest_schema_is_bounded_and_preflight_does_not_run_commands(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "README.md").write_text("demo", encoding="utf-8")
+    sentinel = tmp_path / "command-ran.txt"
+    manifest = tmp_path / ".empy" / "verification.json"
+    manifest.parent.mkdir()
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "unexpected": True,
+                "checks": [
+                    {
+                        "id": "would-run",
+                        "category": "tests",
+                        "command": [sys.executable, "-c", f"open({str(sentinel)!r}, 'w').write('bad')"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    detection = DefaultProjectService().detect(tmp_path)
+    preflight = verification_preflight(detection)
+
+    assert preflight.ready is False
+    assert any("unsupported field" in item for item in preflight.diagnostics)
+    report = VerificationRuntime().run(detection=detection, evidence_root=tmp_path / "evidence")
+    assert report.results == ()
+    assert not sentinel.exists()
+
+
+def test_static_web_diagnostics_covers_html_css_and_javascript_references(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "index.html").write_text(
+        '<link href="assets/site.css"><script src="assets/app.js"></script>',
+        encoding="utf-8",
+    )
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "site.css").write_text(
+        'body { background: url("../images/logo.svg"); }',
+        encoding="utf-8",
+    )
+    (tmp_path / "assets" / "app.js").write_text(
+        "import './missing.js';\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "images").mkdir()
+    (tmp_path / "images" / "logo.svg").write_text("<svg/>", encoding="utf-8")
+
+    errors = static_web_diagnostics(tmp_path)
+
+    assert any("missing.js" in item for item in errors)
+    assert not any("site.css" in item and "logo.svg" in item for item in errors)
+
+
+def test_static_web_diagnostics_allows_runtime_css_variables(tmp_path: Path) -> None:
+    (tmp_path / "index.html").write_text('<link href="site.css">', encoding="utf-8")
+    (tmp_path / "site.css").write_text(
+        ":root { --asset: url('/assets/logo.svg'); }\n"
+        ".hero { background: url(var(--asset)); }",
+        encoding="utf-8",
+    )
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "logo.svg").write_text("<svg/>", encoding="utf-8")
+
+    errors = static_web_diagnostics(tmp_path)
+
+    assert errors == ()
+
+
+def test_static_web_diagnostics_rejects_placeholder_links(tmp_path: Path) -> None:
+    (tmp_path / "index.html").write_text('<a href="#">Placeholder</a>', encoding="utf-8")
+
+    errors = static_web_diagnostics(tmp_path)
+
+    assert any("placeholder" in item for item in errors)

@@ -74,8 +74,10 @@ from empy_studio.project_delivery import (
     import_project_archive,
     import_project_folder,
     inspect_project_delta,
+    review_snapshot_drift,
     safe_upload_relative_path,
     summarize_import_skips,
+    validate_export_artifacts,
 )
 from empy_studio.release_validation import validate_changed_html_links
 from empy_studio.review_workspace import ReviewReport, ReviewWorkspaceAdapter
@@ -1089,6 +1091,25 @@ class GuidedState:
             and release_manifest.get("archive_mode") == "delta"
         )
         release_metadata: dict[str, Any] = release_manifest or {}
+        restore_error: str | None = None
+        # v3 releases contain a complete integrity contract.  Validate all
+        # three artifacts before presenting one as verified after a restart.
+        # Older development records had only display metadata; keep those
+        # readable for migration while never weakening validation for a v3
+        # archive produced by the current exporter.
+        if latest_release is not None and release_manifest is not None and release_manifest.get("schema_version") == 3:
+            try:
+                release_metadata = validate_export_artifacts(
+                    latest_release.archive_path,
+                    latest_release.manifest_path,
+                    latest_release.checksum_path,
+                    expected_sha256=latest_release.sha256,
+                    expected_file_count=latest_release.file_count,
+                    expected_changed_files=release_manifest.get("changed_files", ()),
+                )
+            except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                restored_delta = False
+                restore_error = f"Saved release could not be verified and was not restored: {exc}"
         changed_files = (
             tuple(str(item) for item in release_metadata.get("changed_files", []))
             if restored_delta
@@ -1145,14 +1166,18 @@ class GuidedState:
             self.repair_attempts = self.recovery.attempts
             self.node_states = {node.node_id: "waiting" for node in graph.nodes}
             self.phase = "plan"
-            self.error = None
-            self.message = (
-                "خروجی قدیمی کامل بود؛ برای جلوگیری از تحویل ناقص، ZIP تغییرات را دوباره تولید کنید."
-                if latest_release is not None and not restored_delta
-                else "تیکت قبلی بازیابی شد."
-                if restore
-                else "تیکت انتخاب شد."
-            )
+            self.error = restore_error
+            if restore_error is not None:
+                self.message_level = "warning"
+                self.message = restore_error
+            elif latest_release is not None and not restored_delta:
+                self.message = (
+                    "خروجی قدیمی کامل بود؛ برای جلوگیری از تحویل ناقص، ZIP تغییرات را دوباره تولید کنید."
+                )
+            elif restore:
+                self.message = "تیکت قبلی بازیابی شد."
+            else:
+                self.message = "تیکت انتخاب شد."
         # A successful task selection starts from that task's own artifacts;
         # do not carry a planning failure from a different ticket into it.
         self._clear_failure_context()
@@ -2005,6 +2030,40 @@ class GuidedState:
         if reason:
             self._stop_recovery(reason)
             raise RuntimeError(reason)
+        # Verification readiness is a hard gate before even inspecting or
+        # invoking a provider.  A missing Composer autoloader is the one
+        # recoverable preflight finding: dependency preparation is local and
+        # deterministic, so perform it first and then re-read the contract.
+        preflight = verification_preflight(self.detection)
+        # A project can legitimately need both Composer and Node.  Prepare at
+        # most one bounded, lockfile-backed dependency set per pass, then
+        # re-read the contract before allowing the provider inspection.  Any
+        # non-dependency diagnostic remains a hard stop and costs no tokens.
+        for _ in range(3):
+            dependency_only = bool(preflight.diagnostics) and all(
+                "dependencies are not available in the isolated copy" in item
+                for item in preflight.diagnostics
+            )
+            if preflight.ready:
+                break
+            if not dependency_only:
+                detail = "; ".join(preflight.diagnostics)
+                message = f"Verification preflight blocked the provider run: {detail}"
+                with self.lock:
+                    self.error = message
+                    self.message_level = "warning"
+                    self.message = message
+                raise RuntimeError(message)
+            self._prepare_dependencies(self.detection, None)
+            preflight = verification_preflight(self.detection)
+        if not preflight.ready:
+            detail = "; ".join(preflight.diagnostics)
+            message = f"Verification preflight blocked the provider run: {detail}"
+            with self.lock:
+                self.error = message
+                self.message_level = "warning"
+                self.message = message
+            raise RuntimeError(message)
         installation = self.driver.inspect(refresh=True)
         if installation.availability != "available" or not installation.authenticated:
             self._stop_recovery("credentials: " + (installation.remediation or installation.message))
@@ -2573,6 +2632,11 @@ class GuidedState:
             blockers.append("Review has not completed.")
         elif self.detection is not None:
             try:
+                review_drift = review_snapshot_drift(
+                    self.detection.descriptor.root,
+                    self.review.files,
+                )
+                blockers.extend(review_drift)
                 delta = inspect_project_delta(
                     self.detection.descriptor.root,
                     self._baseline_snapshot_path(),
@@ -2593,8 +2657,24 @@ class GuidedState:
             except (OSError, RuntimeError, ValueError) as exc:
                 blockers.append(str(exc))
 
+        export_is_valid = bool(self.export and self.export.verified)
+        if export_is_valid and self.export is not None:
+            saved_manifest = self._load_release_manifest(self.export.manifest_path)
+            if saved_manifest is not None and saved_manifest.get("schema_version") == 3:
+                try:
+                    validate_export_artifacts(
+                        self.export.archive_path,
+                        self.export.manifest_path,
+                        self.export.checksum_path,
+                        expected_sha256=self.export.sha256,
+                        expected_file_count=self.export.file_count,
+                        expected_changed_files=self.export.changed_files,
+                    )
+                except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                    export_is_valid = False
+                    blockers.append(f"The saved project ZIP is no longer valid: {exc}")
         hard_blockers = [item for item in blockers if item != review_blocker]
-        if self.export is not None and self.export.verified:
+        if export_is_valid and not blockers:
             status = "exported"
         elif review_blocker is not None and not hard_blockers:
             status = "awaiting_review"
@@ -2606,7 +2686,7 @@ class GuidedState:
             "status": status,
             "ready": not blockers,
             "blockers": blockers,
-            "exported": bool(self.export and self.export.verified),
+            "exported": export_is_valid,
         }
 
     def export_download_path(self) -> Path:
@@ -2629,6 +2709,23 @@ class GuidedState:
                 digest.update(chunk)
         if digest.hexdigest() != exported.sha256:
             raise RuntimeError("The verified project ZIP changed; export it again.")
+        # Current exports carry a complete v3 integrity contract.  Validate
+        # the ZIP and both sidecars on every download so a removed or edited
+        # artifact cannot be served from a stale in-memory state.
+        manifest = self._load_release_manifest(exported.manifest_path)
+        if manifest is not None and manifest.get("schema_version") == 3:
+            try:
+                validate_export_artifacts(
+                    archive,
+                    exported.manifest_path,
+                    exported.checksum_path,
+                    expected_sha256=exported.sha256,
+                    expected_file_count=exported.file_count,
+                    expected_changed_files=exported.changed_files,
+                    workspace_root=workspace,
+                )
+            except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                raise RuntimeError(f"The verified project export is no longer valid: {exc}") from exc
         return archive
 
     def export_artifact_path(self, kind: str) -> Path:
@@ -2657,6 +2754,22 @@ class GuidedState:
             expected = f"{exported.sha256}  {exported.archive_path.name}"
             if target.read_text(encoding="utf-8").strip() != expected:
                 raise RuntimeError("The export checksum changed; export the project again.")
+            manifest = self._load_release_manifest(exported.manifest_path)
+            if manifest is not None and manifest.get("schema_version") == 3:
+                try:
+                    validate_export_artifacts(
+                        exported.archive_path,
+                        exported.manifest_path,
+                        target,
+                        expected_sha256=exported.sha256,
+                        expected_file_count=exported.file_count,
+                        expected_changed_files=exported.changed_files,
+                        workspace_root=workspace,
+                    )
+                except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                    raise RuntimeError(
+                        f"The export checksum is no longer trusted: {exc}"
+                    ) from exc
         if kind == "manifest":
             try:
                 manifest = json.loads(target.read_text(encoding="utf-8"))
@@ -2668,6 +2781,21 @@ class GuidedState:
                 or tuple(manifest.get("changed_files", ())) != exported.changed_files
             ):
                 raise RuntimeError("The export manifest does not match the verified ZIP.")
+            if manifest.get("schema_version") == 3:
+                try:
+                    validate_export_artifacts(
+                        exported.archive_path,
+                        target,
+                        exported.checksum_path,
+                        expected_sha256=exported.sha256,
+                        expected_file_count=exported.file_count,
+                        expected_changed_files=exported.changed_files,
+                        workspace_root=workspace,
+                    )
+                except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                    raise RuntimeError(
+                        f"The export manifest is no longer trusted: {exc}"
+                    ) from exc
         return target
 
     def export_project(self, destination: str | None = None) -> None:
@@ -2684,6 +2812,7 @@ class GuidedState:
             self.detection.descriptor.root,
             target,
             baseline_snapshot=self._baseline_snapshot_path(),
+            review_files=self.review.files,
         )
         self.export = exported
         if self.active_project_id is not None and self.active_task_id is not None:

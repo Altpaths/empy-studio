@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import zipfile
 from pathlib import Path
 
@@ -11,9 +12,13 @@ from empy_studio.project_delivery import (
     import_project_archive,
     import_project_folder,
     materialize_baseline_copy,
+    review_snapshot_drift,
     safe_upload_relative_path,
     summarize_import_skips,
+    validate_export_artifacts,
+    verify_project_archive,
 )
+from empy_studio.review_workspace import ReviewFile
 from empy_studio.vault import initialize_vault
 
 
@@ -335,3 +340,155 @@ def test_browser_upload_paths_keep_project_scope() -> None:
     assert safe_upload_relative_path(".env") is None
     assert safe_upload_relative_path("C:\\Users\\demo\\app.py") is None
     assert safe_upload_relative_path("/etc/passwd") is None
+
+
+def test_import_preserves_only_the_project_verification_manifest(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("demo\n", encoding="utf-8")
+    (source / ".empy").mkdir()
+    (source / ".empy" / "verification.json").write_text(
+        '{"schema_version":1,"checks":[]}',
+        encoding="utf-8",
+    )
+    (source / ".empy" / "runtime.json").write_text("internal\n", encoding="utf-8")
+
+    imported = import_project_folder(source, tmp_path / "workspace")
+
+    assert (imported.project_root / ".empy" / "verification.json").is_file()
+    assert not (imported.project_root / ".empy" / "runtime.json").exists()
+    assert ".empy/runtime.json" in imported.skipped_members
+
+
+def test_verification_manifest_mutation_is_excluded_from_delivery_delta(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("demo\n", encoding="utf-8")
+    (source / ".empy").mkdir()
+    manifest = source / ".empy" / "verification.json"
+    manifest.write_text('{"schema_version":1,"checks":[]}', encoding="utf-8")
+
+    imported = import_project_folder(source, tmp_path / "workspace")
+    snapshot = _baseline_snapshot(imported, tmp_path)
+    (imported.project_root / ".empy" / "verification.json").write_text(
+        '{"schema_version":1,"checks":[{"id":"local","command":["true"]}]}',
+        encoding="utf-8",
+    )
+    (imported.project_root / "README.md").write_text("changed\n", encoding="utf-8")
+
+    exported = export_project_zip(
+        imported.project_root,
+        tmp_path / "out",
+        baseline_snapshot=snapshot,
+    )
+
+    with zipfile.ZipFile(exported.archive_path) as archive:
+        assert archive.namelist() == ["README.md"]
+
+
+def test_export_artifacts_validation_rejects_changed_archive_or_sidecars(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("before\n", encoding="utf-8")
+    imported = import_project_folder(source, tmp_path / "workspace")
+    snapshot = _baseline_snapshot(imported, tmp_path)
+    (imported.project_root / "README.md").write_text("after\n", encoding="utf-8")
+    exported = export_project_zip(imported.project_root, tmp_path / "out", baseline_snapshot=snapshot)
+
+    validate_export_artifacts(
+        exported.archive_path,
+        exported.manifest_path,
+        exported.checksum_path,
+        expected_sha256=exported.sha256,
+        expected_file_count=exported.file_count,
+        expected_changed_files=exported.changed_files,
+    )
+    exported.archive_path.write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="checksum does not match"):
+        validate_export_artifacts(
+            exported.archive_path,
+            exported.manifest_path,
+            exported.checksum_path,
+            expected_sha256=exported.sha256,
+        )
+
+
+def test_verify_project_archive_keeps_legacy_v1_api_usable(tmp_path: Path) -> None:
+    archive_path = tmp_path / "legacy.zip"
+    payload = b"legacy\n"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("README.md", payload)
+
+    verify_project_archive(
+        archive_path,
+        {
+            "schema_version": 1,
+            "file_count": 1,
+            "files": [
+                {
+                    "path": "README.md",
+                    "size": len(payload),
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                }
+            ],
+        },
+    )
+
+
+def test_export_artifact_validator_rejects_symlink_sidecar_before_resolve(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("before\n", encoding="utf-8")
+    imported = import_project_folder(source, tmp_path / "workspace")
+    snapshot = _baseline_snapshot(imported, tmp_path)
+    (imported.project_root / "README.md").write_text("after\n", encoding="utf-8")
+    exported = export_project_zip(imported.project_root, tmp_path / "out", baseline_snapshot=snapshot)
+    real_manifest = exported.manifest_path.with_name("real-manifest.json")
+    exported.manifest_path.rename(real_manifest)
+    exported.manifest_path.symlink_to(real_manifest)
+
+    with pytest.raises(ValueError, match="manifest must not be a symlink"):
+        validate_export_artifacts(
+            exported.archive_path,
+            exported.manifest_path,
+            exported.checksum_path,
+        )
+
+
+def test_review_snapshot_drift_only_reports_accepted_files(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    file = source / "README.md"
+    file.write_text("before\n", encoding="utf-8")
+    imported = import_project_folder(source, tmp_path / "workspace")
+    target = imported.project_root / "README.md"
+    target.write_text("after\n", encoding="utf-8")
+    from empy_studio.project_delivery import _sha256_file
+
+    review = ReviewFile(
+        relative_path="README.md",
+        git_status=" M",
+        change_kind="modified",
+        diff_text="diff",
+        is_binary=False,
+        current_sha256=_sha256_file(target),
+        decision="accepted",
+    )
+    target.write_text("changed-after-review\n", encoding="utf-8")
+
+    assert review_snapshot_drift(imported.project_root, (review,))
+
+
+def test_import_archive_failure_does_not_leave_partial_workspace(tmp_path: Path) -> None:
+    source_archive = tmp_path / "input.zip"
+    with zipfile.ZipFile(source_archive, "w") as archive:
+        archive.writestr("demo/README.md", "hello\n")
+        archive.writestr("demo/README.md/child", "conflicting path\n")
+
+    workspace = tmp_path / "workspace"
+    with pytest.raises(FileExistsError):
+        import_project_archive(source_archive, workspace)
+
+    assert not list(workspace.glob("input-*"))
