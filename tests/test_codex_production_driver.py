@@ -427,6 +427,101 @@ def test_rejects_final_turn_accounting_overage_after_process_completion(
     assert result.usage.uncached_total == 65
 
 
+def test_accepts_bounded_completion_accounting_overage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "empy_studio.drivers.codex.shutil.which",
+        lambda value: "/usr/local/bin/codex",
+    )
+
+    created: dict[str, FakeProcess] = {}
+
+    def process_factory(command: list[str], **kwargs: Any) -> FakeProcess:
+        del kwargs
+        final_path = Path(command[command.index("--output-last-message") + 1])
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        final_path.write_text(
+            "Implemented the approved change.\nEMPY_NODE_RESULT: PASS\n",
+            encoding="utf-8",
+        )
+        process = FakeProcess(
+            stdout=(
+                '{"type":"thread.started","thread_id":"thread-grace"}\n'
+                '{"type":"item.completed","item":{"type":"file_change",'
+                '"status":"completed","changes":[{"path":"src/example.py",'
+                '"kind":"update"}]}}\n'
+                '{"type":"turn.completed","usage":{"input_tokens":27313,'
+                '"output_tokens":3073,"cached_input_tokens":109824,'
+                '"total_tokens":140210}}\n'
+            )
+        )
+        created["process"] = process
+        return process
+
+    events = []
+    driver = CodexDriver(
+        artifact_root=tmp_path,
+        command_runner=ready_runner,
+        process_factory=process_factory,
+    )
+    result = driver.execute_streaming(
+        replace(request(tmp_path), fresh_token_limit=30_116),
+        node_id="node-budget-grace",
+        artifact_dir=tmp_path / "run" / "node-budget-grace",
+        on_progress=events.append,
+    )
+
+    assert result.status == "completed"
+    assert result.error_code is None
+    assert result.changed_files == ("src/example.py",)
+    assert result.usage is not None
+    assert result.usage.uncached_total == 30_386
+    assert any(event.event_type == "run.budget_grace" for event in events)
+    assert "bounded provider completion" in result.summary
+    assert created["process"].terminated is False
+
+
+def test_rejects_overage_above_bounded_completion_allowance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "empy_studio.drivers.codex.shutil.which",
+        lambda value: "/usr/local/bin/codex",
+    )
+
+    def process_factory(command: list[str], **kwargs: Any) -> FakeProcess:
+        del kwargs
+        final_path = Path(command[command.index("--output-last-message") + 1])
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        final_path.write_text("Over budget\n", encoding="utf-8")
+        return FakeProcess(
+            stdout=(
+                '{"type":"turn.completed","usage":{"input_tokens":27313,'
+                '"output_tokens":3600,"cached_input_tokens":109824,'
+                '"total_tokens":140737}}\n'
+            )
+        )
+
+    driver = CodexDriver(
+        artifact_root=tmp_path,
+        command_runner=ready_runner,
+        process_factory=process_factory,
+    )
+    result = driver.execute_streaming(
+        replace(request(tmp_path), fresh_token_limit=30_116),
+        node_id="node-budget-hard",
+        artifact_dir=tmp_path / "run" / "node-budget-hard",
+    )
+
+    assert result.status == "failed"
+    assert result.error_code == "budget_exceeded"
+    assert result.usage is not None
+    assert result.usage.uncached_total == 30_913
+
+
 def test_counts_codex_total_usage_snapshot_once(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -36,3 +36,17 @@ Run `scripts/benchmark_token_efficiency.py` to measure deterministic planning
 overhead without calling a provider.
 The accompanying acceptance report distinguishes mocked tests from real free
 provider failures; no real cost reduction or successful free coding is claimed.
+# Empy Studio 0.1.60 — bounded provider completion accounting
+
+This patch fixes a false failure observed when Codex completed a scoped file
+change but its final fresh-token accounting landed 270 tokens above the locked
+economy node allocation. Empy now keeps the hard per-node boundary and allows
+only a bounded final-accounting allowance (up to 512 tokens or 1.5% for normal
+node sizes); a larger overage still terminates the node. Any accepted allowance
+is recorded as a warning and must pass Empy's deterministic Verification before
+Review or ZIP release.
+
+The reproduced usage shape and the hard-overage path are covered by regression
+tests. No provider call is made by the test suite.
+
+## Previous release context

@@ -1,3 +1,14 @@
+## [0.1.60] - 2026-09-16
+
+- Keep the economy node allocation and enforce a hard fresh-token boundary,
+  while allowing only a bounded final-accounting allowance for provider usage
+  that arrives with an otherwise completed turn.
+- Preserve a successful provider process and its scoped file changes when the
+  observed overage is within that allowance, emit explicit budget evidence,
+  and require deterministic Verification before Review or ZIP release.
+- Continue terminating runs that exceed the allowance and add regression tests
+  for both the reproduced ۳۰٬۳۸۶/۳۰٬۱۱۶ usage shape and a hard overage.
+
 ## [0.1.59] - 2026-09-15
 
 - Treat an implementation Agent's explicit `EMPY_NODE_RESULT: PASS` with no
