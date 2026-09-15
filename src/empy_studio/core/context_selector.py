@@ -10,7 +10,14 @@ from pathlib import Path
 from typing import Final
 
 from .path_policy import is_sensitive_relative_path
-from .planner import AgentRole, ExecutionPlan, PlanStep, requests_implementation
+from .planner import (
+    AgentRole,
+    ExecutionPlan,
+    PlanStep,
+    classify_intent,
+    requests_data_model_changes,
+    requests_implementation,
+)
 from .project_brain import ProjectBrainIndex, ProjectBrainRecord
 from .project_service import ProjectDetection
 from .task_intake import ProductTask
@@ -34,6 +41,10 @@ DEFAULT_EXCLUDED_DIRECTORIES: Final[tuple[str, ...]] = (
     ".ruff_cache",
     ".next",
     ".nuxt",
+    ".svelte-kit",
+    ".astro",
+    ".cache",
+    ".turbo",
 )
 
 TEXT_EXTENSIONS: Final[frozenset[str]] = frozenset(
@@ -43,11 +54,14 @@ TEXT_EXTENSIONS: Final[frozenset[str]] = frozenset(
         ".pyi",
         ".php",
         ".js",
+        ".mjs",
+        ".cjs",
         ".jsx",
         ".ts",
         ".tsx",
         ".vue",
         ".svelte",
+        ".astro",
         ".css",
         ".scss",
         ".sass",
@@ -119,6 +133,45 @@ ROLE_KEYWORDS: Final[dict[str, tuple[str, ...]]] = {
         "css",
         "frontend",
         "ui",
+        "ux",
+        "navigation",
+        "nav",
+        "menu",
+        "header",
+        "footer",
+        "hero",
+        "banner",
+        "gallery",
+        "form",
+        "responsive",
+        "mobile",
+        "tablet",
+        "accessibility",
+        "accessible",
+        "wcag",
+        "a11y",
+        "seo",
+        "metadata",
+        "sitemap",
+        "dashboard",
+        "chart",
+        "graph",
+        "table",
+        "grid",
+        "login",
+        "signup",
+        "register",
+        "cart",
+        "checkout",
+        "payment",
+        "upload",
+        "app",
+        "tsx",
+        "jsx",
+        "vue",
+        "svelte",
+        "astro",
+        "index",
     ),
     "backend": (
         "app",
@@ -131,6 +184,20 @@ ROLE_KEYWORDS: Final[dict[str, tuple[str, ...]]] = {
         "models",
         "service",
         "services",
+        "repository",
+        "handler",
+        "server",
+        "auth",
+        "authentication",
+        "login",
+        "signup",
+        "password",
+        "session",
+        "payment",
+        "checkout",
+        "upload",
+        "storage",
+        "webhook",
         "database",
         "migration",
         "backend",
@@ -168,6 +235,16 @@ ROLE_KEYWORDS: Final[dict[str, tuple[str, ...]]] = {
         "policy",
         "policies",
         "middleware",
+        "login",
+        "logout",
+        "signup",
+        "register",
+        "password",
+        "session",
+        "oauth",
+        "token",
+        "csrf",
+        "xss",
     ),
     "release": (
         "release",
@@ -227,6 +304,8 @@ _CODE_SUFFIXES: Final[frozenset[str]] = frozenset(
         ".hpp",
         ".java",
         ".js",
+        ".mjs",
+        ".cjs",
         ".jsx",
         ".kt",
         ".php",
@@ -238,6 +317,7 @@ _CODE_SUFFIXES: Final[frozenset[str]] = frozenset(
         ".tsx",
         ".vue",
         ".svelte",
+        ".astro",
     }
 )
 _FRONTEND_SUFFIXES: Final[frozenset[str]] = frozenset(
@@ -245,7 +325,10 @@ _FRONTEND_SUFFIXES: Final[frozenset[str]] = frozenset(
         ".css",
         ".html",
         ".htm",
+        ".svg",
         ".js",
+        ".mjs",
+        ".cjs",
         ".jsx",
         ".scss",
         ".sass",
@@ -254,6 +337,7 @@ _FRONTEND_SUFFIXES: Final[frozenset[str]] = frozenset(
         ".tsx",
         ".vue",
         ".svelte",
+        ".astro",
     }
 )
 _BACKEND_PARTS: Final[frozenset[str]] = frozenset(
@@ -272,51 +356,17 @@ _BACKEND_PARTS: Final[frozenset[str]] = frozenset(
         "server",
         "service",
         "services",
+        "handler",
+        "handlers",
+        "repository",
+        "repositories",
+        "function",
+        "functions",
         "src",
         "migration",
         "migrations",
         "schema",
     }
-)
-
-DATA_MODEL_TERMS: Final[tuple[str, ...]] = (
-    "database",
-    "db",
-    "schema",
-    "migration",
-    "migrations",
-    "table",
-    "tables",
-    "sql",
-    "storage",
-    "persist",
-    "persisted",
-    "save",
-    "store",
-    "stored",
-    "record",
-    "records",
-    "history",
-    "historical",
-    "entity",
-    "entities",
-    "orm",
-    "ذخیره",
-    "ذخیره‌سازی",
-    "تاریخچه",
-    "سوابق",
-    "ثبت",
-    "پایگاه داده",
-    "جدول",
-    "مهاجرت",
-)
-
-DATA_MODEL_PHRASES: Final[tuple[str, ...]] = (
-    "data model",
-    "data-model",
-    "data schema",
-    "پایگاه داده",
-    "ذخیره سازی",
 )
 
 MARKET_TASK_TOKENS: Final[frozenset[str]] = frozenset(
@@ -367,16 +417,10 @@ def _task_requests_data_model_changes(task_text: str) -> bool:
     file or the runtime will correctly reject the otherwise necessary edit.
     """
 
-    normalized = task_text.casefold().replace("\u200c", " ")
-    tokens = _tokens(normalized)
-    single_word_terms = {
-        term.replace("\u200c", " ").casefold()
-        for term in DATA_MODEL_TERMS
-        if " " not in term and "\u200c" not in term
-    }
-    return bool(tokens & single_word_terms) or any(
-        phrase in normalized for phrase in DATA_MODEL_PHRASES
-    )
+    # Keep the ownership decision in the same classifier that builds the
+    # execution plan.  In particular, a visual ``table`` must not grant SQL
+    # ownership while an explicit schema/persistence request must.
+    return requests_data_model_changes(task_text)
 
 
 def _is_data_model_candidate(relative_path: str) -> bool:
@@ -580,7 +624,14 @@ def _expanded_task_tokens(value: str) -> frozenset[str]:
     concepts whose filename equivalents are unambiguous.
     """
 
-    normalized = value.casefold().replace("\u200c", " ")
+    normalized = (
+        value.casefold()
+        .replace("\u200c", " ")
+        .replace("\u200d", " ")
+        .replace("\ufeff", " ")
+        .replace("ي", "ی")
+        .replace("ك", "ک")
+    )
     expanded = set(_tokens(normalized))
     aliases: dict[str, tuple[str, ...]] = {
         "گزارش": ("report", "journey", "completion"),
@@ -600,6 +651,38 @@ def _expanded_task_tokens(value: str) -> frozenset[str]:
         "سرویس": ("service", "client", "api"),
         "صفحه": ("page", "view", "index"),
         "خانه": ("home", "index"),
+        "سایت": ("site", "website", "web", "homepage"),
+        "طراحی": ("design", "redesign", "layout", "ui", "frontend"),
+        "بازطراحی": ("redesign", "design", "layout", "ui"),
+        "ناوبری": ("navigation", "nav", "menu"),
+        "منو": ("menu", "navigation", "nav"),
+        "سربرگ": ("header", "navbar", "navigation"),
+        "پانوشت": ("footer",),
+        "هدر": ("header",),
+        "فوتر": ("footer",),
+        "هیرو": ("hero", "banner"),
+        "بنر": ("banner", "hero"),
+        "گالری": ("gallery", "image", "images"),
+        "فرم": ("form", "input"),
+        "واکنش": ("responsive", "mobile", "tablet"),
+        "موبایل": ("mobile", "responsive"),
+        "تبلت": ("tablet", "responsive"),
+        "دسترسی": ("accessibility", "accessible", "wcag"),
+        "پذیری": ("accessibility", "accessible", "wcag"),
+        "سئو": ("seo", "metadata", "sitemap"),
+        "متادیتا": ("metadata", "meta", "seo"),
+        "داشبورد": ("dashboard", "chart", "graph"),
+        "جدول": ("table", "grid", "data"),
+        "ورود": ("login", "signin", "auth", "authentication"),
+        "ثبت": ("register", "signup", "auth"),
+        "رمز": ("password", "auth", "security"),
+        "پرداخت": ("payment", "checkout", "cart"),
+        "درگاه": ("payment", "checkout", "gateway"),
+        "سبد": ("cart", "shopping", "checkout"),
+        "آپلود": ("upload", "file", "storage"),
+        "بارگذاری": ("upload", "file", "storage"),
+        "امنیت": ("security", "auth", "permission"),
+        "مجوز": ("permission", "authorization", "security"),
     }
     for token in tuple(expanded):
         expanded.update(aliases.get(token, ()))
@@ -617,41 +700,13 @@ def _expanded_task_tokens(value: str) -> frozenset[str]:
 
 
 def _task_requests_homepage(task_text: str) -> bool:
-    normalized = task_text.casefold().replace("\u200c", " ")
-    return any(
-        phrase in normalized
-        for phrase in (
-            "homepage",
-            "home page",
-            "landing page",
-            "صفحه اول",
-            "صفحه اصلی",
-            "صفحه خانه",
-        )
-    )
+    return classify_intent(task_text).homepage
 
 
 def _task_requests_frontend_assets(task_text: str) -> bool:
     """Return whether the ticket explicitly calls for styling/assets too."""
 
-    normalized = task_text.casefold().replace("\u200c", " ")
-    return any(
-        phrase in normalized
-        for phrase in (
-            "css",
-            "style",
-            "stylesheet",
-            "layout",
-            "theme",
-            "asset",
-            "استایل",
-            "چیدمان",
-            "قالب",
-            "تم",
-            "ظاهر",
-            "طراحی",
-        )
-    )
+    return classify_intent(task_text).frontend_assets
 
 
 def _task_requests_test_changes(task_text: str) -> bool:
@@ -708,15 +763,22 @@ def _explicit_task_paths(task_text: str) -> frozenset[str]:
     real implementation surface.
     """
 
-    values: set[str] = set()
-    for match in re.finditer(
-        r"(?<![\w./-])(?:\.?[\w.-]+/)+[\w.-]+\.[A-Za-z0-9_-]+",
-        task_text,
-    ):
-        value = match.group(0).replace("\\", "/").lstrip("./")
-        if value:
-            values.add(value)
-    return frozenset(values)
+    return frozenset(classify_intent(task_text).explicit_files)
+
+
+def _is_explicit_task_path(
+    relative_path: str,
+    explicit_paths: frozenset[str],
+) -> bool:
+    """Match a path that is already normalized to the project root.
+
+    Basename-only references are resolved after candidate discovery, where
+    duplicate names can be detected safely.  Keeping this predicate exact
+    prevents two ``App.tsx`` files from both receiving an ``explicitly named``
+    ownership grant before that disambiguation occurs.
+    """
+
+    return relative_path in explicit_paths
 
 
 def _normalise_relative(path: Path, root: Path) -> str:
@@ -998,7 +1060,7 @@ def _score_candidate(
     reasons: list[str] = []
 
     explicit_paths = _explicit_task_paths(task_text)
-    if relative in explicit_paths:
+    if _is_explicit_task_path(relative, explicit_paths):
         score += 120
         reasons.append("explicitly named in ticket")
 
@@ -1246,7 +1308,38 @@ def _is_writable_candidate_for_role(
     ):
         return False
     if role == "frontend":
-        return suffix in _FRONTEND_SUFFIXES or bool(
+        if suffix in _FRONTEND_SUFFIXES:
+            return True
+        if project.descriptor.project_type in {"php", "laravel"} and (
+            name.endswith(".blade.php")
+            or name in {
+                "index.php",
+                "home.php",
+                "homepage.php",
+                "login.php",
+                "signup.php",
+                "register.php",
+            }
+        ):
+            return True
+        # A PHP presentation partial in an explicitly named ticket is still
+        # a frontend target even when it lives at the project root.
+        profile = classify_intent(task_text)
+        if profile.frontend and (
+            name
+            in {
+                "header.php",
+                "footer.php",
+                "navbar.php",
+                "menu.php",
+                "robots.txt",
+                "sitemap.xml",
+                "manifest.json",
+            }
+            or name.endswith(".view.php")
+        ):
+            return True
+        return bool(
             path_parts
             & {
                 "public",
@@ -1280,6 +1373,149 @@ def _is_writable_candidate_for_role(
     return role == "coordinator"
 
 
+def _explicit_writer_target(
+    *,
+    project: ProjectDetection,
+    role: AgentRole,
+    task_text: str,
+) -> str | None:
+    """Resolve a named file to an exact safe creation/edit target.
+
+    Basename-only references are common in the desktop intake (``App.tsx``
+    and ``FinanceService.php``).  Prefer an existing unique match, then place
+    a missing source file in the detected conventional source directory.  A
+    path containing ``..`` or a sensitive name is never converted into a
+    virtual writer target.
+    """
+
+    profile = classify_intent(task_text)
+    explicit = profile.explicit_files
+    if not explicit or role not in WRITING_ROLES:
+        return None
+
+    root = project.descriptor.root
+    verification_root = project.effective_verification_root
+    verification_prefix = ""
+    if verification_root != root:
+        verification_prefix = verification_root.relative_to(root).as_posix()
+    for raw in explicit:
+        value = raw.replace("\\", "/")
+        while value.startswith("./"):
+            value = value[2:]
+        path = Path(value)
+        if path.is_absolute() or ".." in path.parts or not path.name:
+            continue
+        suffix = path.suffix.casefold()
+        name = path.name.casefold()
+        stem = path.stem.casefold()
+        frontend_file = (
+            suffix in _FRONTEND_SUFFIXES
+            or name.endswith(".blade.php")
+            or stem
+            in {
+                "app",
+                "index",
+                "home",
+                "homepage",
+                "layout",
+                "page",
+                "header",
+                "footer",
+                "navbar",
+                "navigation",
+                "menu",
+                "hero",
+                "gallery",
+                "dashboard",
+                "chart",
+                "graph",
+                "form",
+                "login",
+                "signup",
+                "register",
+                "sitemap",
+                "robots",
+                "manifest",
+            }
+        )
+        backend_file = (
+            suffix in _CODE_SUFFIXES
+            and suffix not in _FRONTEND_SUFFIXES
+        ) or any(
+            hint in stem
+            for hint in (
+                "service",
+                "controller",
+                "repository",
+                "handler",
+                "middleware",
+                "model",
+                "route",
+                "api",
+                "server",
+                "database",
+                "migration",
+                "schema",
+                "auth",
+                "payment",
+            )
+        )
+        if role == "frontend" and not frontend_file:
+            continue
+        if role == "backend" and not backend_file and not profile.backend:
+            continue
+        if _is_sensitive(value):
+            continue
+
+        exact = root / value
+        if exact.is_file() and not exact.is_symlink():
+            return value
+        verification_exact = verification_root / value
+        if (
+            verification_root != root
+            and verification_exact.is_file()
+            and not verification_exact.is_symlink()
+        ):
+            return verification_exact.relative_to(root).as_posix()
+
+        # A basename can be unqualified while the archive keeps the actual
+        # file below public_html/src or resources/views.  Use a unique match;
+        # two matches stay ambiguous and fall through to the framework rule.
+        if "/" not in value:
+            matches = sorted(
+                candidate
+                for candidate in root.rglob(path.name)
+                if candidate.is_file()
+                and not candidate.is_symlink()
+                and not _is_sensitive(candidate.relative_to(root).as_posix())
+            )
+            if len(matches) == 1:
+                return matches[0].relative_to(root).as_posix()
+
+        if "/" in value:
+            if verification_prefix and value != verification_prefix and not value.startswith(
+                f"{verification_prefix}/"
+            ):
+                return f"{verification_prefix}/{value}"
+            return value
+        if (
+            project.descriptor.project_type == "laravel"
+            and role == "frontend"
+            and (verification_root / "resources" / "views").is_dir()
+        ):
+            return (
+                f"{verification_root.relative_to(root).as_posix()}/resources/views/{value}"
+                if verification_root != root
+                else f"resources/views/{value}"
+            )
+        if (verification_root / "src").is_dir() and role in {"frontend", "backend", "coordinator"}:
+            prefix = verification_root.relative_to(root).as_posix() if verification_root != root else ""
+            return f"{prefix + '/' if prefix else ''}src/{value}"
+        prefix = verification_root.relative_to(root).as_posix() if verification_root != root else ""
+        return f"{prefix + '/' if prefix else ''}{value}"
+    return None
+
+
 def _virtual_writer_target(
     *,
     project: ProjectDetection,
@@ -1301,8 +1537,34 @@ def _virtual_writer_target(
 
     root = project.effective_verification_root
     project_type = project.descriptor.project_type
+    explicit_target = _explicit_writer_target(
+        project=project,
+        role=role,
+        task_text=task_text,
+    )
+    if explicit_target is not None:
+        return explicit_target
     if role == "frontend":
-        filename = "index.html"
+        if project_type == "laravel" and (root / "resources" / "views").is_dir():
+            filename = "resources/views/index.blade.php"
+        elif project_type == "node" and (root / "src").is_dir():
+            # Prefer the extension already used by a component tree.  A new
+            # Node site without one gets a conventional React-compatible
+            # source entry instead of an unrelated root HTML file.
+            extension = next(
+                (
+                    candidate.suffix
+                    for candidate in sorted((root / "src").rglob("*"))
+                    if candidate.is_file()
+                    and candidate.suffix.casefold() in {".tsx", ".jsx", ".vue", ".svelte", ".astro"}
+                ),
+                ".jsx",
+            )
+            filename = f"src/App{extension}"
+        elif project_type == "python" and (root / "templates").is_dir():
+            filename = "templates/index.html"
+        else:
+            filename = "index.html"
     elif project_type in {"php", "laravel"}:
         filename = "src/index.php" if (root / "src").is_dir() else "index.php"
     elif project_type == "python":
@@ -1426,8 +1688,54 @@ def _build_pack(
     # Keep exact named files for implementation/quality nodes. Discovery and
     # ambiguous tickets retain the normal scored scope.
     explicit_paths = _explicit_task_paths(task_text)
+    verification_prefix = ""
+    if project.effective_verification_root != project.descriptor.root:
+        verification_prefix = project.effective_verification_root.relative_to(
+            project.descriptor.root
+        ).as_posix()
+    normalized_explicit_paths = frozenset(
+        {
+            *explicit_paths,
+            *(
+                f"{verification_prefix}/{path}"
+                for path in explicit_paths
+                if verification_prefix
+                and not path.startswith(f"{verification_prefix}/")
+            ),
+        }
+    )
+    unqualified_names = {
+        Path(item).name.casefold()
+        for item in explicit_paths
+        if "/" not in item
+    }
+    candidate_by_name: dict[str, list[str]] = {}
+    for candidate in candidates:
+        candidate_by_name.setdefault(candidate.path.name.casefold(), []).append(candidate.relative_path)
+    explicit_candidate_paths = frozenset(
+        candidate.relative_path
+        for candidate in candidates
+        if candidate.relative_path in normalized_explicit_paths
+        or (
+            candidate.path.name.casefold() in unqualified_names
+            and len(candidate_by_name[candidate.path.name.casefold()]) == 1
+        )
+    )
+    if explicit_candidate_paths:
+        scored = [
+            (
+                score + 120,
+                relative,
+                tuple(dict.fromkeys((*reasons, "explicitly named in ticket"))),
+                candidate,
+            )
+            if relative in explicit_candidate_paths
+            else (score, relative, reasons, candidate)
+            for score, relative, reasons, candidate in scored
+        ]
+        scored.sort(key=lambda item: (-item[0], item[1]))
     if explicit_paths and step.suggested_agent in (*WRITING_ROLES, "quality"):
-        exact = [item for item in scored if item[1] in explicit_paths]
+        exact = [item for item in scored if item[1] in explicit_candidate_paths]
         if exact:
             scored = exact
 
@@ -1439,7 +1747,7 @@ def _build_pack(
         scored = [
             item
             for item in scored
-            if item[1] in explicit_paths
+            if item[1] in explicit_candidate_paths
             or _is_writable_candidate_for_role(
                 item[3],
                 role=step.suggested_agent,
@@ -1469,7 +1777,7 @@ def _build_pack(
         and (
             not has_existing_writer_target
             or (
-                project.descriptor.project_type in {"php", "laravel"}
+                project.descriptor.project_type == "php"
                 and (project.effective_verification_root / "index.php").is_file()
             )
         )
@@ -1478,10 +1786,13 @@ def _build_pack(
         virtual_relative is not None
         and not (project.descriptor.root / virtual_relative).is_file()
         and (
-            frontend_homepage_target
+            bool(explicit_paths)
             or (
-                step.suggested_agent != "frontend"
-                and not has_existing_writer_target
+                frontend_homepage_target
+                or (
+                    step.suggested_agent != "frontend"
+                    and not has_existing_writer_target
+                )
             )
         )
     )
@@ -1567,7 +1878,7 @@ def _build_pack(
     # persistence ticket is the narrow exception: its matching database/SQL
     # context is an approved implementation surface, not merely a dependency.
     if brain_index is not None and scored:
-        primary_paths = explicit_paths or frozenset((scored[0][1],))
+        primary_paths = explicit_candidate_paths or frozenset((scored[0][1],))
         related = set(brain_index.related_paths(primary_paths))
         scored = [
             (
@@ -1644,7 +1955,11 @@ def _build_pack(
     )
     max_files = (
         1
-        if homepage_writer
+        if homepage_writer or (
+            bool(explicit_paths)
+            and virtual_target is not None
+            and not explicit_candidate_paths
+        )
         else min(policy.max_files_per_pack, 3)
         if writer_pack
         else policy.max_files_per_pack

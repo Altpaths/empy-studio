@@ -16,47 +16,6 @@ PlanStatus = Literal[
     "approved",
     "cancelled",
 ]
-
-IMPLEMENTATION_TERMS: tuple[str, ...] = (
-    "add",
-    "change",
-    "create",
-    "delete",
-    "fix",
-    "implement",
-    "modify",
-    "refactor",
-    "remove",
-    "update",
-    "write",
-    "link",
-    "button",
-    "page",
-    "افزود",
-    "تغییر",
-    "اصلاح",
-    "حذف",
-    "ساخت",
-    "پیاده",
-    "رفع",
-    "به‌روزرسان",
-    "بروزرسان",
-    "نوشتن",
-    "لینک",
-    "لینک‌دهی",
-    "ارتباط",
-    "همگام",
-    "هماهنگ",
-    "دکمه",
-    "بساز",
-    "ایجاد",
-    "درست کن",
-    "درستش کن",
-    "اضافه",
-    "اضافه کن",
-    "جمع‌آوری",
-    "جمع اوری",
-)
 RiskLevel = Literal[
     "low",
     "medium",
@@ -72,6 +31,780 @@ AgentRole = Literal[
     "release",
 ]
 
+IMPLEMENTATION_TERMS: tuple[str, ...] = (
+    "add",
+    "adjust",
+    "build",
+    "change",
+    "create",
+    "delete",
+    "design",
+    "develop",
+    "enhance",
+    "fix",
+    "generate",
+    "implement",
+    "make",
+    "modify",
+    "polish",
+    "redesign",
+    "refactor",
+    "remove",
+    "rewrite",
+    "save",
+    "ship",
+    "style",
+    "store",
+    "persist",
+    "insert",
+    "upsert",
+    "submit",
+    "send",
+    "upload",
+    "render",
+    "display",
+    "show",
+    "update",
+    "write",
+    "link",
+    "button",
+    "page",
+    "improve",
+    "improvement",
+    "responsive",
+    "mobile",
+    "tablet",
+    "accessibility",
+    "accessible",
+    "wcag",
+    "seo",
+    "metadata",
+    "meta",
+    "navigation",
+    "menu",
+    "header",
+    "footer",
+    "hero",
+    "gallery",
+    "form",
+    "dashboard",
+    "chart",
+    "graph",
+    "table",
+    "login",
+    "logout",
+    "sign in",
+    "sign up",
+    "signup",
+    "register",
+    "registration",
+    "authentication",
+    "authorization",
+    "session",
+    "password",
+    "checkout",
+    "payment",
+    "cart",
+    "upload",
+    "افزود",
+    "افزایش",
+    "توسعه",
+    "بهبود",
+    "بهتر",
+    "زیباتر",
+    "تغییر",
+    "اصلاح",
+    "حذف",
+    "ساخت",
+    "بساز",
+    "طراحی",
+    "بازطراحی",
+    "ارتقا",
+    "پیاده",
+    "رفع",
+    "به‌روزرسان",
+    "بروزرسان",
+    "روزرسانی",
+    "نوشتن",
+    "لینک",
+    "لینک‌دهی",
+    "ارتباط",
+    "همگام",
+    "هماهنگ",
+    "دکمه",
+    "ایجاد",
+    "درست کن",
+    "درستش کن",
+    "اضافه",
+    "اضافه کن",
+    "واکنش‌گرا",
+    "واکنش گرا",
+    "موبایل",
+    "تبلت",
+    "دسترسی‌پذیری",
+    "دسترسی پذیری",
+    "دسترسی‌پذیر",
+    "دسترسی پذیر",
+    "سئو",
+    "متادیتا",
+    "متا تگ",
+    "ناوبری",
+    "منو",
+    "سربرگ",
+    "هدر",
+    "پانوشت",
+    "فوتر",
+    "هیرو",
+    "بنر",
+    "گالری",
+    "فرم",
+    "داشبورد",
+    "نمودار",
+    "گراف",
+    "جدول",
+    "ورود",
+    "خروج",
+    "ثبت‌نام",
+    "ثبت نام",
+    "نام‌نویسی",
+    "رمز عبور",
+    "احراز هویت",
+    "نشست کاربر",
+    "توکن",
+    "پرداخت",
+    "درگاه",
+    "سبد خرید",
+    "آپلود",
+    "جمع‌آوری",
+    "جمع اوری",
+    "نمایش",
+    "نمایش بده",
+    "واکنش‌گرا کن",
+    "واکنش گرا کن",
+)
+
+# Domain nouns are kept in ``IMPLEMENTATION_TERMS`` for backwards-compatible
+# plan metadata, but a noun alone is not an imperative.  Without this split,
+# a read-only request such as ``audit accessibility`` looked like a write.
+IMPLEMENTATION_ACTION_TERMS: tuple[str, ...] = (
+    "add",
+    "adjust",
+    "build",
+    "change",
+    "create",
+    "delete",
+    "design",
+    "develop",
+    "enhance",
+    "fix",
+    "generate",
+    "implement",
+    "make",
+    "modify",
+    "polish",
+    "redesign",
+    "refactor",
+    "remove",
+    "rewrite",
+    "save",
+    "ship",
+    "style",
+    "store",
+    "persist",
+    "insert",
+    "upsert",
+    "submit",
+    "send",
+    "render",
+    "display",
+    "show",
+    "upload",
+    "update",
+    "write",
+    "link",
+    "improve",
+    "add",
+    "افزود",
+    "افزایش",
+    "توسعه",
+    "بهبود",
+    "بهتر",
+    "زیباتر",
+    "تغییر",
+    "اصلاح",
+    "حذف",
+    "ساخت",
+    "بساز",
+    "طراحی",
+    "بازطراحی",
+    "ارتقا",
+    "پیاده",
+    "رفع",
+    "به‌روزرسان",
+    "بروزرسان",
+    "روزرسانی",
+    "نوشتن",
+    "لینک‌دهی",
+    "ارتباط",
+    "همگام",
+    "هماهنگ",
+    "ایجاد",
+    "درست کن",
+    "درستش کن",
+    "اضافه",
+    "اضافه کن",
+    "جمع‌آوری",
+    "جمع اوری",
+    "نمایش",
+    "نمایش بده",
+    "واکنش‌گرا کن",
+    "واکنش گرا کن",
+)
+
+# These vocabularies are deliberately kept in the core planner rather than
+# in the web UI.  Requests can arrive through the CLI, a restored task, or a
+# provider handoff, so routing must have one deterministic implementation.
+# Terms are phrases where a phrase is safer than a broad substring (for
+# example ``accessibility`` must never be interpreted as security ``access``).
+FRONTEND_INTENT_TERMS: tuple[str, ...] = (
+    "ui",
+    "ux",
+    "frontend",
+    "front end",
+    "web design",
+    "website",
+    "web site",
+    "site",
+    "homepage",
+    "home page",
+    "landing",
+    "landing page",
+    "redesign",
+    "design",
+    "layout",
+    "template",
+    "view",
+    "show",
+    "display",
+    "render",
+    "list",
+    "page",
+    "html",
+    "css",
+    "stylesheet",
+    "style",
+    "theme",
+    "font",
+    "typography",
+    "color",
+    "colour",
+    "asset",
+    "assets",
+    "image",
+    "images",
+    "icon",
+    "logo",
+    "navigation",
+    "nav",
+    "menu",
+    "header",
+    "footer",
+    "hero",
+    "banner",
+    "gallery",
+    "form",
+    "contact form",
+    "input",
+    "button",
+    "link",
+    "card",
+    "modal",
+    "responsive",
+    "mobile",
+    "tablet",
+    "desktop",
+    "breakpoint",
+    "interaction",
+    "interactive",
+    "javascript",
+    "js interaction",
+    "local storage",
+    "localstorage",
+    "browser storage",
+    "accessibility",
+    "accessible",
+    "wcag",
+    "a11y",
+    "seo",
+    "meta tags",
+    "metadata",
+    "meta data",
+    "title tag",
+    "canonical",
+    "open graph",
+    "structured data",
+    "schema.org",
+    "sitemap",
+    "robots.txt",
+    "favicon",
+    "manifest.json",
+    "dashboard",
+    "chart",
+    "graph",
+    "plot",
+    "sparkline",
+    "table",
+    "data table",
+    "data grid",
+    "datagrid",
+    "grid",
+    "login",
+    "log in",
+    "sign in",
+    "signup",
+    "sign up",
+    "register",
+    "registration",
+    "password reset",
+    "cart",
+    "shopping cart",
+    "checkout",
+    "payment",
+    "upload",
+    "profile",
+    "user profile",
+    "admin panel",
+    "پنل مدیریت",
+    "drag and drop",
+    "rtl",
+    "right to left",
+    "synchronize",
+    "sync",
+    "رابط کاربری",
+    "رابط",
+    "تجربه کاربری",
+    "تجربهٔ کاربری",
+    "سایت",
+    "طراحی سایت",
+    "صفحه",
+    "صفحه اصلی",
+    "صفحه اول",
+    "صفحه خانه",
+    "صفحه فرود",
+    "لندینگ",
+    "بازطراحی",
+    "چیدمان",
+    "قالب",
+    "استایل",
+    "تم",
+    "نمایش",
+    "نشان بده",
+    "رندر",
+    "لیست",
+    "ظاهر",
+    "فونت",
+    "تایپوگرافی",
+    "رنگ",
+    "تصویر",
+    "تصاویر",
+    "آیکون",
+    "لوگو",
+    "ناوبری",
+    "منوی ناوبری",
+    "منو",
+    "سربرگ",
+    "هدر",
+    "پانوشت",
+    "فوتر",
+    "هیرو",
+    "بنر",
+    "گالری",
+    "فرم",
+    "فرم تماس",
+    "ورودی",
+    "دکمه",
+    "لینک",
+    "کارت",
+    "پنجره",
+    "واکنش‌گرا",
+    "واکنش گرا",
+    "موبایل",
+    "تبلت",
+    "رومیزی",
+    "دسترسی‌پذیری",
+    "دسترسی پذیری",
+    "دسترسی‌پذیر",
+    "دسترسی پذیر",
+    "استاندارد wcag",
+    "سئو",
+    "متادیتا",
+    "متا تگ",
+    "تگ عنوان",
+    "کنونیکال",
+    "داده ساختاریافته",
+    "نقشه سایت",
+    "نقشهٔ سایت",
+    "داشبورد",
+    "نمودار",
+    "گراف",
+    "رسم",
+    "جدول",
+    "جدول نمایش",
+    "شبکه داده",
+    "ورود",
+    "وارد شدن",
+    "ثبت‌نام",
+    "ثبت نام",
+    "نام‌نویسی",
+    "سبد خرید",
+    "پرداخت",
+    "درگاه پرداخت",
+    "آپلود",
+    "بارگذاری فایل",
+    "راست به چپ",
+    "تعامل",
+    "تعاملی",
+    "جاوااسکریپت",
+    "تعامل جاوااسکریپت",
+    "ذخیره‌سازی محلی",
+    "ذخیره سازی محلی",
+    "ذخیره مرورگر",
+    "دسترسی‌پذیری",
+    "دسترسی پذیری",
+    "فاوآیکون",
+    "پروفایل کاربر",
+    "پنل مدیریت",
+    "همگام",
+    "همگام‌سازی",
+    "همگام سازی",
+    "هماهنگ",
+    "ارتباط",
+    "ارتباط‌دهی",
+    "ارتباط دهی",
+)
+
+BACKEND_INTENT_TERMS: tuple[str, ...] = (
+    "backend",
+    "back end",
+    "server",
+    "server-side",
+    "api",
+    "endpoint",
+    "route",
+    "routing",
+    "controller",
+    "service",
+    "repository",
+    "handler",
+    "model",
+    "database",
+    "db",
+    "schema",
+    "migration",
+    "migrations",
+    "sql",
+    "orm",
+    "persist",
+    "persistence",
+    "insert",
+    "upsert",
+    "webhook",
+    "queue",
+    "cron",
+    "email delivery",
+    "send email",
+    "mail",
+    "integration",
+    "fetch from api",
+    "load from server",
+    "realtime",
+    "real-time",
+    "live data",
+    "data source",
+    "file storage",
+    "object storage",
+    "local storage api",
+    "upload endpoint",
+    "upload handler",
+    "checkout",
+    "payment",
+    "cart total",
+    "price calculation",
+    "database table",
+    "data model",
+    "data schema",
+    "ای پی آی",
+    "ای‌پی‌آی",
+    "سمت سرور",
+    "سرور",
+    "بک‌اند",
+    "بک اند",
+    "رابط برنامه‌نویسی",
+    "رابط برنامه نویسی",
+    "نقطه پایانی",
+    "مسیر سمت سرور",
+    "روت",
+    "کنترلر",
+    "سرویس",
+    "ریپازیتوری",
+    "هندلر",
+    "مدل داده",
+    "پایگاه داده",
+    "دیتابیس",
+    "طرح پایگاه داده",
+    "اسکیما",
+    "مهاجرت",
+    "ذخیره",
+    "ذخیره‌سازی",
+    "ذخیره سازی",
+    "ثبت اطلاعات",
+    "رکورد",
+    "وب‌هوک",
+    "صف پردازش",
+    "ایمیل",
+    "ارسال ایمیل",
+    "اتصال به api",
+    "دریافت از api",
+    "دریافت از سرور",
+    "لحظه‌ای",
+    "لحظه ای",
+    "داده زنده",
+    "منبع داده",
+    "ذخیره فایل",
+    "آپلود به سرور",
+    "محاسبه مبلغ",
+    "محاسبه قیمت",
+    "جدول پایگاه داده",
+    "جدول دیتابیس",
+    "ذخیره‌سازی فایل",
+    "ذخیره سازی فایل",
+    "آپلود فایل",
+    "آپلود تصویر",
+    "ارسال فرم",
+    "ارسال ایمیل",
+)
+
+SECURITY_INTENT_TERMS: tuple[str, ...] = (
+    "security",
+    "secure",
+    "vulnerability",
+    "authentication",
+    "authorization",
+    "auth",
+    "login",
+    "log in",
+    "logout",
+    "log out",
+    "sign in",
+    "sign up",
+    "signup",
+    "register",
+    "registration",
+    "password",
+    "password reset",
+    "session",
+    "token",
+    "oauth",
+    "oidc",
+    "sso",
+    "csrf",
+    "xss",
+    "csp",
+    "encryption",
+    "secret",
+    "permission",
+    "permissions",
+    "role based access",
+    "rbac",
+    "pci",
+    "card security",
+    "input sanitization",
+    "sanitize input",
+    "security validation",
+    "csrf protection",
+    "xss protection",
+    "امنیت",
+    "ایمن",
+    "آسیب‌پذیری",
+    "آسیب پذیری",
+    "احراز هویت",
+    "اعتبارسنجی هویت",
+    "مجوز",
+    "مجوزها",
+    "سطح دسترسی",
+    "ورود امن",
+    "ورود کاربران",
+    "ثبت‌نام کاربران",
+    "ثبت نام کاربران",
+    "رمز عبور",
+    "بازیابی رمز",
+    "نشست",
+    "نشست کاربر",
+    "توکن",
+    "رمزنگاری",
+    "محرمانه",
+    "csrf",
+    "xss",
+    "پرداخت امن",
+    "امنیت پرداخت",
+    "کارت بانکی",
+    "پاکسازی ورودی",
+    "اعتبارسنجی امنیتی",
+    "محافظت csrf",
+    "محافظت xss",
+)
+
+ACCESSIBILITY_INTENT_TERMS: tuple[str, ...] = (
+    "accessibility",
+    "accessible",
+    "wcag",
+    "a11y",
+    "aria",
+    "screen reader",
+    "keyboard navigation",
+    "دسترسی‌پذیری",
+    "دسترسی پذیری",
+    "دسترسی‌پذیر",
+    "دسترسی پذیر",
+    "استاندارد wcag",
+    "صفحه‌خوان",
+    "صفحه خوان",
+    "ناوبری با صفحه‌کلید",
+    "ناوبری با صفحه کلید",
+)
+
+RELEASE_INTENT_TERMS: tuple[str, ...] = (
+    "release",
+    "deploy",
+    "deployment",
+    "publish",
+    "production build",
+    "directadmin",
+    "direct admin",
+    "استقرار",
+    "انتشار",
+    "نسخه نهایی",
+    "نسخهٔ نهایی",
+    "تحویل",
+)
+
+_FILE_INTENT_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".php",
+        ".html",
+        ".htm",
+        ".css",
+        ".scss",
+        ".sass",
+        ".less",
+        ".js",
+        ".mjs",
+        ".cjs",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".vue",
+        ".svelte",
+        ".astro",
+        ".py",
+        ".go",
+        ".rs",
+        ".java",
+        ".kt",
+        ".rb",
+        ".sql",
+        ".json",
+        ".toml",
+        ".yaml",
+        ".yml",
+        ".md",
+        ".mdx",
+        ".txt",
+        ".xml",
+    }
+)
+
+_FRONTEND_FILE_STEMS: frozenset[str] = frozenset(
+    {
+        "app",
+        "index",
+        "home",
+        "homepage",
+        "landing",
+        "layout",
+        "page",
+        "header",
+        "footer",
+        "navbar",
+        "navigation",
+        "menu",
+        "hero",
+        "gallery",
+        "dashboard",
+        "chart",
+        "graph",
+        "form",
+        "login",
+        "signup",
+        "register",
+    }
+)
+
+_BACKEND_FILE_HINTS: tuple[str, ...] = (
+    "service",
+    "controller",
+    "repository",
+    "handler",
+    "middleware",
+    "model",
+    "route",
+    "api",
+    "server",
+    "database",
+    "migration",
+    "schema",
+    "auth",
+    "payment",
+)
+
+
+@dataclass(frozen=True)
+class IntentProfile:
+    """Deterministic domain signals extracted from a bilingual task.
+
+    The profile is intentionally a small, serializable decision record.  It
+    lets planner and context selection use the same interpretation without
+    asking a provider to rediscover whether a ticket is UI, server, or
+    security work.  ``domains`` contains only implementation-capable roles;
+    discovery and quality are added by the plan policy.
+    """
+
+    implementation: bool
+    domains: tuple[AgentRole, ...]
+    frontend: bool
+    backend: bool
+    security: bool
+    release: bool
+    homepage: bool
+    accessibility: bool
+    frontend_assets: bool
+    data_model: bool
+    explicit_files: tuple[str, ...]
+
+    def validate(self) -> None:
+        known = {"frontend", "backend", "security", "release"}
+        if any(domain not in known for domain in self.domains):
+            raise ValueError("intent profile contains an unsupported domain")
+        if tuple(dict.fromkeys(self.domains)) != self.domains:
+            raise ValueError("intent profile domains must be unique")
+        if self.frontend != ("frontend" in self.domains):
+            raise ValueError("frontend intent flag is inconsistent")
+        if self.backend != ("backend" in self.domains):
+            raise ValueError("backend intent flag is inconsistent")
+        if self.security != ("security" in self.domains):
+            raise ValueError("security intent flag is inconsistent")
+        if self.release != ("release" in self.domains):
+            raise ValueError("release intent flag is inconsistent")
 
 @dataclass(frozen=True)
 class PlanStep:
@@ -221,7 +954,8 @@ def _likely_paths(
             task.objective,
             *task.requirements,
         )
-    ).lower()
+    )
+    intent = classify_intent(text)
     project_type = (
         project.descriptor.project_type
     )
@@ -229,26 +963,7 @@ def _likely_paths(
     paths: list[str] = []
 
     if project_type == "laravel":
-        if any(
-            word in text
-            for word in (
-                "ui",
-                "homepage",
-                "page",
-                "font",
-                "image",
-                "design",
-                "layout",
-                "rtl",
-                "chart",
-                "graph",
-                "plot",
-                "dashboard",
-                "asset",
-                "assets",
-                "portfolio",
-                )
-        ):
+        if intent.frontend:
             paths.extend(
                 (
                     "resources/views/",
@@ -257,17 +972,7 @@ def _likely_paths(
                     "public/",
                 )
             )
-        if any(
-            word in text
-            for word in (
-                "route",
-                "controller",
-                "api",
-                "backend",
-                "store",
-                "database",
-            )
-        ):
+        if intent.backend:
             paths.extend(
                 (
                     "routes/",
@@ -292,32 +997,7 @@ def _likely_paths(
         for directory in ("src", "app", "public", "routes", "tests", "assets"):
             if (verification_root / directory).is_dir():
                 paths.append(f"{directory}/")
-        if any(
-            word in text
-            for word in (
-                "ui",
-                "homepage",
-                "page",
-                "link",
-                "button",
-                "layout",
-                "html",
-                "صفحه",
-                "ایندکس",
-                "لینک",
-                "دکمه",
-                "رابط",
-                "ظاهر",
-                "طراحی",
-                "همگام",
-                "هماهنگ",
-                "خانه",
-                "نمودار",
-                "دارایی",
-                "سبد",
-                "داشبورد",
-            )
-        ):
+        if intent.frontend:
             # Kept as an explicit branch for readability: the application
             # root was already added above and is deduplicated below.
             paths.append("./")
@@ -346,16 +1026,35 @@ def _risk(
             task.objective,
             *task.requirements,
         )
-    ).lower()
+    )
 
     high_terms = (
         "database migration",
         "authentication",
+        "authorization",
+        "login",
+        "sign in",
+        "sign up",
+        "password",
+        "session",
+        "oauth",
         "payment",
+        "checkout",
         "security",
+        "vulnerability",
         "delete",
         "production",
         "deployment",
+        "احراز هویت",
+        "ورود",
+        "ثبت نام",
+        "ثبت‌نام",
+        "رمز عبور",
+        "پرداخت",
+        "درگاه",
+        "امنیت",
+        "آسیب پذیری",
+        "آسیب‌پذیری",
     )
     medium_terms = (
         "backend",
@@ -364,6 +1063,20 @@ def _risk(
         "controller",
         "integration",
         "refactor",
+        "upload",
+        "storage",
+        "webhook",
+        "realtime",
+        "real-time",
+        "database",
+        "schema",
+        "migration",
+        "بک‌اند",
+        "ای پی آی",
+        "آپلود",
+        "ذخیره",
+        "لحظه‌ای",
+        "لحظه ای",
     )
 
     if _contains_any_term(text, high_terms):
@@ -383,10 +1096,16 @@ def _normalise_intent_text(text: str) -> str:
     value = (
         text.casefold()
         .replace("\u200c", " ")
+        .replace("\u200d", " ")
+        .replace("\ufeff", " ")
         .replace("ي", "ی")
         .replace("ك", "ک")
         .replace("لینگ", "لینک")
     )
+    # Arabic diacritics otherwise make an otherwise exact Persian phrase miss
+    # its classification.  Keep punctuation because the word-boundary
+    # matcher below deliberately treats it as a separator.
+    value = re.sub(r"[\u064b-\u065f\u0670]", "", value)
     return re.sub(r"\s+", " ", value).strip()
 
 
@@ -404,26 +1123,761 @@ def _contains_any_term(text: str, terms: tuple[str, ...]) -> bool:
     )
 
 
+def _file_tokens(text: str) -> tuple[str, ...]:
+    """Extract safe, project-relative-looking file tokens from task text.
+
+    A ticket often names ``FinanceService.php`` or ``App.tsx`` without a
+    directory.  The old path-only expression silently discarded those names,
+    so the context selector could pass an unrelated file to the writer.  The
+    extension allow-list prevents decimal versions and ordinary prose from
+    becoming edit scope.
+    """
+
+    values: list[str] = []
+    pattern = re.compile(
+        r"(?<![\w./:-])(?:\.?[\w.-]+[/\\])*[\w.-]+\.[A-Za-z0-9_-]+",
+        flags=re.IGNORECASE,
+    )
+    for match in pattern.finditer(text):
+        value = match.group(0).rstrip(".,;:!?)]}").replace("\\", "/")
+        while value.startswith("./"):
+            value = value[2:]
+        suffix = Path(value).suffix.casefold()
+        if suffix in _FILE_INTENT_EXTENSIONS:
+            values.append(value)
+    return tuple(dict.fromkeys(values))
+
+
+def _file_role_signals(text: str) -> tuple[bool, bool]:
+    """Infer a narrow role from explicitly named source files.
+
+    File names supplement natural language; they never override an explicit
+    domain such as ``database`` or ``security``.  The basename check is
+    intentionally limited to common UI and server conventions so a generic
+    ``worker.py`` does not become frontend work merely because it is a file.
+    """
+
+    frontend = False
+    backend = False
+    for value in _file_tokens(text):
+        path = Path(value)
+        name = path.name.casefold()
+        suffix = path.suffix.casefold()
+        stem = path.stem.casefold()
+        path_parts = {part.casefold() for part in path.parts[:-1]}
+        if name.endswith(".blade.php"):
+            frontend = True
+        if suffix in {
+            ".css",
+            ".scss",
+            ".sass",
+            ".less",
+            ".html",
+            ".htm",
+            ".svg",
+            ".tsx",
+            ".jsx",
+            ".vue",
+            ".svelte",
+            ".astro",
+        }:
+            frontend = True
+        if suffix in {".js", ".mjs", ".cjs", ".ts"} and path_parts & {
+            "asset",
+            "assets",
+            "component",
+            "components",
+            "css",
+            "frontend",
+            "page",
+            "pages",
+            "public",
+            "script",
+            "scripts",
+            "style",
+            "styles",
+            "template",
+            "templates",
+            "view",
+            "views",
+        }:
+            frontend = True
+        if stem in _FRONTEND_FILE_STEMS or stem.removesuffix(".blade") in _FRONTEND_FILE_STEMS:
+            frontend = True
+        if any(hint in stem for hint in _BACKEND_FILE_HINTS):
+            backend = True
+        if suffix in {".sql"} or name in {"composer.json", "package.json", "pyproject.toml"}:
+            backend = True
+        if any(part.casefold() in {"api", "server", "backend", "controllers", "services", "models", "database", "migrations"}
+               for part in path.parts[:-1]):
+            backend = True
+        # A plain PHP index is the presentation entry point in a typical
+        # imported DirectAdmin site.  Server terms elsewhere in the ticket
+        # can still add backend alongside it.
+        if suffix == ".php" and stem in {"index", "home", "homepage", "login", "signup", "register"}:
+            frontend = True
+    return frontend, backend
+
+
+def _requests_data_model_changes(text: str) -> bool:
+    """Return true only for an explicit persistence/schema change.
+
+    ``table`` and ``record`` are common presentation words.  Treating either
+    as a database request gave a UI-only table ownership of SQL migrations.
+    Schema terms or a persistence verb plus a data subject are required.
+    """
+
+    normalized = _normalise_intent_text(text)
+    schema_terms = (
+        "database",
+        "db",
+        "schema",
+        "migration",
+        "migrations",
+        "sql",
+        "orm",
+        "data model",
+        "data schema",
+        "database table",
+        "table schema",
+        "پایگاه داده",
+        "دیتابیس",
+        "اسکیما",
+        "طرح پایگاه داده",
+        "جدول پایگاه داده",
+        "جدول دیتابیس",
+        "مدل داده",
+    )
+    if _contains_any_term(normalized, schema_terms):
+        return True
+
+    table_operation = (
+        "create table",
+        "alter table",
+        "drop table",
+        "delete table",
+        "add table schema",
+        "ایجاد جدول پایگاه",
+        "ساخت جدول پایگاه",
+        "تغییر جدول پایگاه",
+        "حذف جدول پایگاه",
+    )
+    if _contains_any_term(normalized, table_operation):
+        return True
+
+    persistence_actions = (
+        "persist",
+        "persistence",
+        "save",
+        "store",
+        "insert",
+        "upsert",
+        "persisted",
+        "ذخیره",
+        "ذخیره سازی",
+        "ذخیره‌سازی",
+        "ثبت اطلاعات",
+        "ثبت رکورد",
+        "ثبت سوابق",
+    )
+    data_subjects = (
+        "data",
+        "record",
+        "records",
+        "history",
+        "historical",
+        "entity",
+        "entities",
+        "information",
+        "سوابق",
+        "تاریخچه",
+        "رکورد",
+        "اطلاعات",
+        "موجودیت",
+    )
+    persisted = _contains_any_term(normalized, persistence_actions) and _contains_any_term(
+        normalized,
+        data_subjects,
+    )
+    # ``record`` is both a persistence verb and the noun used by a data-grid
+    # ticket.  Only treat it as a write when presentation language does not
+    # clearly say that records are being displayed.
+    record_action = _contains_any_term(normalized, ("record", "ثبت")) and not _contains_any_term(
+        normalized,
+        (
+            "show",
+            "display",
+            "render",
+            "list",
+            "table",
+            "grid",
+            "view",
+            "نمایش",
+            "لیست",
+            "جدول",
+            "شبکه",
+        ),
+    )
+    return persisted or (record_action and _contains_any_term(normalized, data_subjects))
+
+
+def requests_data_model_changes(text: str) -> bool:
+    """Public stable wrapper used by context selection and integrations."""
+
+    return _requests_data_model_changes(text)
+
+
+_LOCAL_STORAGE_TERMS: tuple[str, ...] = (
+    "local storage",
+    "localstorage",
+    "browser storage",
+    "ذخیره‌سازی محلی",
+    "ذخیره سازی محلی",
+    "ذخیره مرورگر",
+)
+_SERVER_DATA_BOUNDARY_TERMS: tuple[str, ...] = (
+    "api",
+    "endpoint",
+    "server",
+    "backend",
+    "route",
+    "controller",
+    "service",
+    "database",
+    "db",
+    "schema",
+    "migration",
+    "webhook",
+    "upload endpoint",
+    "دریافت از api",
+    "دریافت از سرور",
+    "سمت سرور",
+    "پایگاه داده",
+)
+
+
+def _is_local_storage_only(text: str) -> bool:
+    return _contains_any_term(text, _LOCAL_STORAGE_TERMS) and not _contains_any_term(
+        text,
+        _SERVER_DATA_BOUNDARY_TERMS,
+    )
+
+
+def _has_dynamic_data_signal(text: str) -> bool:
+    """Detect data plumbing that makes a visual request multi-domain."""
+
+    if _is_local_storage_only(text):
+        return False
+
+    return _contains_any_term(
+        text,
+        (
+            "api",
+            "endpoint",
+            "server",
+            "backend",
+            "route",
+            "controller",
+            "service",
+            "database",
+            "db",
+            "schema",
+            "migration",
+            "persist",
+            "save",
+            "store",
+            "insert",
+            "storage",
+            "file storage",
+            "webhook",
+            "fetch",
+            "load from server",
+            "data source",
+            "live",
+            "realtime",
+            "real-time",
+            "real time",
+            "دریافت از api",
+            "دریافت از سرور",
+            "سمت سرور",
+            "پایگاه داده",
+            "ذخیره",
+            "ثبت اطلاعات",
+            "ذخیره‌سازی",
+            "ذخیره سازی",
+            "لحظه‌ای",
+            "لحظه ای",
+            "داده زنده",
+            "منبع داده",
+        ),
+    )
+
+
+def classify_intent(text: str) -> IntentProfile:
+    """Classify all implementation domains in one bilingual pass.
+
+    The classifier is intentionally rule based and deterministic.  It is a
+    routing contract, not an attempt to infer product intent from a provider:
+    a visual request can receive frontend plus backend/security when its
+    behavior crosses those boundaries, while a purely visual table or
+    accessibility request remains frontend-only.
+    """
+
+    normalized = _normalise_intent_text(text)
+    implementation = _contains_any_term(normalized, IMPLEMENTATION_ACTION_TERMS)
+    homepage = _contains_any_term(
+        normalized,
+        (
+            "homepage",
+            "home page",
+            "landing page",
+            "landing",
+            "index page",
+            "home screen",
+            "ایندکس",
+            "صفحه اول",
+            "صفحه اصلی",
+            "صفحه خانه",
+            "صفحه فرود",
+            "لندینگ",
+        ),
+    )
+    accessibility = _contains_any_term(normalized, ACCESSIBILITY_INTENT_TERMS)
+    data_model = _requests_data_model_changes(normalized)
+    file_frontend, file_backend = _file_role_signals(normalized)
+
+    # ``table`` is a UI signal by default.  A schema/persistence signal turns
+    # it into backend work only when no presentation language accompanies it.
+    table_ui = _contains_any_term(
+        normalized,
+        (
+            "table",
+            "data table",
+            "data grid",
+            "datagrid",
+            "grid",
+            "جدول",
+            "شبکه داده",
+        ),
+    )
+    table_presentation = _contains_any_term(
+        normalized,
+        (
+            "show",
+            "display",
+            "render",
+            "list",
+            "dashboard",
+            "ui",
+            "view",
+            "screen",
+            "نمایش",
+            "لیست",
+            "داشبورد",
+            "رابط",
+            "صفحه",
+        ),
+    )
+    presentation_action_terms = (
+        "show",
+        "display",
+        "render",
+        "list",
+        "نمایش",
+        "نشان بده",
+        "رندر",
+        "لیست",
+    )
+    frontend_core = _contains_any_term(normalized, FRONTEND_INTENT_TERMS)
+    if _contains_any_term(normalized, presentation_action_terms):
+        # A backend report can say that a service must ``display`` real data;
+        # that verb alone does not create a UI writer.  Require a concrete
+        # presentation subject for action-only display language, while a
+        # chart/table/form/image request remains frontend work.
+        presentation_context = _contains_any_term(
+            normalized,
+            (
+                "ui",
+                "ux",
+                "component",
+                "page",
+                "screen",
+                "table",
+                "data table",
+                "grid",
+                "record",
+                "records",
+                "chart",
+                "graph",
+                "dashboard",
+                "form",
+                "image",
+                "images",
+                "gallery",
+                "profile",
+                "accessibility",
+                "wcag",
+                "جدول",
+                "سابقه",
+                "سوابق",
+                "رکورد",
+                "نمودار",
+                "گراف",
+                "داشبورد",
+                "فرم",
+                "تصویر",
+                "تصاویر",
+                "گالری",
+                "پروفایل",
+                "دسترسی‌پذیری",
+                "دسترسی پذیری",
+            ),
+        )
+        non_action_frontend_terms = tuple(
+            term
+            for term in FRONTEND_INTENT_TERMS
+            if term not in presentation_action_terms
+        )
+        frontend_core = presentation_context or _contains_any_term(
+            normalized,
+            non_action_frontend_terms,
+        )
+    frontend = frontend_core or file_frontend
+    if table_ui and data_model and not table_presentation:
+        # Do not turn "create database table" into an accidental UI task.
+        frontend = frontend and not (
+            _contains_any_term(normalized, ("table", "جدول"))
+            and not _contains_any_term(
+                normalized,
+                tuple(
+                    term
+                    for term in FRONTEND_INTENT_TERMS
+                    if term
+                    not in {
+                        "table",
+                        "data table",
+                        "data grid",
+                        "datagrid",
+                        "grid",
+                        "جدول",
+                        "جدول نمایش",
+                        "شبکه داده",
+                    }
+                ),
+            )
+        )
+
+    form_signal = _contains_any_term(
+        normalized,
+        ("form", "contact form", "فرم", "فرم تماس"),
+    )
+    auth_ui_signal = _contains_any_term(
+        normalized,
+        (
+            "login",
+            "log in",
+            "sign in",
+            "logout",
+            "log out",
+            "sign up",
+            "signup",
+            "register",
+            "registration",
+            "password reset",
+            "ورود",
+            "وارد شدن",
+            "ثبت‌نام",
+            "ثبت نام",
+            "نام‌نویسی",
+            "بازیابی رمز",
+        ),
+    )
+    auth_signal = _contains_any_term(normalized, SECURITY_INTENT_TERMS)
+    local_storage_only = _is_local_storage_only(normalized)
+    payment_signal = _contains_any_term(
+        normalized,
+        (
+            "checkout",
+            "payment",
+            "pay",
+            "shopping cart checkout",
+            "پرداخت",
+            "درگاه",
+            "سبد خرید و پرداخت",
+            "خرید",
+            "کارت بانکی",
+        ),
+    )
+    cart_signal = _contains_any_term(
+        normalized,
+        ("cart", "shopping cart", "سبد خرید"),
+    )
+    upload_signal = _contains_any_term(
+        normalized,
+        (
+            "upload",
+            "file upload",
+            "image upload",
+            "آپلود",
+            "بارگذاری فایل",
+            "ارسال فایل",
+        ),
+    )
+    seo_signal = _contains_any_term(
+        normalized,
+        (
+            "seo",
+            "metadata",
+            "meta tags",
+            "canonical",
+            "structured data",
+            "sitemap",
+            "robots.txt",
+            "سئو",
+            "متادیتا",
+            "متا تگ",
+            "کنونیکال",
+            "داده ساختاریافته",
+            "نقشه سایت",
+            "نقشهٔ سایت",
+        ),
+    )
+
+    # Explicit security terms never include the generic Persian word
+    # ``دسترسی``.  This is what prevents ``دسترسی‌پذیری`` from becoming a
+    # security task while still routing ``امنیت و مجوز`` correctly.
+    security = auth_signal
+    backend = _contains_any_term(normalized, BACKEND_INTENT_TERMS) or file_backend
+    if (
+        _contains_any_term(normalized, ("save", "store", "persist", "persistence", "ذخیره"))
+        and not local_storage_only
+        and not _contains_any_term(
+            normalized,
+            (
+                "button",
+                "save button",
+                "store button",
+                "دکمه ذخیره",
+                "دکمه ثبت",
+            ),
+        )
+    ):
+        backend = True
+    if _contains_any_term(normalized, ("storage", "ذخیره‌سازی", "ذخیره سازی")) and not _contains_any_term(
+        normalized,
+        ("local storage", "localstorage", "browser storage", "ذخیره‌سازی محلی", "ذخیره سازی محلی"),
+    ):
+        backend = True
+    if local_storage_only:
+        # ``ذخیره‌سازی`` is a backend noun by itself, but browser/local
+        # storage is a client-side concern until a server/API boundary is
+        # explicitly requested.
+        backend = False
+
+    if form_signal:
+        frontend = True
+        if (_has_dynamic_data_signal(normalized) and not local_storage_only) or _contains_any_term(
+            normalized,
+            (
+                "submit",
+                "send",
+                "email",
+                "mail",
+                "store response",
+                "save response",
+                "ارسال",
+                "فرستادن",
+                "ایمیل",
+                "ذخیره پاسخ",
+                "ثبت پاسخ",
+            ),
+        ):
+            backend = True
+
+    if auth_signal:
+        backend = True
+        security = True
+    if auth_ui_signal:
+        frontend = True
+        backend = True
+        security = True
+
+    if payment_signal:
+        frontend = True
+        backend = True
+        security = True
+    elif cart_signal:
+        frontend = True
+
+    if upload_signal:
+        frontend = True
+        # A bare upload needs both an input and a receiving path.  A clearly
+        # visual-only upload button/drag target stays frontend-only.
+        if not _contains_any_term(
+            normalized,
+            ("upload button", "upload ui", "drag and drop", "دکمه آپلود", "رابط آپلود"),
+        ) or _has_dynamic_data_signal(normalized):
+            backend = True
+
+    if seo_signal:
+        frontend = True
+        if _contains_any_term(
+            normalized,
+            (
+                "dynamic sitemap",
+                "generate sitemap",
+                "sitemap route",
+                "sitemap api",
+                "server-side seo",
+                "route",
+                "api",
+                "server",
+                "database",
+                "نقشه سایت پویا",
+                "تولید نقشه سایت",
+                "مسیر نقشه سایت",
+            ),
+        ):
+            backend = True
+
+    # A chart/dashboard/table becomes backend work only when a live or
+    # explicit data source is requested.  Static visualizations remain cheap
+    # frontend tasks.
+    if _contains_any_term(
+        normalized,
+        ("chart", "graph", "plot", "dashboard", "نمودار", "گراف", "داشبورد"),
+    ) and _has_dynamic_data_signal(normalized):
+        frontend = True
+        backend = True
+
+    if data_model:
+        backend = True
+        if table_presentation or _contains_any_term(
+            normalized,
+            ("dashboard", "chart", "graph", "form", "صفحه", "داشبورد", "نمودار", "فرم"),
+        ):
+            frontend = True
+
+    release = _contains_any_term(normalized, RELEASE_INTENT_TERMS)
+    # File names can identify a frontend target even when the user says only
+    # "update App.tsx".  Conversely a service/controller name must not be
+    # routed to the frontend because the suffix happens to be PHP/JS.
+    if file_backend and not file_frontend:
+        backend = True
+
+    domains: list[AgentRole] = []
+    for role, selected in (
+        ("frontend", frontend),
+        ("backend", backend),
+        ("security", security),
+        ("release", release),
+    ):
+        if selected:
+            domains.append(role)  # type: ignore[arg-type]
+    profile = IntentProfile(
+        implementation=implementation,
+        domains=tuple(domains),
+        frontend=frontend,
+        backend=backend,
+        security=security,
+        release=release,
+        homepage=homepage,
+        accessibility=accessibility,
+        frontend_assets=(
+            _contains_any_term(
+                normalized,
+                (
+                    "css",
+                    "stylesheet",
+                    "style",
+                    "layout",
+                    "template",
+                    "theme",
+                    "font",
+                    "typography",
+                    "color",
+                    "colour",
+                    "asset",
+                    "assets",
+                    "image",
+                    "images",
+                    "icon",
+                    "logo",
+                    "navigation",
+                    "nav",
+                    "menu",
+                    "header",
+                    "footer",
+                    "hero",
+                    "banner",
+                    "gallery",
+                    "form",
+                    "responsive",
+                    "mobile",
+                    "tablet",
+                    "accessibility",
+                    "accessible",
+                    "wcag",
+                    "a11y",
+                    "seo",
+                    "metadata",
+                    "meta tags",
+                    "sitemap",
+                    "rtl",
+                    "رابط کاربری",
+                    "طراحی",
+                    "چیدمان",
+                    "قالب",
+                    "استایل",
+                    "تم",
+                    "فونت",
+                    "تایپوگرافی",
+                    "رنگ",
+                    "تصویر",
+                    "تصاویر",
+                    "آیکون",
+                    "لوگو",
+                    "ناوبری",
+                    "منو",
+                    "سربرگ",
+                    "هدر",
+                    "پانوشت",
+                    "فوتر",
+                    "هیرو",
+                    "بنر",
+                    "گالری",
+                    "فرم",
+                    "واکنش‌گرا",
+                    "واکنش گرا",
+                    "دسترسی‌پذیری",
+                    "دسترسی پذیری",
+                    "سئو",
+                    "متادیتا",
+                    "متا تگ",
+                    "نقشه سایت",
+                    "نقشهٔ سایت",
+                    "راست به چپ",
+                ),
+            )
+            or file_frontend
+        ),
+        data_model=data_model,
+        explicit_files=_file_tokens(text),
+    )
+    profile.validate()
+    return profile
+
+
 def requests_implementation(text: str) -> bool:
     """Return whether bilingual ticket text clearly requests a real change."""
 
-    return _contains_any_term(text, IMPLEMENTATION_TERMS)
+    return _contains_any_term(text, IMPLEMENTATION_ACTION_TERMS)
 
 
 def _has_explicit_file_scope(text: str) -> bool:
     """Detect a ticket that already names concrete files to change."""
 
-    return bool(
-        re.search(
-            r"(?:^|[\s(])(?:[\w.-]+/)+[\w./-]+\.[A-Za-z0-9_-]+\b",
-            text,
-        )
-        or re.search(
-            r"\b(?:readme|package|composer|pyproject|cargo|go)\.[A-Za-z0-9_-]+\b",
-            text,
-            flags=re.IGNORECASE,
-        )
-    )
+    return bool(_file_tokens(text))
 
 
 def _should_skip_discovery(
@@ -481,95 +1935,74 @@ def _roles(
             task.objective,
             *task.requirements,
         )
-    ).lower()
+    )
 
     roles: list[AgentRole] = ["discovery"] if include_discovery else []
 
-    if _contains_any_term(
-        text,
-        (
-            "ui",
-            "page",
-            "homepage",
-            "html",
-            "htm",
-            "font",
-            "image",
-            "layout",
-            "css",
-            "frontend",
-            "صفحه",
-            "ایندکس",
-            "لینک",
-            "دکمه",
-            "رابط",
-            "ظاهر",
-            "طراحی",
-            "سربرگ",
-            "رنگ",
-            "همگام",
-            "هماهنگ",
-            "سایت",
-            "خانه",
-            "نمودار",
-            "دارایی",
-            "سبد",
-            "داشبورد",
-        )
-    ):
-        roles.append("frontend")
+    # Audit tasks are explicitly read-only by contract.  Even if an audit
+    # brief quotes an imperative such as "fix accessibility" as a
+    # recommendation, it must never turn into a writer node.
+    if task.kind == "audit":
+        if include_quality:
+            roles.append("quality")
+        return tuple(dict.fromkeys(roles))
 
-    if _contains_any_term(
+    profile = classify_intent(text)
+
+    # Market/data words need a server role only when the request actually
+    # asks for a data source, price calculation, or live feed.  "Update asset
+    # images" is presentation-only; "live asset prices in a chart" crosses
+    # the backend boundary.
+    market_signal = _contains_any_term(
         text,
         (
-            "backend",
-            "api",
-            "route",
-            "controller",
-            "database",
-            "model",
-            "integration",
-            "openai",
-            "avalai",
-            "ai",
             "price",
             "prices",
-            "market",
             "quote",
+            "market",
             "finance",
-            "live",
-            "realtime",
-            "ای پی آی",
-            "ای‌پی‌آی",
-            "هوش مصنوعی",
-            "اتصال",
-            "سرویس",
+            "financial",
+            "portfolio",
             "قیمت",
             "بازار",
-            "نرخ",
             "مالی",
-            "لحظه",
-            "دریافت",
-            "جمع‌آوری",
-            "جمع اوری",
-        )
-    ):
-        roles.append("backend")
-
-    if _contains_any_term(
+            "دارایی",
+        ),
+    )
+    visual_data_signal = _contains_any_term(
         text,
         (
-            "security",
-            "permission",
-            "authentication",
-            "امنیت",
-            "مجوز",
-            "احراز هویت",
-            "دسترسی",
-        )
+            "chart",
+            "graph",
+            "plot",
+            "dashboard",
+            "table",
+            "data",
+            "نمودار",
+            "گراف",
+            "داشبورد",
+            "جدول",
+            "اطلاعات",
+        ),
+    )
+    if market_signal and (
+        visual_data_signal
+        or _has_dynamic_data_signal(text)
+        or _contains_any_term(text, ("add price", "show price", "قیمت واقعی", "قیمت لحظه‌ای", "قیمت لحظه ای"))
     ):
-        roles.append("security")
+        profile = replace(
+            profile,
+            backend=True,
+            domains=tuple(dict.fromkeys((*profile.domains, "backend"))),
+        )
+        profile.validate()
 
+    for role in profile.domains:
+        if role in {"frontend", "backend", "security", "release"}:
+            roles.append(role)
+
+    # The release template is an explicit product-level decision, even when
+    # the brief itself contains no release keyword.
     if task.kind == "release":
         roles.append("release")
 
