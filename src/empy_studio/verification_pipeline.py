@@ -389,11 +389,29 @@ def _read_static_file(path: Path) -> str | None:
         return None
 
 
-def static_web_diagnostics(project_root: str | Path) -> tuple[str, ...]:
-    """Check local HTML/CSS/JS references without running application code."""
+def static_web_diagnostics(
+    project_root: str | Path,
+    *,
+    relative_files: tuple[str, ...] | None = None,
+) -> tuple[str, ...]:
+    """Check local HTML/CSS/JS references without running application code.
+
+    ``relative_files`` limits inspection to the files selected for the current
+    bounded Agent context.  The available-target index still covers the whole
+    project, so a selected page can resolve its existing assets without
+    rescanning unrelated stylesheets.  Final Verification intentionally calls
+    this function without a scope and audits the complete web graph.
+    """
 
     root = Path(project_root).expanduser().resolve()
     web_files = _web_files(root)
+    if relative_files is not None:
+        scope = {
+            PurePosixPath(item.replace("\\", "/")).as_posix()
+            for item in relative_files
+            if item
+        }
+        web_files = tuple(item for item in web_files if item[1] in scope)
     if not web_files:
         return ()
     available = {relative for _path, relative in web_files}
@@ -769,7 +787,11 @@ def _verification_diagnostics(detection: ProjectDetection) -> tuple[str, ...]:
     return tuple(diagnostics)
 
 
-def verification_preflight(detection: ProjectDetection) -> VerificationPreflight:
+def verification_preflight(
+    detection: ProjectDetection,
+    *,
+    static_scope: tuple[str, ...] | None = None,
+) -> VerificationPreflight:
     """Inspect the verification contract without running project commands.
 
     Importing a project must surface missing runtime prerequisites before an
@@ -789,7 +811,10 @@ def verification_preflight(detection: ProjectDetection) -> VerificationPreflight
     except (OSError, TypeError, ValueError) as exc:
         diagnostics.append(f"Verification prerequisites could not be read: {exc}")
     try:
-        static_errors = static_web_diagnostics(detection.descriptor.root)
+        static_errors = static_web_diagnostics(
+            detection.descriptor.root,
+            relative_files=static_scope,
+        )
         if static_errors:
             shown = "; ".join(static_errors[:20])
             extra = f"; and {len(static_errors) - 20} more" if len(static_errors) > 20 else ""

@@ -76,6 +76,9 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert "renderRecoveryActions" in app_js
     assert "state.failure_context ? renderFailureContext(state.failure_context)" in app_js
     assert "failure-actions" in app_js
+    render_plan = app_js.split("function renderPlan()", 1)[1].split("function renderBenchmark", 1)[0]
+    assert "const failure = state.failure_context" in render_plan
+    assert "renderRecoveryActions(state.failure_context)" in render_plan
     assert "const suggested = !draft" not in app_js
     assert "guidance && !state?.failure_context" in app_js
     assert "no writable files" in app_js

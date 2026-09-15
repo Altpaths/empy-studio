@@ -2044,38 +2044,70 @@ class GuidedState:
             self._stop_recovery(reason)
             raise RuntimeError(reason)
         # Verification readiness is a hard gate before even inspecting or
-        # invoking a provider.  A missing Composer autoloader is the one
-        # recoverable preflight finding: dependency preparation is local and
-        # deterministic, so perform it first and then re-read the contract.
-        preflight = verification_preflight(self.detection)
+        # invoking a provider for missing dependencies or an invalid contract.
+        # Static web findings are different: a requested frontend repair may
+        # be precisely what fixes the broken reference.  Keep those findings
+        # in the final full-project Verification, but do not deadlock the
+        # bounded Agent before it can repair the selected file.
+        static_scope = tuple(
+            sorted(
+                {
+                    item.relative_path
+                    for pack in self.context.packs
+                    for item in pack.files
+                }
+            )
+        )
+        preflight = verification_preflight(
+            self.detection,
+            static_scope=static_scope or None,
+        )
         # A project can legitimately need both Composer and Node.  Prepare at
         # most one bounded, lockfile-backed dependency set per pass, then
         # re-read the contract before allowing the provider inspection.  Any
-        # non-dependency diagnostic remains a hard stop and costs no tokens.
+        # non-static diagnostic remains a hard stop and costs no tokens.
         for _ in range(3):
-            dependency_only = bool(preflight.diagnostics) and all(
-                "dependencies are not available in the isolated copy" in item
+            blocking_diagnostics = tuple(
+                item
                 for item in preflight.diagnostics
+                if not item.startswith("Static web validation failed:")
             )
-            if preflight.ready:
+            dependency_only = bool(blocking_diagnostics) and all(
+                "dependencies are not available in the isolated copy" in item
+                for item in blocking_diagnostics
+            )
+            if preflight.checks and not blocking_diagnostics:
+                if preflight.diagnostics:
+                    with self.lock:
+                        self.message = (
+                            "Verification static web findings will be rechecked after the Agent run."
+                        )
+                        self.message_level = "warning"
                 break
             if not dependency_only:
-                detail = "; ".join(preflight.diagnostics)
+                detail = "; ".join(blocking_diagnostics or preflight.diagnostics)
                 message = f"Verification preflight blocked the provider run: {detail}"
                 with self.lock:
                     self.error = message
                     self.message_level = "warning"
                     self.message = message
+                self._capture_failure_context()
                 raise RuntimeError(message)
             self._prepare_dependencies(self.detection, None)
             preflight = verification_preflight(self.detection)
-        if not preflight.ready:
-            detail = "; ".join(preflight.diagnostics)
+        blocking_diagnostics = tuple(
+            item
+            for item in preflight.diagnostics
+            if not item.startswith("Static web validation failed:")
+        )
+        if not preflight.checks or blocking_diagnostics:
+            detail = "; ".join(blocking_diagnostics or preflight.diagnostics)
             message = f"Verification preflight blocked the provider run: {detail}"
             with self.lock:
                 self.error = message
                 self.message_level = "warning"
                 self.message = message
+            self._capture_failure_context()
             raise RuntimeError(message)
         installation = self.driver.inspect(refresh=True)
         if installation.availability != "available" or not installation.authenticated:

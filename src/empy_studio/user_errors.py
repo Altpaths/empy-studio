@@ -23,6 +23,27 @@ def _generic(language: str) -> str:
 def safe_user_error(error: BaseException, *, language: str = "fa") -> str:
     """Convert OS/provider failures to useful messages without leaking host paths."""
     lowered = str(error).casefold()
+    if lowered.startswith("verification preflight blocked the provider run:"):
+        detail = str(error).split(":", 1)[1].strip()
+        # Preflight diagnostics are project-relative by contract.  Keep that
+        # actionable detail, but fall back to the generic message if a future
+        # diagnostic accidentally includes an absolute host path or URL.
+        absolute_markers = (
+            "/users/",
+            "/private/",
+            "/var/",
+            "\\users\\",
+            "file://",
+            "apptranslocation",
+        )
+        if not detail or any(marker in detail.casefold() for marker in absolute_markers):
+            return _generic(language)
+        detail = detail[:1200]
+        return (
+            "پیش از اجرای Agent، Verification جلوی مصرف توکن را گرفت: " + detail
+            if language == "fa"
+            else "Verification blocked the Agent before token use: " + detail
+        )
     if (
         getattr(error, "errno", None) == errno.ERANGE
         or "result too large" in lowered

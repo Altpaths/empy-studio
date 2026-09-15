@@ -1,3 +1,12 @@
+## [0.1.58] - 2026-09-15
+
+- Scope pre-run static web checks to the files selected for the current
+  bounded context so unrelated legacy link findings cannot deadlock a valid
+  ticket before its Agent can repair the project.
+- Keep the complete static web graph as a final Verification gate, while
+  preserving actionable preflight diagnostics and recovery actions in the Plan
+  screen instead of collapsing them into a generic error.
+
 ## [0.1.57] - 2026-09-15
 
 - Audit website-design inputs across PHP, static HTML, Node/React, and Laravel
