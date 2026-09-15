@@ -1,3 +1,17 @@
+## [0.1.57] - 2026-09-15
+
+- Audit website-design inputs across PHP, static HTML, Node/React, and Laravel
+  project graphs, including forms, APIs, persistence, auth, realtime, files,
+  localization, and deployment-sensitive routes.
+- Route bilingual and ambiguous requests deterministically, fail closed for
+  unknown or unsafe paths, and keep security review separate from file-writing
+  ownership so remediation is not duplicated.
+- Bound recovery cycles, token reservations, context reuse, and task intake;
+  detect malformed state, no-progress cycles, duplicate requests, and provider
+  overhead before another expensive run.
+- Strengthen verification and delivery gates with static references, dependency
+  checks, review-drift detection, archive integrity, manifests, and checksums.
+
 ## [0.1.56] - 2026-09-15
 
 - Route Persian asset, chart, and live-price tickets to both frontend and
