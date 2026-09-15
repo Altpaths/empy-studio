@@ -554,6 +554,76 @@ def test_release_gate_distinguishes_pending_review_from_a_blocked_run(tmp_path: 
     assert ready["blockers"] == []
 
 
+def test_release_gate_accepts_verified_no_change_without_delta_zip(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "public_html").mkdir(parents=True)
+    (source / "public_html" / "index.html").write_text(
+        "<html><body><h1>Existing homepage</h1></body></html>\n",
+        encoding="utf-8",
+    )
+    state = GuidedState(tmp_path / "empy-workspace")
+    state.import_path(str(source))
+    state.create_plan("Improve the homepage chart layout")
+    assert state.graph is not None
+    assert state.detection is not None
+    assert state.task is not None
+    root = state.detection.descriptor.root
+
+    state.run = SimpleNamespace(
+        status="completed",
+        node_results=(
+            SimpleNamespace(
+                node_id="node-implement-frontend",
+                status="completed",
+                changed_files=(),
+                summary=(
+                    "The requested homepage state is already present. "
+                    "EMPY_NODE_RESULT: PASS"
+                ),
+            ),
+        ),
+    )
+    state.verification = VerificationReport(
+        schema_version=1,
+        verification_id="verification-no-change",
+        project_root=str(root),
+        project_type="static",
+        status="pass",
+        started_at="now",
+        finished_at="now",
+        results=(
+            VerificationResult(
+                check=VerificationCheck("homepage", "Homepage", "static", ("true",)),
+                status="pass",
+                returncode=0,
+                stdout="ok\n",
+                stderr="",
+                started_at="now",
+                finished_at="now",
+            ),
+        ),
+        evidence_path=str(tmp_path / "evidence"),
+        finalized_at="now",
+    )
+    state.review = ReviewReport(
+        schema_version=1,
+        review_id="review-no-change",
+        project_root=str(root),
+        base_revision="HEAD",
+        created_at="now",
+        updated_at="now",
+        status="complete",
+        files=(),
+    )
+
+    gate = state._release_gate()
+
+    assert gate["status"] == "verified_no_change"
+    assert gate["ready"] is False
+    assert gate["blockers"] == ["No changed project files are available for a delta ZIP."]
+    assert state._run_has_attested_no_change() is True
+
+
 def test_restart_invalidates_old_passing_verification_evidence(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()

@@ -181,6 +181,16 @@ def _failure_kind(detail: str) -> str:
     if any(
         marker in normalized
         for marker in (
+            "produced no project change",
+            "no project change",
+            "no project file was changed",
+            "no file change",
+        )
+    ):
+        return "no_change"
+    if any(
+        marker in normalized
+        for marker in (
             "no writable files for writing roles",
             "no writable files",
             "فایل قابل‌ویرایش",
@@ -266,6 +276,13 @@ def _plain_failure_finding(
     """Give a nontechnical user the one fact that blocks delivery."""
 
     normalized = detail.casefold()
+    if kind == "no_change":
+        return (
+            "Agent هیچ تغییری در فایل‌های پروژه ثبت نکرد و نتیجهٔ PASS قابل‌تأیید ارائه نداد؛ "
+            "برای جلوگیری از موفقیت جعلی، Verification و ZIP متوقف شدند."
+            if language == "fa"
+            else "The Agent produced no project change and did not provide a verifiable PASS attestation; Verification and ZIP creation were stopped to avoid a false success."
+        )
     if kind == "no_writable_files":
         return (
             "برای این تیکت فایل امن و قابل‌ویرایشی برای نقش اجرایی پیدا نشد؛ Empy باید فهرست فایل‌ها را دوباره بررسی یا هدف فایل جدید را بسازد."
@@ -1371,7 +1388,11 @@ class GuidedState:
                     "kind": failure_kind,
                 }
             )
-            kind = "dirty_worktree" if failure_kind == "dirty_worktree" else "run_failed"
+            kind = (
+                failure_kind
+                if failure_kind in {"dirty_worktree", "no_change"}
+                else "run_failed"
+            )
         if not diagnostics and not failures and self.error:
             message = _safe_verification_detail(self.error, roots)
             diagnostics.append(message)
@@ -1389,6 +1410,7 @@ class GuidedState:
                 "dirty_worktree",
                 "token_budget",
                 "no_writable_files",
+                "no_change",
             } else "run_failed"
         if not diagnostics and not failures:
             return None
@@ -1453,6 +1475,7 @@ class GuidedState:
             )
             suggested_prefix = "Resolve the previous failure at its root, not by changing the ticket text."
             action_map = {
+                "no_change": "Check whether the requested state is already present. If it is, emit the required EMPY_NODE_RESULT: PASS attestation and let deterministic Verification decide; otherwise modify the owned file.",
                 "no_writable_files": "Rebuild the bounded project index and assign the implementation role a real writable source file or an explicitly approved missing target; do not stop at a read-only plan.",
                 "missing_dependency": "Install the missing project dependency in the isolated copy, or add an explicit safe verification manifest. Do not silently skip the required check.",
                 "missing_verification_contract": "Add or repair the project's explicit .empy/verification.json contract, or provide a supported test/build/lint entry point.",
@@ -1476,6 +1499,7 @@ class GuidedState:
             )
             suggested_prefix = "علت خطای قبلی را ریشه‌ای اصلاح کن، نه اینکه فقط متن تیکت را عوض کنی."
             action_map = {
+                "no_change": "بررسی کن آیا وضعیت درخواستی از قبل وجود دارد یا نه. اگر وجود دارد، گزارش صریح EMPY_NODE_RESULT: PASS بده تا Verification قطعی آن را تأیید کند؛ در غیر این صورت فایلِ مالکیت‌داده‌شده را واقعاً اصلاح کن.",
                 "no_writable_files": "فهرست محدود پروژه را دوباره بساز و نقش اجرایی را به یک فایل واقعیِ قابل‌ویرایش یا هدف جدیدِ صریحاً تأییدشده وصل کن؛ برنامهٔ فقط‌خواندنی نساز.",
                 "missing_dependency": "وابستگی گمشده را در کپی ایزوله نصب/تأمین کن یا یک قرارداد بررسی امن در .empy/verification.json تعریف کن؛ تست لازم نباید بی‌صدا رد شود.",
                 "missing_verification_contract": "قرارداد .empy/verification.json یا ورودی تست/build/lint پشتیبانی‌شده را اصلاح کن تا Verification دقیقاً بداند چه چیزی را باید اجرا کند.",
@@ -1519,6 +1543,27 @@ class GuidedState:
                 next_step = (
                     "روی «اصلاح خودکار و اجرای دوباره» بزنید؛ Empy فهرست پروژه را تازه می‌کند، فایل واقعی را انتخاب می‌کند "
                     "یا هدفِ مجازِ فایل جدید را قبل از شروع Agent می‌سازد."
+                )
+        if first_kind == "no_change":
+            if self.language == "en":
+                title = "The Agent made no change without a verifiable PASS"
+                summary = (
+                    "The Agent did not change a project file and did not provide the required "
+                    "PASS attestation, so Empy could not safely continue to Verification."
+                )
+                next_step = (
+                    "Choose Automatically repair and rerun. Empy will verify whether the "
+                    "requested state already exists or make the bounded change."
+                )
+            else:
+                title = "Agent بدون تأیید PASS تغییری ایجاد نکرد"
+                summary = (
+                    "Agent هیچ فایل پروژه را تغییر نداد و تأیید صریح PASS ارائه نکرد؛ "
+                    "برای ادامهٔ امن، Verification متوقف شد."
+                )
+                next_step = (
+                    "روی «اصلاح خودکار و اجرای دوباره» بزنید؛ Empy بررسی می‌کند وضعیت درخواستی "
+                    "از قبل وجود دارد یا تغییر محدود لازم است."
                 )
         if first_kind == "dirty_worktree":
             if self.language == "en":
@@ -2653,6 +2698,7 @@ class GuidedState:
 
         blockers: list[str] = []
         review_blocker: str | None = None
+        no_change_attested = self._run_has_attested_no_change()
         if self.run is not None and self.run.status != "completed":
             blockers.append("The agent run did not complete successfully.")
         if self.verification is None:
@@ -2721,6 +2767,19 @@ class GuidedState:
         hard_blockers = [item for item in blockers if item != review_blocker]
         if export_is_valid and not blockers:
             status = "exported"
+        elif (
+            no_change_attested
+            and self.verification is not None
+            and self.verification.finalize_allowed
+            and self.review is not None
+            and self.review.status == "complete"
+            and not self.review.pending_count
+            and blockers == ["No changed project files are available for a delta ZIP."]
+        ):
+            # A PASS-attested writer may discover that the requested state is
+            # already present.  Verification remains authoritative, but a
+            # no-op result is not a failed run and must be explained as such.
+            status = "verified_no_change"
         elif review_blocker is not None and not hard_blockers:
             status = "awaiting_review"
         elif blockers:
@@ -2733,6 +2792,44 @@ class GuidedState:
             "blockers": blockers,
             "exported": export_is_valid,
         }
+
+    def _run_has_attested_no_change(self) -> bool:
+        """Return whether every implementation writer reported a verified no-op."""
+
+        if self.run is None or self.run.status != "completed" or self.graph is None:
+            return False
+        writer_ids = {
+            node.node_id
+            for node in self.graph.nodes
+            if node.agent_role in {"frontend", "backend", "coordinator", "release"}
+        }
+        if not writer_ids:
+            return False
+        # Persisted/fixture run objects from older clients may only expose the
+        # terminal status.  Treat those as not attested rather than crashing
+        # release-gate rendering on a compatibility read.
+        results = {
+            item.node_id: item
+            for item in getattr(self.run, "node_results", ())
+            if getattr(item, "node_id", None)
+        }
+        for node_id in writer_ids:
+            result = results.get(node_id)
+            if (
+                result is None
+                or getattr(result, "status", None) != "completed"
+                or getattr(result, "changed_files", ())
+            ):
+                return False
+            normalized = (
+                str(getattr(result, "summary", ""))
+                .casefold()
+                .replace("\u200c", " ")
+                .replace("*", "")
+            )
+            if "empy_node_result: pass" not in normalized:
+                return False
+        return True
 
     def export_download_path(self) -> Path:
         """Return the current verified ZIP only when it is safe to download."""
@@ -3174,6 +3271,49 @@ class GuidedState:
             if self.run is not None and self.run.error_message
             else self.error or ""
         )
+        if _failure_kind(run_error_text) == "no_change":
+            repair_available = (
+                self.repair_attempts < self.recovery.policy.max_attempts
+                and self.recovery.status != "running"
+            )
+            if self.language == "en":
+                return {
+                    "kind": "no_change",
+                    "title": "The Agent made no change without a verifiable PASS",
+                    "summary": (
+                        "The Agent produced no project change and did not provide the "
+                        "required PASS attestation, so Empy stopped before Verification."
+                    ),
+                    "steps": [
+                        (
+                            "Choose Automatically repair and rerun. Empy will verify "
+                            "whether the requested state already exists or make the "
+                            "bounded change."
+                            if repair_available
+                            else "Choose Continue and fix ticket to retry the bounded work."
+                        ),
+                    ],
+                    "action": "auto-repair" if repair_available else "resume-ticket",
+                    "repair_available": repair_available,
+                }
+            return {
+                "kind": "no_change",
+                "title": "Agent بدون تأیید PASS تغییری ایجاد نکرد",
+                "summary": (
+                    "Agent هیچ فایل پروژه را تغییر نداد و تأیید صریح PASS ارائه نکرد؛ "
+                    "Empy پیش از Verification متوقف شد."
+                ),
+                "steps": [
+                    (
+                        "روی «اصلاح خودکار و اجرای دوباره» بزنید؛ Empy بررسی می‌کند "
+                        "وضعیت درخواستی از قبل وجود دارد یا تغییر محدود لازم است."
+                        if repair_available
+                        else "برای تلاش دوباره روی «ادامه و اصلاح تیکت» بزنید."
+                    ),
+                ],
+                "action": "auto-repair" if repair_available else "resume-ticket",
+                "repair_available": repair_available,
+            }
         if _failure_kind(run_error_text) == "dirty_worktree":
             repair_available = self.repair_attempts < self.recovery.policy.max_attempts and self.recovery.status != "running"
             if self.language == "en":

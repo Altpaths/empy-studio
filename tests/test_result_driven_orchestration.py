@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import zipfile
+from dataclasses import replace
 from pathlib import Path
 
 from empy_studio.core import (
@@ -195,7 +196,7 @@ def test_plain_php_ticket_uses_one_relevant_writer_and_directadmin_zip(
         assert archive.namelist() == list(exported.changed_files)
 
 
-def test_writer_process_without_a_change_is_not_a_success(tmp_path: Path) -> None:
+def test_writer_can_attest_that_requested_state_already_exists(tmp_path: Path) -> None:
     _plain_php_source(tmp_path)
     detection, task, _plan, selection, budget, graph = _workflow(tmp_path)
 
@@ -210,9 +211,38 @@ def test_writer_process_without_a_change_is_not_a_success(tmp_path: Path) -> Non
         task=task,
     )
 
+    assert result.status == "completed"
+    assert result.error_code is None
+    assert result.node_results[0].changed_files == ()
+    assert any("run.no_change_attested" in event.event_type for event in result.events)
+
+
+def test_writer_without_change_must_provide_pass_attestation(tmp_path: Path) -> None:
+    _plain_php_source(tmp_path)
+    detection, task, _plan, selection, budget, graph = _workflow(tmp_path)
+
+    driver = _ResultDriver(change_files=False)
+    original = driver.execute_streaming
+
+    def without_attestation(request, *, node_id, artifact_dir, on_progress=None):
+        result = original(request, node_id=node_id, artifact_dir=artifact_dir, on_progress=on_progress)
+        return replace(result, summary="Reviewed the project; no change was made.")
+
+    driver.execute_streaming = without_attestation  # type: ignore[method-assign]
+    result = CodexGraphRuntime(
+        driver=driver,
+        run_root=tmp_path / "runs",
+    ).run(
+        graph=graph,
+        selection=selection,
+        budget=budget,
+        project=detection.descriptor,
+        task=task,
+    )
+
     assert result.status == "failed"
     assert result.error_code == "objective_not_met"
-    assert result.node_results[0].changed_files == ()
+    assert "PASS attestation" in (result.error_message or "")
 
 
 def test_agent_declared_failure_is_not_a_success(tmp_path: Path) -> None:

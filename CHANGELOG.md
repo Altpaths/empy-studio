@@ -1,3 +1,17 @@
+## [0.1.59] - 2026-09-15
+
+- Treat an implementation Agent's explicit `EMPY_NODE_RESULT: PASS` with no
+  file diff as a verified no-op candidate; run deterministic Verification
+  before presenting the result and never fabricate a cosmetic edit or delta
+  ZIP.
+- Carry sanitized Verification evidence into recovery context scoring so the
+  corrective graph assigns the exact failing HTML/CSS/JS file to its specialist
+  instead of repeating a narrow first-pass context.
+- Expose a distinct verified no-change release-gate state and keep export
+  disabled when there is no real project delta.
+- Keep no-change reports, missing attestations, and legacy run objects
+  fail-closed and covered by regression tests.
+
 ## [0.1.58] - 2026-09-15
 
 - Scope pre-run static web checks to the files selected for the current

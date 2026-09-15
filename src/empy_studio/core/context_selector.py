@@ -1681,6 +1681,22 @@ def _build_pack(
     exclusions: list[ContextExclusion],
     brain_index: ProjectBrainIndex | None = None,
 ) -> ContextPack:
+    # Recovery plans carry sanitized Verification evidence in one explicitly
+    # marked constraint.  Include that evidence in local scoring so a
+    # corrective writer receives the exact failing file (for example a CSS
+    # asset reference) instead of repeating the original ticket's narrower
+    # context.  Ordinary user constraints stay out of task scoring to keep
+    # first-pass prompts small and deterministic.
+    recovery_context = tuple(
+        item
+        for item in task.constraints
+        if item.startswith(
+            (
+                "Recovery owner:",
+                "Previous Empy verification findings:",
+            )
+        )
+    )
     task_text = " ".join(
         (
             task.title,
@@ -1688,6 +1704,7 @@ def _build_pack(
             *task.requirements,
             step.title,
             step.objective,
+            *recovery_context,
         )
     )
     task_tokens = _expanded_task_tokens(task_text)

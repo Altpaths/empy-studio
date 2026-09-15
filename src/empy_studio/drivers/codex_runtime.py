@@ -295,6 +295,8 @@ def build_codex_node_prompt(
         "9. Use targeted searches and bounded file ranges; do not print whole large files, dependency trees, or logs.\n"
         "10. The bounded context already contains selected file excerpts. Do not re-read an owned file unless an exact omitted section is required.\n"
         "11. Limit every inspection command to at most 4096 output characters. Use byte-bounded commands such as head -c or tail -c; line counts are unsafe for minified or long-line files.\n\n"
+        "12. If the requested state is already present and no file change is necessary, report that explicitly and end with EMPY_NODE_RESULT: PASS. "
+        "Never create a cosmetic or fake edit just to produce a diff; Empy will run deterministic Verification before deciding the outcome.\n\n"
         f"## Owned files\n{owned}\n\n"
         f"## Read-only files\n{read_only}\n\n"
         f"## Protected paths\n{protected}\n\n"
@@ -523,26 +525,49 @@ class CodexGraphRuntime:
             and node.agent_role in {"frontend", "backend", "coordinator", "release"}
             and not changed_files
         ):
-            error_message = (
-                "The implementation Agent completed its process but produced no project "
-                "change. Empy will not report the requested work as successful."
-            )
-            node_result = replace(
-                node_result,
-                status="failed",
-                summary="The requested implementation was not produced.",
-                error_code="objective_not_met",
-                error_message=error_message,
-            )
-            report(
-                CodexProgressEvent(
-                    timestamp=self._utc_now(),
-                    level="error",
-                    event_type="run.objective_not_met",
-                    message=error_message,
-                    node_id=node.node_id,
+            # A bounded writer can legitimately discover that the requested
+            # state already exists.  Treat that as a no-op attestation only
+            # when the worker emitted the required PASS marker; deterministic
+            # Verification must still confirm the state before any result is
+            # shown as successful.  A missing marker remains a hard failure so
+            # a provider cannot turn an unimplemented request into a no-op.
+            if self._summary_declares_pass(node_result.summary):
+                message = (
+                    "The Agent reported PASS without a file diff; Empy will "
+                    "continue to deterministic Verification to confirm the "
+                    "requested state."
                 )
-            )
+                report(
+                    CodexProgressEvent(
+                        timestamp=self._utc_now(),
+                        level="info",
+                        event_type="run.no_change_attested",
+                        message=message,
+                        node_id=node.node_id,
+                    )
+                )
+            else:
+                error_message = (
+                    "The implementation Agent completed its process but produced no "
+                    "project change and did not provide a PASS attestation. Empy will "
+                    "not report the requested work as successful."
+                )
+                node_result = replace(
+                    node_result,
+                    status="failed",
+                    summary="The requested implementation was not produced.",
+                    error_code="objective_not_met",
+                    error_message=error_message,
+                )
+                report(
+                    CodexProgressEvent(
+                        timestamp=self._utc_now(),
+                        level="error",
+                        event_type="run.objective_not_met",
+                        message=error_message,
+                        node_id=node.node_id,
+                    )
+                )
         elif (
             node_result.status == "completed"
             and self._summary_declares_failure(node_result.summary)
@@ -1240,6 +1265,11 @@ class CodexGraphRuntime:
             "قابل تأیید نیست",
         )
         return any(marker in normalized for marker in failure_markers)
+
+    @staticmethod
+    def _summary_declares_pass(summary: str) -> bool:
+        normalized = summary.casefold().replace("\u200c", " ").replace("*", "")
+        return "empy_node_result: pass" in normalized
 
     def _skipped_result(
         self,
