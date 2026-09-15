@@ -415,6 +415,109 @@ def test_runtime_fails_node_that_changes_unowned_file(
     assert len(driver.requests) == 1
 
 
+def test_runtime_allows_exact_new_market_endpoint_but_not_unplanned_migration(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "project"
+    public_html = root / "public_html"
+    (public_html / "assets").mkdir(parents=True)
+    (public_html / "src").mkdir()
+    (public_html / "database").mkdir()
+    (public_html / "composer.json").write_text(
+        '{"name":"holda/demo"}\n', encoding="utf-8"
+    )
+    (public_html / "assets.php").write_text("<?php echo 'assets';\n", encoding="utf-8")
+    (public_html / "assets" / "app.js").write_text(
+        "document.querySelector('[data-assets]');\n", encoding="utf-8"
+    )
+    (public_html / "src" / "FinanceService.php").write_text(
+        "<?php class FinanceService {}\n", encoding="utf-8"
+    )
+    detection = DefaultProjectService().detect(root)
+    text = "برای بخش دارایی ها یک نمودار با قیمت های واقعی لحظه ای اضافه کن"
+    task = ProductTask(
+        task_id="runtime-market-endpoint",
+        project_root=str(root.resolve()),
+        kind="custom",
+        title=text,
+        objective=text,
+        requirements=("اطلاعات و قیمت ها واقعی جمع اوری شود",),
+        constraints=("Do not change unrelated files",),
+        definition_of_done=("The chart verification passes",),
+        status="ready_for_planning",
+    )
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=detection),
+        current_task=task,
+    )
+    selection = build_context_selection(task=task, project=detection, plan=plan)
+    budget = lock_token_budget(build_token_budget(plan=plan, selection=selection))
+    graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+
+    class EndpointDriver(FakeDriver):
+        def __init__(self, *, add_migration: bool) -> None:
+            super().__init__()
+            self.add_migration = add_migration
+
+        def execute_streaming(self, request, *, node_id, artifact_dir, on_progress=None):
+            if request.task_id.endswith(":implement-frontend"):
+                (root / "public_html" / "assets" / "app.js").write_text(
+                    "document.body.dataset.marketChart = 'ready';\n", encoding="utf-8"
+                )
+            if request.task_id.endswith(":implement-backend"):
+                (root / "public_html" / "asset-prices.php").write_text(
+                    "<?php echo json_encode([]);\n", encoding="utf-8"
+                )
+                if self.add_migration:
+                    (root / "public_html" / "database" / "migrate-asset-prices.sql").write_text(
+                        "CREATE TABLE asset_prices (id INT);\n", encoding="utf-8"
+                    )
+            result = super().execute_streaming(
+                request,
+                node_id=node_id,
+                artifact_dir=artifact_dir,
+                on_progress=on_progress,
+            )
+            if request.task_id.endswith(":implement-frontend"):
+                changed = ["public_html/assets/app.js"]
+            elif request.task_id.endswith(":implement-backend"):
+                changed = ["public_html/asset-prices.php"]
+            else:
+                changed = []
+            if self.add_migration and request.task_id.endswith(":implement-backend"):
+                changed.append("public_html/database/migrate-asset-prices.sql")
+            return replace(result, changed_files=tuple(changed))
+
+    allowed = CodexGraphRuntime(
+        driver=EndpointDriver(add_migration=False),
+        run_root=tmp_path / "allowed-run",
+    ).run(
+        graph=graph,
+        selection=selection,
+        budget=budget,
+        project=detection.descriptor,
+        task=task,
+    )
+    assert allowed.status == "completed"
+    assert "public_html/asset-prices.php" in {
+        path for result in allowed.node_results for path in result.changed_files
+    }
+
+    blocked = CodexGraphRuntime(
+        driver=EndpointDriver(add_migration=True),
+        run_root=tmp_path / "blocked-run",
+    ).run(
+        graph=graph,
+        selection=selection,
+        budget=budget,
+        project=detection.descriptor,
+        task=task,
+    )
+    assert blocked.status == "failed"
+    assert blocked.error_code == "scope_violation"
+    assert "migrate-asset-prices.sql" in (blocked.error_message or "")
+
+
 def test_failed_usage_is_unknown_not_zero(tmp_path: Path) -> None:
     detection, selection, budget, graph = prepared(tmp_path)
     result = CodexGraphRuntime(driver=FakeDriver(fail_first=True), run_root=tmp_path / "runs").run(

@@ -52,6 +52,10 @@ IMPLEMENTATION_TERMS: tuple[str, ...] = (
     "ایجاد",
     "درست کن",
     "درستش کن",
+    "اضافه",
+    "اضافه کن",
+    "جمع‌آوری",
+    "جمع اوری",
 )
 RiskLevel = Literal[
     "low",
@@ -236,7 +240,14 @@ def _likely_paths(
                 "design",
                 "layout",
                 "rtl",
-            )
+                "chart",
+                "graph",
+                "plot",
+                "dashboard",
+                "asset",
+                "assets",
+                "portfolio",
+                )
         ):
             paths.extend(
                 (
@@ -301,6 +312,10 @@ def _likely_paths(
                 "همگام",
                 "هماهنگ",
                 "خانه",
+                "نمودار",
+                "دارایی",
+                "سبد",
+                "داشبورد",
             )
         ):
             # Kept as an explicit branch for readability: the application
@@ -496,6 +511,10 @@ def _roles(
             "هماهنگ",
             "سایت",
             "خانه",
+            "نمودار",
+            "دارایی",
+            "سبد",
+            "داشبورد",
         )
     ):
         roles.append("frontend")
@@ -513,11 +532,26 @@ def _roles(
             "openai",
             "avalai",
             "ai",
+            "price",
+            "prices",
+            "market",
+            "quote",
+            "finance",
+            "live",
+            "realtime",
             "ای پی آی",
             "ای‌پی‌آی",
             "هوش مصنوعی",
             "اتصال",
             "سرویس",
+            "قیمت",
+            "بازار",
+            "نرخ",
+            "مالی",
+            "لحظه",
+            "دریافت",
+            "جمع‌آوری",
+            "جمع اوری",
         )
     ):
         roles.append("backend")

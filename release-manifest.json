@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
   "product": "Empy Studio",
-  "version": "0.1.55",
-  "tag": "v0.1.55",
+  "version": "0.1.56",
+  "tag": "v0.1.56",
   "channel": "stable",
-  "release_name": "Empy Studio 0.1.55 \u2014 Ownership-safe persistence fixes",
+  "release_name": "Empy Studio 0.1.56 \u2014 Semantic scope routing and exact creation ownership",
   "notes_file": "RELEASE_NOTES.md",
   "changelog_file": "CHANGELOG.md",
   "artifacts": [],
-  "previous_version": "0.1.54",
+  "previous_version": "0.1.55",
   "metadata": {
-    "release_scope": "ownership-safe persistence scope with deterministic acceptance"
+    "release_scope": "bilingual market-ticket routing with exact existing-file ownership and explicit endpoint creation"
   }
 }

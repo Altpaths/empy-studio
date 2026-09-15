@@ -1,3 +1,16 @@
+## [0.1.56] - 2026-09-15
+
+- Route Persian asset, chart, and live-price tickets to both frontend and
+  backend specialists instead of treating them as an unrelated backend-only
+  task.
+- Rank the existing financial modules and interactive asset scripts from the
+  Project Brain, preserving exact ownership for edits to existing files.
+- Add one explicit `asset-prices.php` creation target for PHP market tickets;
+  unrequested migrations and other new files remain outside the graph and stop
+  the run safely.
+- Add end-to-end regression coverage for the live failure shape, including
+  exact endpoint creation and rejection of an unplanned migration.
+
 ## [0.1.55] - 2026-09-15
 
 - Fix PHP persistence tickets whose backend node needs to update a related
