@@ -3,6 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Literal
 
+MAX_TASK_TITLE_CHARS = 256
+MAX_TASK_OBJECTIVE_CHARS = 16_000
+MAX_TASK_ITEM_CHARS = 8_000
+MAX_TASK_ITEMS = 64
+MAX_TASK_TOTAL_CHARS = 48_000
+
+
 TaskKind = Literal[
     "bug_fix",
     "feature",
@@ -55,6 +62,42 @@ class ProductTask:
         }:
             raise ValueError(
                 f"unsupported task status: {self.status}"
+            )
+        if len(self.title) > MAX_TASK_TITLE_CHARS:
+            raise ValueError(
+                f"title cannot exceed {MAX_TASK_TITLE_CHARS} characters"
+            )
+        if len(self.objective) > MAX_TASK_OBJECTIVE_CHARS:
+            raise ValueError(
+                f"objective cannot exceed {MAX_TASK_OBJECTIVE_CHARS} characters"
+            )
+        for field_name, values in (
+            ("requirements", self.requirements),
+            ("constraints", self.constraints),
+            ("definition_of_done", self.definition_of_done),
+        ):
+            if len(values) > MAX_TASK_ITEMS:
+                raise ValueError(
+                    f"{field_name} cannot contain more than {MAX_TASK_ITEMS} items"
+                )
+            if any(not isinstance(item, str) or not item.strip() for item in values):
+                raise ValueError(f"{field_name} cannot contain blank items")
+            if any(len(item) > MAX_TASK_ITEM_CHARS for item in values):
+                raise ValueError(
+                    f"{field_name} items cannot exceed {MAX_TASK_ITEM_CHARS} characters"
+                )
+        total_chars = len(self.title) + len(self.objective) + sum(
+            len(item)
+            for values in (
+                self.requirements,
+                self.constraints,
+                self.definition_of_done,
+            )
+            for item in values
+        )
+        if total_chars > MAX_TASK_TOTAL_CHARS:
+            raise ValueError(
+                f"task text cannot exceed {MAX_TASK_TOTAL_CHARS} characters"
             )
 
 
@@ -168,11 +211,18 @@ def template_by_key(
 def split_multiline(
     value: str,
 ) -> tuple[str, ...]:
-    return tuple(
-        line.strip(" -•\t")
-        for line in value.splitlines()
-        if line.strip(" -•\t")
-    )
+    values: list[str] = []
+    seen: set[str] = set()
+    for raw_line in value.splitlines():
+        line = raw_line.strip(" -•\t")
+        if not line:
+            continue
+        key = " ".join(line.casefold().split())
+        if key in seen:
+            continue
+        seen.add(key)
+        values.append(line)
+    return tuple(values)
 
 
 def build_product_task(

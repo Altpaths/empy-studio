@@ -16,9 +16,10 @@ RunStatus = Literal["ready", "running", "stopped", "completed"]
 UsageKind = Literal["planning", "agent", "retry", "handoff"]
 
 # Provider usage includes its system/tool harness and usually at least one
-# replay after a tool call. The former budget counted only selected project
-# excerpts, understating real fresh usage by 2x-6x in production.
-PROVIDER_EXECUTION_OVERHEAD_TOKENS = 36_000
+# replay after a tool call. Keep a bounded allowance for that contract while
+# charging the selected context separately; the previous 36k constant made a
+# one-file economy task start with an unnecessarily large 40k+ cap.
+PROVIDER_EXECUTION_OVERHEAD_TOKENS = 24_000
 
 
 @dataclass(frozen=True)
