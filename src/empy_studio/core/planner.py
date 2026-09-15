@@ -223,6 +223,13 @@ IMPLEMENTATION_ACTION_TERMS: tuple[str, ...] = (
     "write",
     "link",
     "improve",
+    "enable",
+    "configure",
+    "integrate",
+    "migrate",
+    "support",
+    "export",
+    "import",
     "add",
     "افزود",
     "افزایش",
@@ -253,6 +260,16 @@ IMPLEMENTATION_ACTION_TERMS: tuple[str, ...] = (
     "درستش کن",
     "اضافه",
     "اضافه کن",
+    "پشتیبانی",
+    "فعال کن",
+    "فعال‌سازی",
+    "یکپارچه",
+    "اتصال",
+    "مهاجرت",
+    "خروجی",
+    "ورودی",
+    "گزارش‌گیری",
+    "گزارش گیری",
     "جمع‌آوری",
     "جمع اوری",
     "نمایش",
@@ -312,11 +329,56 @@ FRONTEND_INTENT_TERMS: tuple[str, ...] = (
     "hero",
     "banner",
     "gallery",
+    "search",
+    "search box",
+    "search bar",
+    "autocomplete",
+    "filter",
+    "filters",
+    "sorting",
+    "sort",
+    "pagination",
+    "infinite scroll",
+    "comments",
+    "comment",
+    "reviews",
+    "ratings",
+    "rating",
+    "notifications",
+    "notification",
+    "toast",
+    "alert",
+    "chat",
+    "messaging",
+    "conversation",
+    "video",
+    "video player",
+    "dark mode",
+    "light mode",
+    "multilingual",
+    "multi-language",
+    "i18n",
+    "translation",
+    "cookie consent",
+    "privacy policy",
+    "terms of service",
+    "social sharing",
+    "download",
+    "export",
+    "import",
+    "pwa",
+    "offline",
+    "push notifications",
+    "rss",
+    "feed",
     "form",
     "contact form",
     "input",
     "button",
     "link",
+    "links",
+    "broken link",
+    "broken links",
     "card",
     "modal",
     "responsive",
@@ -419,11 +481,49 @@ FRONTEND_INTENT_TERMS: tuple[str, ...] = (
     "هیرو",
     "بنر",
     "گالری",
+    "جستجو",
+    "جست‌وجو",
+    "نوار جستجو",
+    "تکمیل خودکار",
+    "فیلتر",
+    "فیلترها",
+    "مرتب‌سازی",
+    "مرتب سازی",
+    "صفحه‌بندی",
+    "صفحه بندی",
+    "اسکرول بی‌نهایت",
+    "نظرات",
+    "نظر",
+    "دیدگاه",
+    "امتیاز",
+    "اعلان",
+    "اعلان‌ها",
+    "پیام",
+    "پیام‌رسانی",
+    "چت",
+    "گفتگو",
+    "ویدئو",
+    "پخش‌کننده ویدئو",
+    "حالت تاریک",
+    "حالت روشن",
+    "چندزبانه",
+    "ترجمه",
+    "رضایت کوکی",
+    "حریم خصوصی",
+    "قوانین استفاده",
+    "اشتراک‌گذاری",
+    "دانلود",
+    "خروجی",
+    "ورودی",
+    "آفلاین",
+    "اعلان پوش",
+    "خبرخوان",
     "فرم",
     "فرم تماس",
-    "ورودی",
     "دکمه",
     "لینک",
+    "لینک‌ها",
+    "لینک‌های خراب",
     "کارت",
     "پنجره",
     "واکنش‌گرا",
@@ -469,11 +569,8 @@ FRONTEND_INTENT_TERMS: tuple[str, ...] = (
     "ذخیره‌سازی محلی",
     "ذخیره سازی محلی",
     "ذخیره مرورگر",
-    "دسترسی‌پذیری",
-    "دسترسی پذیری",
     "فاوآیکون",
     "پروفایل کاربر",
-    "پنل مدیریت",
     "همگام",
     "همگام‌سازی",
     "همگام سازی",
@@ -514,6 +611,38 @@ BACKEND_INTENT_TERMS: tuple[str, ...] = (
     "email delivery",
     "send email",
     "mail",
+    "search results",
+    "full-text search",
+    "comments api",
+    "comment storage",
+    "reviews api",
+    "ratings api",
+    "notifications api",
+    "email notifications",
+    "push notifications",
+    "messaging",
+    "websocket",
+    "websockets",
+    "chat server",
+    "subscription",
+    "subscriptions",
+    "billing",
+    "invoice",
+    "invoicing",
+    "analytics tracking",
+    "analytics event",
+    "captcha",
+    "rate limiting",
+    "rate limit",
+    "cors",
+    "audit log",
+    "audit trail",
+    "csv export",
+    "csv import",
+    "pdf generation",
+    "report generation",
+    "rss feed",
+    "push service",
     "integration",
     "fetch from api",
     "load from server",
@@ -582,6 +711,31 @@ BACKEND_INTENT_TERMS: tuple[str, ...] = (
     "آپلود تصویر",
     "ارسال فرم",
     "ارسال ایمیل",
+    "جستجوی پایگاه داده",
+    "نتایج جستجو",
+    "رکوردهای جستجو",
+    "ذخیره نظرات",
+    "ثبت نظر",
+    "اعلان ایمیلی",
+    "اعلان پوش",
+    "پیام‌رسانی سمت سرور",
+    "وب‌سوکت",
+    "چت بلادرنگ",
+    "اشتراک",
+    "صورتحساب",
+    "فاکتور",
+    "تحلیل رفتار",
+    "ردیابی رویداد",
+    "کپچا",
+    "محدودیت درخواست",
+    "محدودسازی درخواست",
+    "لاگ ممیزی",
+    "گزارش ممیزی",
+    "خروجی csv",
+    "ورودی csv",
+    "تولید pdf",
+    "تولید گزارش",
+    "خبرخوان rss",
 )
 
 SECURITY_INTENT_TERMS: tuple[str, ...] = (
@@ -623,6 +777,22 @@ SECURITY_INTENT_TERMS: tuple[str, ...] = (
     "security validation",
     "csrf protection",
     "xss protection",
+    "captcha",
+    "rate limiting",
+    "rate limit",
+    "cors",
+    "audit log",
+    "audit trail",
+    "user roles",
+    "role based permissions",
+    "نقش کاربری",
+    "نقش‌های کاربری",
+    "سطح دسترسی",
+    "کپچا",
+    "محدودیت درخواست",
+    "محدودسازی درخواست",
+    "لاگ ممیزی",
+    "گزارش ممیزی",
     "امنیت",
     "ایمن",
     "آسیب‌پذیری",
@@ -1262,7 +1432,13 @@ def _requests_data_model_changes(text: str) -> bool:
         "تغییر جدول پایگاه",
         "حذف جدول پایگاه",
     )
-    if _contains_any_term(normalized, table_operation):
+    if _contains_any_term(normalized, table_operation) or re.search(
+        r"(?<!\w)(?:create|alter|drop|delete|remove|migrate)\s+(?:an?\s+)?[\w-]+\s+table(?!\w)",
+        normalized,
+    ) or re.search(
+        r"(?:ایجاد|ساخت|تغییر|حذف|مهاجرت)\s+[^\s]+\s+جدول(?!\w)",
+        normalized,
+    ):
         return True
 
     persistence_actions = (
@@ -1717,6 +1893,296 @@ def classify_intent(text: str) -> IntentProfile:
             normalized,
             ("upload button", "upload ui", "drag and drop", "دکمه آپلود", "رابط آپلود"),
         ) or _has_dynamic_data_signal(normalized):
+            backend = True
+
+    # Search, filtering, sorting, pagination, comments, and messaging are
+    # presentation features by default.  They cross the server boundary only
+    # when the request names a persistent/live source; this keeps a static
+    # search box cheap while routing real data flows to a backend writer.
+    collection_ui_signal = _contains_any_term(
+        normalized,
+        (
+            "search",
+            "search box",
+            "search bar",
+            "autocomplete",
+            "filter",
+            "filters",
+            "sorting",
+            "sort",
+            "pagination",
+            "infinite scroll",
+            "جستجو",
+            "جست‌وجو",
+            "فیلتر",
+            "مرتب‌سازی",
+            "مرتب سازی",
+            "صفحه‌بندی",
+            "صفحه بندی",
+            "اسکرول بی‌نهایت",
+        ),
+    )
+    if collection_ui_signal:
+        frontend = True
+        if _has_dynamic_data_signal(normalized) or _contains_any_term(
+            normalized,
+            (
+                "results",
+                "records",
+                "query",
+                "database",
+                "api",
+                "server",
+                "نتایج",
+                "رکورد",
+                "پایگاه داده",
+                "جستجوی پایگاه داده",
+            ),
+        ):
+            backend = True
+
+    collaboration_ui_signal = _contains_any_term(
+        normalized,
+        (
+            "comments",
+            "comment",
+            "reviews",
+            "ratings",
+            "rating",
+            "نظرات",
+            "نظر",
+            "دیدگاه",
+            "امتیاز",
+        ),
+    )
+    if collaboration_ui_signal:
+        frontend = True
+        if not _contains_any_term(
+            normalized,
+            ("comment ui", "comment widget", "نمایش نظر", "ظاهر نظرات"),
+        ):
+            backend = True
+
+    notification_signal = _contains_any_term(
+        normalized,
+        (
+            "notification",
+            "notifications",
+            "email notification",
+            "push notification",
+            "toast",
+            "alert",
+            "اعلان",
+            "پیام‌رسانی",
+            "اعلان پوش",
+        ),
+    )
+    if notification_signal:
+        frontend = True
+        if _contains_any_term(
+            normalized,
+            (
+                "email",
+                "mail",
+                "push",
+                "server",
+                "api",
+                "queue",
+                "webhook",
+                "ایمیل",
+                "پوش",
+                "سمت سرور",
+            ),
+        ):
+            backend = True
+
+    chat_signal = _contains_any_term(
+        normalized,
+        (
+            "chat",
+            "live chat",
+            "messaging",
+            "conversation",
+            "websocket",
+            "websockets",
+            "چت",
+            "گفتگو",
+            "پیام‌رسانی",
+        ),
+    )
+    if chat_signal:
+        frontend = True
+        if _has_dynamic_data_signal(normalized) or _contains_any_term(
+            normalized,
+            ("websocket", "websockets", "send", "receive", "live", "بلادرنگ", "ارسال", "دریافت"),
+        ):
+            backend = True
+
+    account_or_admin_signal = _contains_any_term(
+        normalized,
+        (
+            "admin panel",
+            "user profile",
+            "profile",
+            "user roles",
+            "role based permissions",
+            "پنل مدیریت",
+            "پروفایل کاربر",
+            "نقش کاربری",
+            "سطح دسترسی",
+        ),
+    )
+    if account_or_admin_signal:
+        frontend = True
+        if _contains_any_term(
+            normalized,
+            (
+                "admin panel",
+                "user roles",
+                "role based permissions",
+                "auth",
+                "permission",
+                "database",
+                "api",
+                "server",
+                "پنل مدیریت",
+                "نقش کاربری",
+                "سطح دسترسی",
+            ),
+        ):
+            backend = True
+            if _contains_any_term(
+                normalized,
+                (
+                    "user roles",
+                    "role based permissions",
+                    "permission",
+                    "نقش کاربری",
+                    "سطح دسترسی",
+                ),
+            ):
+                security = True
+
+    commerce_or_reporting_signal = _contains_any_term(
+        normalized,
+        (
+            "subscription",
+            "subscriptions",
+            "billing",
+            "invoice",
+            "invoicing",
+            "analytics",
+            "analytics tracking",
+            "tracking",
+            "csv export",
+            "csv import",
+            "pdf generation",
+            "report generation",
+            "pdf report",
+            "generate report",
+            "export report",
+            "گزارش‌گیری",
+            "گزارش گیری",
+            "صورتحساب",
+            "فاکتور",
+            "اشتراک",
+            "تحلیل رفتار",
+            "ردیابی رویداد",
+            "خروجی csv",
+            "ورودی csv",
+            "تولید pdf",
+            "تولید گزارش",
+            "گزارش pdf",
+            "گزارش پی‌دی‌اف",
+        ),
+    )
+    if commerce_or_reporting_signal:
+        frontend = True
+        backend = True
+
+    if _contains_any_term(normalized, ("csv", "خروجی", "ورودی")) and _contains_any_term(
+        normalized,
+        ("export", "import", "خروجی", "ورودی", "فایل"),
+    ):
+        frontend = True
+        if not _contains_any_term(
+            normalized,
+            ("export button", "import button", "دکمه خروجی", "دکمه ورودی"),
+        ):
+            backend = True
+
+    security_boundary_signal = _contains_any_term(
+        normalized,
+        (
+            "captcha",
+            "rate limiting",
+            "rate limit",
+            "cors",
+            "audit log",
+            "audit trail",
+            "کپچا",
+            "محدودیت درخواست",
+            "محدودسازی درخواست",
+            "لاگ ممیزی",
+            "گزارش ممیزی",
+        ),
+    )
+    if security_boundary_signal:
+        backend = True
+        security = True
+        if _contains_any_term(normalized, ("captcha", "کپچا")):
+            frontend = True
+
+    localization_signal = _contains_any_term(
+        normalized,
+        (
+            "multilingual",
+            "multi-language",
+            "i18n",
+            "translation",
+            "rtl",
+            "right to left",
+            "چندزبانه",
+            "ترجمه",
+            "راست به چپ",
+        ),
+    )
+    if localization_signal:
+        frontend = True
+        if _contains_any_term(
+            normalized,
+            ("translation api", "translation service", "locale database", "ذخیره ترجمه", "سرویس ترجمه"),
+        ):
+            backend = True
+
+    # A service worker belongs to the browser application.  The generic word
+    # ``service`` is also a server signal, so explicitly remove that false
+    # backend route unless the ticket names a separate server boundary.
+    if _contains_any_term(normalized, ("service worker", "سرویس‌ورکر", "سرویس ورکر")):
+        frontend = True
+        if not _contains_any_term(
+            normalized,
+            ("service worker api", "service worker server", "سرویس ورکر سمت سرور"),
+        ):
+            backend = False
+
+    file_transfer_signal = _contains_any_term(
+        normalized,
+        (
+            "file download",
+            "download file",
+            "download endpoint",
+            "file export",
+            "دانلود فایل",
+            "خروجی فایل",
+        ),
+    )
+    if file_transfer_signal:
+        frontend = True
+        if not _contains_any_term(
+            normalized,
+            ("download button", "download ui", "دکمه دانلود", "رابط دانلود"),
+        ):
             backend = True
 
     if seo_signal:

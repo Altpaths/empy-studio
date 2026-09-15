@@ -72,6 +72,26 @@ def _task(root: Path, text: str, *, kind: str = "custom") -> ProductTask:
         ("Add save button", {"frontend"}),
         ("Change header/footer/content", {"frontend"}),
         ("Improve homepage", {"frontend"}),
+        ("Add search", {"frontend"}),
+        ("Add search with database results", {"frontend", "backend"}),
+        ("Add filters and pagination", {"frontend"}),
+        ("Add email notifications", {"frontend", "backend"}),
+        ("Add user roles", {"frontend", "backend", "security"}),
+        ("Add admin panel", {"frontend", "backend"}),
+        ("Add subscription billing", {"frontend", "backend"}),
+        ("Add websocket chat", {"frontend", "backend"}),
+        ("Add captcha", {"frontend", "backend", "security"}),
+        ("Add CORS", {"backend", "security"}),
+        ("Add audit log", {"backend", "security"}),
+        ("Add dark mode", {"frontend"}),
+        ("Add service worker", {"frontend"}),
+        ("Add PWA offline support", {"frontend"}),
+        ("Add export CSV", {"frontend", "backend"}),
+        ("Add PDF report", {"frontend", "backend"}),
+        ("Add file download", {"frontend", "backend"}),
+        ("Add multilingual support", {"frontend"}),
+        ("Fix broken links", {"frontend"}),
+        ("Create users table", {"backend"}),
         ("فرم تماس اضافه کن", {"frontend"}),
         ("منوی ناوبری اضافه کن", {"frontend"}),
         ("داشبورد بساز", {"frontend"}),
@@ -81,6 +101,10 @@ def _task(root: Path, text: str, *, kind: str = "custom") -> ProductTask:
         ("سئو و متادیتا اضافه کن", {"frontend"}),
         ("ورود و ثبت‌نام را اضافه کن", {"frontend", "backend", "security"}),
         ("واکنش‌گرا کن", {"frontend"}),
+        ("پشتیبانی چندزبانه", {"frontend"}),
+        ("چت بلادرنگ اضافه کن", {"frontend", "backend"}),
+        ("محدودیت درخواست اضافه کن", {"backend", "security"}),
+        ("گزارش‌گیری از پرداخت‌ها", {"frontend", "backend", "security"}),
         ("Update FinanceService.php", {"backend"}),
         ("Update index.php", {"frontend"}),
         ("Change App.tsx", {"frontend"}),
@@ -116,6 +140,7 @@ def test_table_ui_is_not_database_ownership() -> None:
     assert not _task_requests_data_model_changes("Add a data table to the dashboard")
     assert not _task_requests_data_model_changes("جدول نمایش بده")
     assert _task_requests_data_model_changes("Create a database table")
+    assert _task_requests_data_model_changes("Create users table")
     assert _task_requests_data_model_changes("Store price history")
 
 

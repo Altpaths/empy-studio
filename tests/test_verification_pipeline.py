@@ -390,6 +390,24 @@ def test_static_web_diagnostics_covers_html_css_and_javascript_references(
     assert not any("site.css" in item and "logo.svg" in item for item in errors)
 
 
+def test_static_web_diagnostics_checks_concrete_form_actions_but_allows_runtime_routes(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "index.html").write_text(
+        '<form action="missing.php"></form>'
+        '<form action="/api/contact"></form>'
+        '<form action="contact.php"></form>',
+        encoding="utf-8",
+    )
+    (tmp_path / "contact.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
+
+    errors = static_web_diagnostics(tmp_path)
+
+    assert any("missing.php" in item for item in errors)
+    assert not any("/api/contact" in item for item in errors)
+    assert not any("contact.php" in item for item in errors)
+
+
 def test_static_web_diagnostics_allows_runtime_css_variables(tmp_path: Path) -> None:
     (tmp_path / "index.html").write_text('<link href="site.css">', encoding="utf-8")
     (tmp_path / "site.css").write_text(

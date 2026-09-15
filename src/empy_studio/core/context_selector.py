@@ -291,7 +291,7 @@ TEST_CHANGE_ACTIONS: Final[frozenset[str]] = frozenset(
     }
 )
 WRITING_ROLES: Final[frozenset[str]] = frozenset(
-    {"frontend", "backend", "coordinator", "security", "release"}
+    {"frontend", "backend", "coordinator", "release"}
 )
 
 _CODE_SUFFIXES: Final[frozenset[str]] = frozenset(
@@ -1297,6 +1297,7 @@ def _is_writable_candidate_for_role(
     path_parts = {part.casefold() for part in Path(relative).parts[:-1]}
     suffix = candidate.path.suffix.casefold()
     name = candidate.path.name.casefold()
+    stem = candidate.path.stem.casefold()
     if (
         path_parts & TEST_PATH_PARTS
         and not _task_requests_test_changes(task_text)
@@ -1355,8 +1356,32 @@ def _is_writable_candidate_for_role(
             }
         )
     if role == "backend":
+        backend_path_parts = path_parts & (_BACKEND_PARTS - {"app", "lib", "src"})
+        backend_name = any(
+            hint in stem
+            for hint in (
+                "api",
+                "auth",
+                "controller",
+                "database",
+                "handler",
+                "migration",
+                "model",
+                "payment",
+                "repository",
+                "route",
+                "schema",
+                "server",
+                "service",
+                "storage",
+                "webhook",
+            )
+        )
         if suffix in _CODE_SUFFIXES and suffix not in {".css", ".html", ".htm"}:
-            return True
+            if suffix not in _FRONTEND_SUFFIXES:
+                return True
+            if backend_path_parts or backend_name:
+                return True
         if project.descriptor.project_type in {"php", "laravel"} and name in {"index.php", "artisan"}:
             return True
         if path_parts & _BACKEND_PARTS and suffix in TEXT_EXTENSIONS:

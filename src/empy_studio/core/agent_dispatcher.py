@@ -12,9 +12,11 @@ from typing import Final, Literal
 from .context_selector import ContextPack, ContextSelection
 from .path_policy import (
     is_agent_denied_relative_path,
+    is_directory_scope,
     is_root_scope,
     normalize_relative_path,
     project_path,
+    scope_contains,
     scopes_overlap,
 )
 from .planner import AgentRole, ExecutionPlan, PlanStep
@@ -75,7 +77,7 @@ ROLE_CAPABILITIES: Final[dict[AgentRole, tuple[AgentCapability, ...]]] = {
 }
 
 WRITING_ROLES: Final[frozenset[AgentRole]] = frozenset(
-    {"frontend", "backend", "coordinator", "security", "release"}
+    {"frontend", "backend", "coordinator", "release"}
 )
 
 
@@ -264,6 +266,17 @@ def default_agent_registry() -> AgentRegistry:
                     "functions/**",
                     "pages/api/**",
                     "app/api/**",
+                    "server.*",
+                    "*.server.*",
+                    "api.*",
+                    "*.api.*",
+                    "routes.*",
+                    "*.routes.*",
+                    "src/server.*",
+                    "src/api/**",
+                    "src/routes/**",
+                    "src/services/**",
+                    "src/controllers/**",
                     "test/**",
                     "tests/**",
                     "**/test_*.py",
@@ -765,7 +778,14 @@ def _build_ownership(
             if (
                 step.suggested_agent in WRITING_ROLES
                 and "direct indexed dependency context (read-only)" not in context_file.reasons
-                and _matches_ownership_pattern(agent, context_file.relative_path)
+                and (
+                    _matches_ownership_pattern(agent, context_file.relative_path)
+                    or any(
+                        reason.startswith("approved ")
+                        and "target is currently missing" in reason
+                        for reason in context_file.reasons
+                    )
+                )
                 and (
                     not _is_data_model_path(context_file.relative_path)
                     or "ticket requests data model changes" in context_file.reasons
@@ -821,11 +841,70 @@ def _build_ownership(
             )
         )
 
-    # A missing target must be represented by a concrete virtual file from the
-    # context selector.  Widening a writer to the application root makes a
-    # typo or an incomplete plan look executable and lets a provider create
-    # unrelated files.  The per-node validation below turns this into an
-    # actionable planning error instead of a broad ``./`` permission.
+    # A nested web application can legitimately need a new sibling file even
+    # when the ticket names only an existing entry point.  Grant that ability
+    # only when project detection identified one concrete verification root,
+    # there is exactly one implementation writer, and the context selector
+    # already gave that writer an exact target below the root.  This is a
+    # bounded application sub-tree, never the project root.  Backend and
+    # coordinator work may need a sibling endpoint/service that cannot be
+    # predicted from one existing PHP entry point; frontend and security work
+    # remain exact-target only so a homepage request cannot widen into the
+    # whole public tree.
+    writing_steps = [
+        step for step in plan.steps if step.suggested_agent in WRITING_ROLES
+    ]
+    verification_roots = [
+        marker.removeprefix("verification-root:").strip()
+        for marker in selection.project_brain.markers
+        if marker.startswith("verification-root:")
+    ]
+    if len(writing_steps) == 1 and verification_roots:
+        step = writing_steps[0]
+        owner = assignments[step.step_id]
+        if owner.role in {"backend", "coordinator"}:
+            owned_exact_paths = {
+                item.relative_path
+                for item in ownership
+                if item.owner_step_id == step.step_id
+                and not is_directory_scope(item.relative_path)
+            }
+            for raw_root in verification_roots:
+                try:
+                    root_scope = normalize_relative_path(
+                        raw_root,
+                        allow_directory=True,
+                    )
+                except ValueError:
+                    continue
+                if (
+                    is_root_scope(root_scope)
+                    or is_agent_denied_relative_path(root_scope)
+                    or not any(scope_contains(root_scope, path) for path in owned_exact_paths)
+                ):
+                    continue
+                if not is_directory_scope(root_scope):
+                    root_scope += "/"
+                if any(item.relative_path == root_scope for item in ownership):
+                    break
+                ownership.append(
+                    FileOwnership(
+                        relative_path=root_scope,
+                        owner_node_id=f"node-{step.step_id}",
+                        owner_agent_id=owner.agent_id,
+                        owner_step_id=step.step_id,
+                        reader_agent_ids=(),
+                        reason=(
+                            "bounded creation scope for the detected verification "
+                            "root; existing files still require exact ownership"
+                        ),
+                    )
+                )
+                break
+
+    # A missing target must otherwise be represented by a concrete virtual file
+    # from the context selector.  Widening a writer to the project root would
+    # make a typo or incomplete plan executable and permit unrelated files.
     return tuple(ownership)
 
 

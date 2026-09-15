@@ -520,7 +520,7 @@ class CodexGraphRuntime:
         elif (
             node_result.status == "completed"
             and task is not None
-            and node.agent_role in {"frontend", "backend", "coordinator", "security", "release"}
+            and node.agent_role in {"frontend", "backend", "coordinator", "release"}
             and not changed_files
         ):
             error_message = (

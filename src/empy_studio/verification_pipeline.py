@@ -262,6 +262,12 @@ class _StaticHtmlParser(HTMLParser):
             normalized = name.casefold()
             if normalized in {"href", "src"}:
                 self.references.append((normalized, value.strip()))
+            elif normalized in {"action", "formaction"}:
+                # A path with a concrete file suffix can be checked like a
+                # local asset (for example contact.php). Extensionless form
+                # routes are runtime contracts and are intentionally left to
+                # the application verification command.
+                self.references.append((normalized, value.strip()))
             elif normalized == "srcset":
                 for candidate in value.split(","):
                     reference = candidate.strip().split(maxsplit=1)[0]
@@ -371,7 +377,7 @@ def _is_external_or_runtime_reference(raw_reference: str, *, kind: str) -> bool:
             return True
         if not PurePosixPath(path).suffix and not path.startswith(("./", "../")):
             return True
-    return False
+    return kind in {"action", "formaction"} and not PurePosixPath(parsed.path).suffix
 
 
 def _read_static_file(path: Path) -> str | None:

@@ -40,6 +40,11 @@ from empy_studio.core import (
     lock_token_budget,
     mark_ready_for_planning,
 )
+from empy_studio.core.path_policy import (
+    is_agent_denied_relative_path,
+    normalize_relative_path,
+    project_path,
+)
 from empy_studio.core.project_brain import (
     ProjectBrainIndex,
     build_load_save_project_brain_index,
@@ -1915,11 +1920,19 @@ class GuidedState:
             return ()
 
         paths = tuple(sorted(snapshot.status))
-        unsafe_paths = tuple(
-            path
-            for path in paths
-            if not CodexGraphRuntime._path_is_owned(path, ("./",))
-        )
+        unsafe: list[str] = []
+        for path in paths:
+            try:
+                normalized = normalize_relative_path(path)
+                if is_agent_denied_relative_path(normalized):
+                    raise ValueError("generated or protected path")
+                # Checkpointing is an isolated-worktree operation.  It needs
+                # to preserve any safe user file, while provider ownership
+                # remains intentionally narrower and never uses ``./``.
+                project_path(root, normalized, allow_directory=False)
+            except ValueError:
+                unsafe.append(path)
+        unsafe_paths = tuple(unsafe)
         if unsafe_paths:
             raise RuntimeError(
                 "Empy found a protected or generated path in the isolated partial "
@@ -2126,7 +2139,7 @@ class GuidedState:
             if node.status == "completed":
                 continue
             if node.status == "failed" and node.error_code == "budget_exceeded":
-                if not node.changed_files or role not in {"frontend", "backend", "coordinator", "security", "release"}:
+                if not node.changed_files or role not in {"frontend", "backend", "coordinator", "release"}:
                     return False
                 has_budget_limited_change = True
                 continue
