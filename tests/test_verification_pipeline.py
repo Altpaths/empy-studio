@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from empy_studio import verification_pipeline
 from empy_studio.core.project_service import DefaultProjectService
 from empy_studio.verification_pipeline import (
     VerificationCancelled,
@@ -30,6 +31,22 @@ def test_python_project_mapping_has_required_panels(tmp_path: Path) -> None:
     detection = DefaultProjectService().detect(tmp_path)
     checks = map_project_verification(detection)
     assert {item.category for item in checks} == {"tests", "build", "lint"}
+
+
+def test_frozen_app_uses_its_dedicated_static_check_entrypoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(verification_pipeline.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(
+        verification_pipeline.sys,
+        "executable",
+        "/Applications/Empy Studio.app/Contents/MacOS/Empy Studio",
+    )
+
+    assert verification_pipeline._static_web_check_command() == (
+        "/Applications/Empy Studio.app/Contents/MacOS/Empy Studio",
+        "--empy-static-web-check",
+    )
 
 
 def test_plain_php_composer_mapping_keeps_test_contract_visible_without_dependencies(

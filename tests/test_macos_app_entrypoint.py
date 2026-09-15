@@ -52,3 +52,12 @@ def test_default_launch_selects_installation_and_preserves_arguments(monkeypatch
     monkeypatch.setattr(entry.sys, "argv", ["Empy", "--port", "9000"])
     assert entry.main() == 7
     assert calls == [["--workspace", "/data/install", "--start-page", "--port", "9000"]]
+
+
+def test_static_check_mode_does_not_start_the_desktop_server(monkeypatch):
+    calls = []
+    monkeypatch.setattr(entry, "desktop_main", lambda argv: calls.append(argv) or 7)
+    monkeypatch.setattr(entry, "run_static_web_check", lambda root: calls.append(root) or 0)
+
+    assert entry.main(["--empy-static-web-check"]) == 0
+    assert calls == [Path.cwd()]

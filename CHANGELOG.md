@@ -1,3 +1,13 @@
+## [0.1.61] - 2026-09-16
+
+- Make the built-in Static HTML/CSS/JS Verification check work from the
+  packaged macOS application instead of passing Python module arguments to the
+  GUI entrypoint.
+- Use a real host Python executable for Python-project checks launched by a
+  frozen app, and keep missing interpreters as recorded verification failures.
+- Add acceptance coverage for the packaged static-check entrypoint so a
+  release cannot regress into a false `no_progress` repair loop.
+
 ## [0.1.60] - 2026-09-16
 
 - Keep the economy node allocation and enforce a hard fresh-token boundary,

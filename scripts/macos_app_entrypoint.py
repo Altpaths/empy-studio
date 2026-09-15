@@ -8,6 +8,7 @@ from pathlib import Path
 
 from empy_studio.platform_support import default_workspace_root
 from empy_studio.web_desktop import main as desktop_main
+from empy_studio.verification_pipeline import run_static_web_check
 
 
 def installation_workspace(executable: Path | None = None) -> Path:
@@ -30,6 +31,8 @@ def installation_workspace(executable: Path | None = None) -> Path:
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
+    if args == ["--empy-static-web-check"]:
+        return run_static_web_check(Path.cwd())
     if not any(arg == "--clean" or arg == "--workspace" or arg.startswith("--workspace=") for arg in args):
         args = ["--workspace", str(installation_workspace()), "--start-page", *args]
     return desktop_main(args)

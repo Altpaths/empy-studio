@@ -50,3 +50,16 @@ The reproduced usage shape and the hard-overage path are covered by regression
 tests. No provider call is made by the test suite.
 
 ## Previous release context
+# Empy Studio 0.1.61 — packaged Verification entrypoint
+
+The packaged macOS app now runs Empy’s built-in Static HTML/CSS/JS check
+through a dedicated non-GUI entrypoint. Previously the frozen app interpreted
+the `-m empy_studio.verification_pipeline` arguments as GUI arguments, causing
+valid projects to fail Verification and enter a pointless repair loop. Python
+project checks also select a host `python3`/`python` interpreter when the app
+is frozen, while an unavailable interpreter remains a visible failed check.
+
+The full suite and packaged macOS acceptance cover this path. The acceptance
+provider is deterministic and local; no live model call is used.
+
+## Previous release context

@@ -5,6 +5,7 @@ import json
 import os
 import posixpath
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -486,7 +487,27 @@ def static_web_diagnostics(
 
 
 def _static_web_check_command() -> tuple[str, ...]:
+    # A frozen PyInstaller executable is the desktop application's GUI entry
+    # point, so ``<app> -m empy_studio.verification_pipeline`` is not a valid
+    # module invocation.  The app entry point exposes a small, non-GUI static
+    # check mode for this isolated subprocess instead.
+    if bool(getattr(sys, "frozen", False)):
+        return (sys.executable, "--empy-static-web-check")
     return (sys.executable, "-m", "empy_studio.verification_pipeline", "--static-web-check")
+
+
+def _python_executable() -> str:
+    """Select a real Python interpreter for checks launched by a frozen app."""
+
+    if not bool(getattr(sys, "frozen", False)):
+        return sys.executable
+    for candidate in ("python3", "python"):
+        executable = shutil.which(candidate)
+        if executable:
+            return executable
+    # The resulting command will fail with a normal, recorded 127-style
+    # verification result rather than recursively starting the GUI binary.
+    return "python3"
 
 
 def _verification_environment() -> dict[str, str]:
@@ -637,11 +658,12 @@ def map_project_verification(detection: ProjectDetection) -> tuple[VerificationC
     project_type = detection.descriptor.project_type
     checks: list[VerificationCheck] = []
     if project_type == "python":
+        python = _python_executable()
         checks.extend(
             (
-                VerificationCheck("tests", "Python tests", "tests", (sys.executable, "-m", "pytest", "-q")),
-                VerificationCheck("build", "Python compilation", "build", (sys.executable, "-m", "compileall", "-q", "src")),
-                VerificationCheck("lint", "Ruff lint", "lint", (sys.executable, "-m", "ruff", "check", ".")),
+                VerificationCheck("tests", "Python tests", "tests", (python, "-m", "pytest", "-q")),
+                VerificationCheck("build", "Python compilation", "build", (python, "-m", "compileall", "-q", "src")),
+                VerificationCheck("lint", "Ruff lint", "lint", (python, "-m", "ruff", "check", ".")),
             )
         )
     elif project_type == "laravel":
@@ -1075,15 +1097,22 @@ def finalize_verification(report: VerificationReport) -> VerificationReport:
     return replace(report, finalized_at=_now())
 
 
-def _main() -> int:
-    if len(sys.argv) == 2 and sys.argv[1] == "--static-web-check":
-        errors = static_web_diagnostics(Path.cwd())
-        if errors:
-            for error in errors:
-                print(error, file=sys.stderr)
-            return 1
-        print("Static HTML/CSS/JS link check passed")
-        return 0
+def run_static_web_check(project_root: str | Path = ".") -> int:
+    """Run the built-in static web check as a subprocess-safe entry point."""
+
+    errors = static_web_diagnostics(project_root)
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
+    print("Static HTML/CSS/JS link check passed")
+    return 0
+
+
+def _main(argv: tuple[str, ...] | None = None) -> int:
+    arguments = tuple(sys.argv[1:] if argv is None else argv)
+    if arguments == ("--static-web-check",):
+        return run_static_web_check(Path.cwd())
     return 2
 
 
