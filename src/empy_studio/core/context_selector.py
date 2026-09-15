@@ -319,6 +319,44 @@ DATA_MODEL_PHRASES: Final[tuple[str, ...]] = (
     "ذخیره سازی",
 )
 
+MARKET_TASK_TOKENS: Final[frozenset[str]] = frozenset(
+    {
+        "asset",
+        "assets",
+        "finance",
+        "portfolio",
+        "price",
+        "prices",
+        "quote",
+        "market",
+        "chart",
+        "graph",
+        "plot",
+        "live",
+        "realtime",
+        "real-time",
+        "دارایی",
+        "نمودار",
+        "قیمت",
+        "بازار",
+        "مالی",
+        "لحظه",
+    }
+)
+
+MARKET_MODULE_TOKENS: Final[frozenset[str]] = frozenset(
+    {
+        "asset",
+        "assets",
+        "finance",
+        "portfolio",
+        "price",
+        "prices",
+        "market",
+        "quote",
+    }
+)
+
 
 def _task_requests_data_model_changes(task_text: str) -> bool:
     """Detect when persistence files are part of the requested implementation.
@@ -549,6 +587,13 @@ def _expanded_task_tokens(value: str) -> frozenset[str]:
         "مقایسه": ("compare", "comparison"),
         "مقابسه": ("compare", "comparison"),
         "پایش": ("patrol", "monitor", "monitoring", "journey"),
+        "دارایی": ("asset", "assets", "finance", "portfolio"),
+        "نمودار": ("chart", "graph", "plot", "sparkline"),
+        "قیمت": ("price", "prices", "quote", "market"),
+        "لحظه": ("live", "realtime", "real-time", "quote"),
+        "واقعی": ("real", "live", "market"),
+        "جمع": ("collect", "fetch", "gather", "aggregate"),
+        "اطلاعات": ("data", "information"),
         "مالی": ("financial", "finance", "analyze"),
         "تحلیل": ("analyze", "analysis"),
         "اتصال": ("api", "client", "service", "integration"),
@@ -931,7 +976,11 @@ def _score_candidate(
     brain_index: ProjectBrainIndex | None = None,
 ) -> tuple[int, tuple[str, ...]]:
     relative = candidate.relative_path
-    path_tokens = _tokens(relative.replace("/", " ").replace(".", " "))
+    path_tokens = _tokens(
+        re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", relative)
+        .replace("/", " ")
+        .replace(".", " ")
+    )
     role = step.suggested_agent
     path_parts = {part.casefold() for part in Path(relative).parts[:-1]}
     documentation_path = (
@@ -983,9 +1032,66 @@ def _score_candidate(
 
     lowered = relative.lower()
     role_keywords = ROLE_KEYWORDS.get(role, ())
-    if any(keyword in path_tokens for keyword in role_keywords):
+    frontend_file = (
+        candidate.path.suffix.casefold() in _FRONTEND_SUFFIXES
+        and bool(
+            path_parts
+            & {
+                "assets",
+                "css",
+                "js",
+                "frontend",
+                "public",
+                "scripts",
+            }
+        )
+    )
+    if any(keyword in path_tokens for keyword in role_keywords) and not (
+        role == "backend" and frontend_file
+    ):
         score += 24
         reasons.append(f"{role} path signal")
+
+    if role == "frontend" and task_tokens & MARKET_TASK_TOKENS:
+        filename = candidate.path.name.casefold()
+        if filename in {"app.js", "app.ts", "chart.js", "chart.ts", "dashboard.js"}:
+            score += 54
+            reasons.append("market-data task targets interactive asset")
+        elif (
+            candidate.path.suffix.casefold() in {".js", ".ts"}
+            and "assets" in path_parts
+            and filename not in {"passkeys.js", "pwa-install.js", "webmcp.js"}
+        ):
+            score += 30
+            reasons.append("market-data task targets asset script")
+
+    if (
+        role in {"backend", "coordinator"}
+        and task_tokens & MARKET_TASK_TOKENS
+        and candidate.path.suffix.casefold() not in _FRONTEND_SUFFIXES
+        and candidate.path.suffix.casefold() != ".sql"
+    ):
+        module_tokens = set(path_tokens)
+        if candidate.brain_record is not None:
+            module_tokens.update(
+                _tokens(
+                    " ".join(
+                        (
+                            candidate.brain_record.language,
+                            candidate.brain_record.summary,
+                            *candidate.brain_record.imports,
+                            *candidate.brain_record.symbols,
+                        )
+                    )
+                )
+            )
+        module_overlap = module_tokens & MARKET_MODULE_TOKENS
+        if module_overlap:
+            if module_overlap & {"asset", "assets", "finance", "portfolio"}:
+                score += 48
+            else:
+                score += min(48, len(module_overlap) * 24)
+            reasons.append("market-data task matches financial module")
 
     if (
         role in {"backend", "coordinator"}
@@ -1217,6 +1323,42 @@ def _virtual_writer_target(
     if prefix in {".", "./"}:
         prefix = ""
     return f"{prefix}/{filename}" if prefix else filename
+
+
+def _market_virtual_writer_targets(
+    *,
+    project: ProjectDetection,
+    role: AgentRole,
+    task_text: str,
+) -> tuple[str, ...]:
+    """Return exact, conventional creation targets for a market-data ticket.
+
+    A market chart often needs a small server endpoint even when the imported
+    project does not contain one yet.  Granting the whole verification root
+    would let a provider create unrelated files (and was the reason an old
+    run accepted an unrequested migration).  Keep the creation contract
+    explicit: the endpoint is a single exact path, while existing files still
+    require their own ownership records.
+    """
+
+    if role != "backend" or not requests_implementation(task_text):
+        return ()
+    if not (_expanded_task_tokens(task_text) & MARKET_TASK_TOKENS):
+        return ()
+    if project.descriptor.project_type not in {"php", "laravel"}:
+        return ()
+
+    root = project.effective_verification_root
+    try:
+        prefix = root.relative_to(project.descriptor.root).as_posix()
+    except ValueError:
+        prefix = ""
+    if prefix in {".", "./"}:
+        prefix = ""
+    relative = f"{prefix}/asset-prices.php" if prefix else "asset-prices.php"
+    if (project.descriptor.root / relative).is_file():
+        return ()
+    return (relative,)
 
 
 def _project_brain(project: ProjectDetection) -> ProjectBrain:
@@ -1466,7 +1608,32 @@ def _build_pack(
             -item[0], item[1],
         ))
 
-    files: list[ContextFile] = [virtual_target] if virtual_target is not None else []
+    virtual_targets: list[ContextFile] = (
+        [virtual_target] if virtual_target is not None else []
+    )
+    for relative in _market_virtual_writer_targets(
+        project=project,
+        role=step.suggested_agent,
+        task_text=task_text,
+    ):
+        if any(item.relative_path == relative for item in virtual_targets):
+            continue
+        virtual_targets.append(
+            ContextFile(
+                relative_path=relative,
+                score=88,
+                reasons=(
+                    "approved market endpoint target is currently missing",
+                ),
+                size_bytes=0,
+                included_bytes=0,
+                sha256=hashlib.sha256(b"").hexdigest(),
+                truncated=False,
+                content="",
+            )
+        )
+
+    files: list[ContextFile] = virtual_targets
     total_bytes = 0
     writer_pack = step.suggested_agent in WRITING_ROLES
     homepage_writer = (
@@ -1534,7 +1701,7 @@ def _build_pack(
         objective=step.objective,
         files=tuple(files),
         total_bytes=total_bytes,
-        candidate_count=len(scored) + (1 if virtual_target is not None else 0),
+        candidate_count=len(scored) + len(virtual_targets),
     )
     pack.validate()
     return pack

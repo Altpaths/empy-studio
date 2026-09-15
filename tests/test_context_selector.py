@@ -371,6 +371,81 @@ def test_restore_word_does_not_request_data_model_ownership() -> None:
     assert not _task_requests_data_model_changes("Improve the restore flow")
 
 
+def test_persian_market_chart_ticket_selects_existing_finance_modules(
+    tmp_path: Path,
+) -> None:
+    public_html = tmp_path / "public_html"
+    (public_html / "src").mkdir(parents=True)
+    (public_html / "assets").mkdir(parents=True)
+    (public_html / "database").mkdir(parents=True)
+    (public_html / "tests").mkdir(parents=True)
+    (public_html / "composer.json").write_text('{"name":"holda/demo"}\n', encoding="utf-8")
+    (public_html / "assets.php").write_text(
+        "<?php echo 'assets';\n", encoding="utf-8"
+    )
+    (public_html / "finance.php").write_text(
+        "<?php echo 'finance';\n", encoding="utf-8"
+    )
+    (public_html / "src" / "FinanceService.php").write_text(
+        "<?php class FinanceService { public function assets() {} }\n",
+        encoding="utf-8",
+    )
+    (public_html / "assets" / "app.js").write_text(
+        "document.querySelector('[data-assets]');\n", encoding="utf-8"
+    )
+    (public_html / "database" / "schema.sql").write_text(
+        "CREATE TABLE finance_assets (id INT);\n", encoding="utf-8"
+    )
+    (public_html / "tests" / "site-audit.php").write_text(
+        "<?php echo 'ok';\n", encoding="utf-8"
+    )
+    project = DefaultProjectService().detect(tmp_path)
+    text = "برای بخش دارایی ها یک نمودار با قیمت های واقعی لحظه ای اضافه کن"
+    task = ProductTask(
+        task_id="persian-market-chart",
+        project_root=str(tmp_path.resolve()),
+        kind="custom",
+        title=text,
+        objective=text,
+        requirements=("اطلاعات و قیمت ها واقعی جمع اوری شود",),
+        constraints=("Do not change unrelated files",),
+        definition_of_done=("The chart verification passes",),
+        status="ready_for_planning",
+    )
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+    assert {step.suggested_agent for step in plan.steps} >= {"frontend", "backend"}
+
+    brain = build_project_brain_index(tmp_path).index
+    selection = build_context_selection(
+        task=task,
+        project=project,
+        plan=plan,
+        brain_index=brain,
+    )
+    backend_pack = next(pack for pack in selection.packs if pack.agent_role == "backend")
+    backend_paths = {item.relative_path for item in backend_pack.files}
+    assert "public_html/assets.php" in backend_paths
+    assert "public_html/src/FinanceService.php" in backend_paths
+    endpoint = next(
+        item for item in backend_pack.files
+        if item.relative_path == "public_html/asset-prices.php"
+    )
+    assert endpoint.content == ""
+    assert "approved market endpoint target is currently missing" in endpoint.reasons
+
+    budget = lock_token_budget(build_token_budget(plan=plan, selection=selection))
+    graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+    backend_node = next(node for node in graph.nodes if node.agent_role == "backend")
+    assert "public_html/assets.php" in backend_node.owned_files
+    assert "public_html/src/FinanceService.php" in backend_node.owned_files
+    assert "public_html/asset-prices.php" in backend_node.owned_files
+    frontend_node = next(node for node in graph.nodes if node.agent_role == "frontend")
+    assert "public_html/assets/app.js" in frontend_node.owned_files
+
+
 def test_documentation_ticket_keeps_named_readme_in_writer_context(
     tmp_path: Path,
 ) -> None:
