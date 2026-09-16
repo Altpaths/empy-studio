@@ -1157,6 +1157,9 @@ def test_failed_agent_report_is_recovered_as_a_specific_ownership_error(
     assert "Agent report" in context["failures"][0]["detail"]
     assert "public_html/index.html" in context["findings"][0]
     assert state.public()["run_report"]["guidance"]["kind"] == "ownership_mismatch"
+    continuation = state._build_continuation_context()
+    assert "فایل مالکیت" in continuation
+    assert "public_html/index.html" in continuation
 
 
 def test_runtime_failure_has_an_automatic_continuation_hook(tmp_path: Path) -> None:

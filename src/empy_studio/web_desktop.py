@@ -1796,6 +1796,27 @@ class GuidedState:
                     f"- {result.check.check_id}: {result.check.label}; command={list(result.check.command)!r} (return code {result.returncode}): {detail}"
                 )
             return "\n".join(lines)[:4000]
+        failure_context = (
+            self._failure_context_from_state()
+            if self.run is not None and self.run.status != "completed"
+            else self.failure_context
+        )
+        if failure_context is not None:
+            lines = [
+                "Previous Empy execution failed and the next attempt must resolve its confirmed root cause before release:",
+            ]
+            failures = failure_context.get("failures", [])
+            if failures:
+                for item in failures[:4]:
+                    label = str(item.get("label", "Agent execution"))
+                    detail = _safe_verification_detail(str(item.get("detail", "")), roots)
+                    lines.append(f"- {label}: {detail}")
+            else:
+                lines.extend(
+                    f"- {item}"
+                    for item in failure_context.get("diagnostics", [])[:4]
+                )
+            return "\n".join(lines)[:4000]
         message = self.run.error_message if self.run is not None else self.error
         if message:
             return (
