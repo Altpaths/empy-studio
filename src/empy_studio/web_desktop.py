@@ -3401,7 +3401,70 @@ class GuidedState:
             if self.run is not None and self.run.error_message
             else self.error or ""
         )
-        if _failure_kind(run_error_text) == "no_change":
+        run_failure_kind = _failure_kind(run_error_text)
+        if self.run is not None and self.run.status != "completed":
+            # Prefer the specific worker evidence recovered by the failure
+            # context over the graph's generic objective_not_met message.
+            refreshed_context = self._failure_context_from_state()
+            contextual_failures = (refreshed_context or {}).get("failures", [])
+            contextual_kind = next(
+                (
+                    str(item.get("kind", ""))
+                    for item in contextual_failures
+                    if str(item.get("kind", ""))
+                    in {
+                        "ownership_mismatch",
+                        "no_writable_files",
+                        "token_budget",
+                        "dirty_worktree",
+                        "no_change",
+                    }
+                ),
+                "",
+            )
+            if contextual_kind:
+                run_failure_kind = contextual_kind
+        if run_failure_kind == "ownership_mismatch":
+            repair_available = (
+                self.repair_attempts < self.recovery.policy.max_attempts
+                and self.recovery.status != "running"
+            )
+            if self.language == "en":
+                return {
+                    "kind": "ownership_mismatch",
+                    "title": "The selected file target does not match this project",
+                    "summary": (
+                        "Empy found the requested work, but the Agent was assigned a file outside the project's real layout. "
+                        "No unapproved file was changed."
+                    ),
+                    "steps": [
+                        (
+                            "Choose Automatically repair and rerun. Empy will refresh the project map and assign the real target."
+                            if repair_available
+                            else "Choose Continue and fix ticket after selecting the real project target."
+                        ),
+                    ],
+                    "action": "auto-repair" if repair_available else "resume-ticket",
+                    "repair_available": repair_available,
+                }
+            return {
+                "kind": "ownership_mismatch",
+                "title": "هدف فایل با ساختار واقعی پروژه یکی نیست",
+                "summary": (
+                    "Empy کار درخواستی را پیدا کرد، اما Agent به فایلی خارج از ساختار واقعی پروژه وصل شده بود؛ "
+                    "هیچ فایل تأییدنشده‌ای تغییر نکرده است."
+                ),
+                "steps": [
+                    (
+                        "روی «اصلاح خودکار و اجرای دوباره» بزنید؛ Empy فهرست پروژه را تازه می‌کند و فایل واقعی را انتخاب می‌کند."
+                        if repair_available
+                        else "پس از انتخاب هدف واقعی پروژه، روی «ادامه و اصلاح تیکت» بزنید."
+                    ),
+                ],
+                "action": "auto-repair" if repair_available else "resume-ticket",
+                "repair_available": repair_available,
+            }
+        if run_failure_kind == "no_change":
             repair_available = (
                 self.repair_attempts < self.recovery.policy.max_attempts
                 and self.recovery.status != "running"
@@ -3444,7 +3507,7 @@ class GuidedState:
                 "action": "auto-repair" if repair_available else "resume-ticket",
                 "repair_available": repair_available,
             }
-        if _failure_kind(run_error_text) == "dirty_worktree":
+        if run_failure_kind == "dirty_worktree":
             repair_available = self.repair_attempts < self.recovery.policy.max_attempts and self.recovery.status != "running"
             if self.language == "en":
                 return {
