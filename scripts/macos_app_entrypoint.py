@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 
 from empy_studio.platform_support import default_workspace_root
-from empy_studio.web_desktop import main as desktop_main
 from empy_studio.verification_pipeline import run_static_web_check
+from empy_studio.web_desktop import main as desktop_main
 
 
 def installation_workspace(executable: Path | None = None) -> Path:
