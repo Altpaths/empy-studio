@@ -431,6 +431,22 @@ class CodexGraphRuntime:
         result.validate()
         return result
 
+    @staticmethod
+    def _failure_with_agent_report(message: str, summary: str) -> str:
+        """Keep the provider's bounded root-cause report with a mapped failure.
+
+        The runtime must add its own machine-checkable failure reason, but
+        replacing the worker's report with that generic reason loses the fact
+        the user needs to act on (for example, an ownership mismatch or a
+        missing entry point).  Preserve a bounded copy for diagnostics and
+        let the web layer redact it before display.
+        """
+
+        report = summary.strip()
+        if not report or report.casefold() == message.casefold():
+            return message
+        return f"{message} Agent report: {report[:2400]}"
+
     def _prompt_estimates(self) -> tuple[tuple[str, int], ...]:
         with self._prompt_measurement_lock:
             return tuple(sorted(self._prompt_measurements.items()))
@@ -658,7 +674,10 @@ class CodexGraphRuntime:
                     status="failed",
                     summary="The requested implementation was not produced.",
                     error_code="objective_not_met",
-                    error_message=error_message,
+                    error_message=self._failure_with_agent_report(
+                        error_message,
+                        node_result.summary,
+                    ),
                 )
                 report(
                     CodexProgressEvent(
@@ -682,7 +701,10 @@ class CodexGraphRuntime:
                 node_result,
                 status="failed",
                 error_code="objective_not_met",
-                error_message=error_message,
+                error_message=self._failure_with_agent_report(
+                    error_message,
+                    node_result.summary,
+                ),
             )
             report(
                 CodexProgressEvent(

@@ -72,3 +72,31 @@ def test_preflight_failure_with_absolute_path_falls_back_to_safe_message() -> No
 
     assert "/Users/example/project" not in message
     assert "Choose an existing project folder" in message
+
+
+def test_provider_auth_failure_has_one_actionable_message_without_raw_details() -> None:
+    error = RuntimeError(
+        "Dedicated route credential is missing for OmniRoute; set EMPY_OMNIROUTE_API_KEY"
+    )
+
+    fa = safe_user_error(error)
+    en = safe_user_error(error, language="en")
+
+    assert "کلید" in fa
+    assert "EMPY_OMNIROUTE_API_KEY" not in fa
+    assert "codex login" in en
+    assert "EMPY_OMNIROUTE_API_KEY" not in en
+
+
+def test_provider_target_failure_explains_layout_mismatch() -> None:
+    error = RuntimeError(
+        "Agent changed public_html/index.html outside this node's ownership; "
+        "the real entry point is public_html/index.php"
+    )
+
+    fa = safe_user_error(error)
+    en = safe_user_error(error, language="en")
+
+    assert "ساختار واقعی پروژه" in fa
+    assert "index.html" not in fa
+    assert "real layout" in en

@@ -332,6 +332,52 @@ def test_missing_php_homepage_gets_virtual_frontend_ownership(tmp_path: Path) ->
     }
 
 
+def test_php_asset_ticket_uses_real_frontend_assets_instead_of_virtual_homepage(
+    tmp_path: Path,
+) -> None:
+    public_html = tmp_path / "public_html"
+    (public_html / "assets").mkdir(parents=True)
+    (public_html / "index.php").write_text("<?php echo 'home';\n", encoding="utf-8")
+    (public_html / "assets" / "app.js").write_text(
+        "document.querySelector('[data-assets]');\n",
+        encoding="utf-8",
+    )
+    (public_html / "assets" / "home.css").write_text(
+        ".asset-chart { display: block; }\n",
+        encoding="utf-8",
+    )
+    (public_html / "composer.json").write_text(
+        '{"name":"demo/site","scripts":{"test":"php -l index.php"}}\n',
+        encoding="utf-8",
+    )
+    project = DefaultProjectService().detect(tmp_path)
+    text = "برای بخش دارایی ها نمودار قیمت لحظه ای با درصد افزایش اضافه کن"
+    task = ProductTask(
+        task_id="php-asset-chart",
+        project_root=str(tmp_path.resolve()),
+        kind="custom",
+        title=text,
+        objective=text,
+        requirements=("نمودار در صفحهٔ دارایی‌ها نمایش داده شود",),
+        constraints=("Do not change unrelated files",),
+        definition_of_done=("Chart verification passes",),
+        status="ready_for_planning",
+    )
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+    selection = build_context_selection(task=task, project=project, plan=plan)
+    budget = lock_token_budget(build_token_budget(plan=plan, selection=selection))
+    graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+
+    frontend = next(node for node in graph.nodes if node.agent_role == "frontend")
+
+    assert "public_html/index.html" not in frontend.owned_files
+    assert "public_html/assets/app.js" in frontend.owned_files
+    assert "public_html/assets/home.css" in frontend.owned_files
+
+
 def test_explicit_test_update_is_owned_by_the_writer(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text(
         "[project]\nname = 'demo'\n",

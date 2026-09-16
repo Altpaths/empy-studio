@@ -1820,6 +1820,7 @@ def _build_pack(
             not has_existing_writer_target
             or (
                 project.descriptor.project_type == "php"
+                and _task_requests_homepage(task_text)
                 and (project.effective_verification_root / "index.php").is_file()
             )
         )

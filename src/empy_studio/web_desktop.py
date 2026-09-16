@@ -185,6 +185,25 @@ def _failure_kind(detail: str) -> str:
     if any(
         marker in normalized
         for marker in (
+            "outside this node's ownership",
+            "outside this wave's ownership",
+            "outside the node's ownership",
+            "outside the allowed files",
+            "not in the list of allowed",
+            "not in the allowed file",
+            "ownership mismatch",
+            "ownership boundary",
+            "فایل مالکیت‌داده‌شده",
+            "فهرست فایل‌های مجاز",
+            "محدودهٔ مجاز",
+            "محدوده مجاز",
+            "گسترش مالکیت فایل",
+        )
+    ):
+        return "ownership_mismatch"
+    if any(
+        marker in normalized
+        for marker in (
             "produced no project change",
             "no project change",
             "no project file was changed",
@@ -211,7 +230,6 @@ def _failure_kind(detail: str) -> str:
         for marker in (
             "dirty_worktree",
             "clean git worktree",
-            "file ownership",
             "commit or restore these paths first",
             "could not safely preserve the previous isolated changes",
             "isolated workspace is still not clean",
@@ -292,6 +310,12 @@ def _plain_failure_finding(
             "برای این تیکت فایل امن و قابل‌ویرایشی برای نقش اجرایی پیدا نشد؛ Empy باید فهرست فایل‌ها را دوباره بررسی یا هدف فایل جدید را بسازد."
             if language == "fa"
             else "No safe writable target was assigned to the implementation role; Empy must re-check the project index or create the approved missing target."
+        )
+    if kind == "ownership_mismatch":
+        return (
+            "هدف فایل این نود با ساختار واقعی پروژه منطبق نبود؛ Agent اجازهٔ تغییر فایل لازم را نداشت و هیچ تغییر تأییدشده‌ای ثبت نشد."
+            if language == "fa"
+            else "The node's file target did not match the project's real layout; the Agent was not allowed to change the required file, so no approved change was recorded."
         )
     if kind == "verification_contract_mismatch" and "index.html" in normalized:
         expected_path = "index.html"
@@ -1412,6 +1436,35 @@ class GuidedState:
                 self.run.error_message or "The Agent run ended without a complete result.",
                 roots,
             )
+            # A graph-level error can be deliberately generic (for example,
+            # ``objective_not_met``).  Recover the bounded worker report so
+            # the user sees the actual blocker, such as a target outside the
+            # node's ownership, instead of an opaque summary.  Evidence is
+            # read only from Empy's own run directory and is redacted before
+            # it reaches the browser.
+            agent_reports: list[str] = []
+            for node in self.run.node_results:
+                if node.status not in {"failed", "cancelled", "timed_out", "unavailable"}:
+                    continue
+                final_path = Path(node.final_message_path)
+                try:
+                    if not final_path.is_absolute():
+                        final_path = self.workspace_root / final_path
+                    if not final_path.is_file() or not final_path.resolve().is_relative_to(
+                        self.workspace_root.resolve()
+                    ):
+                        continue
+                    report = _safe_verification_detail(
+                        final_path.read_text(encoding="utf-8", errors="replace")[:2400],
+                        roots,
+                    )
+                except (OSError, UnicodeError, RuntimeError):
+                    continue
+                if report:
+                    agent_reports.append(report[:2400])
+            for report in agent_reports[:2]:
+                if report.casefold() not in message.casefold():
+                    message = f"{message} Agent report: {report}"
             if message not in diagnostics:
                 diagnostics.append(message)
             failure_kind = _failure_kind(message)
@@ -1430,7 +1483,13 @@ class GuidedState:
             )
             kind = (
                 failure_kind
-                if failure_kind in {"dirty_worktree", "no_change"}
+                if failure_kind in {
+                    "dirty_worktree",
+                    "no_change",
+                    "ownership_mismatch",
+                    "no_writable_files",
+                    "token_budget",
+                }
                 else "run_failed"
             )
         if not diagnostics and not failures and self.error:
@@ -1492,7 +1551,14 @@ class GuidedState:
 
     def _localized_failure_context(self) -> dict[str, Any] | None:
         raw = self.failure_context
-        if raw is None and (
+        if self.run is not None and self.run.status != "completed":
+            # Rebuild a failed-run context on every read.  Persisted contexts
+            # can predate an agent's final evidence, and keeping that stale
+            # snapshot would continue to show only the generic graph error.
+            refreshed = self._failure_context_from_state()
+            if refreshed is not None:
+                raw = refreshed
+        elif raw is None and (
             (self.verification is not None and self.verification.status != "pass")
             or (self.run is not None and self.run.status != "completed")
             or self.error
@@ -1517,6 +1583,7 @@ class GuidedState:
             action_map = {
                 "no_change": "Check whether the requested state is already present. If it is, emit the required EMPY_NODE_RESULT: PASS attestation and let deterministic Verification decide; otherwise modify the owned file.",
                 "no_writable_files": "Rebuild the bounded project index and assign the implementation role a real writable source file or an explicitly approved missing target; do not stop at a read-only plan.",
+                "ownership_mismatch": "Refresh the project index and map the node to the real entry point or asset. Do not widen ownership to unrelated files or create a placeholder just to make the run pass.",
                 "missing_dependency": "Install the missing project dependency in the isolated copy, or add an explicit safe verification manifest. Do not silently skip the required check.",
                 "missing_verification_contract": "Add or repair the project's explicit .empy/verification.json contract, or provide a supported test/build/lint entry point.",
                 "missing_file_or_route": "Inspect whether the reported file or route is truly required. If the check is inconsistent with the project's real entry point, fix the check contract; do not create a placeholder only to make it pass.",
@@ -1541,6 +1608,7 @@ class GuidedState:
             action_map = {
                 "no_change": "بررسی کن آیا وضعیت درخواستی از قبل وجود دارد یا نه. اگر وجود دارد، گزارش صریح EMPY_NODE_RESULT: PASS بده تا Verification قطعی آن را تأیید کند؛ در غیر این صورت فایلِ مالکیت‌داده‌شده را واقعاً اصلاح کن.",
                 "no_writable_files": "فهرست محدود پروژه را دوباره بساز و نقش اجرایی را به یک فایل واقعیِ قابل‌ویرایش یا هدف جدیدِ صریحاً تأییدشده وصل کن؛ برنامهٔ فقط‌خواندنی نساز.",
+                "ownership_mismatch": "فهرست پروژه را تازه کن و نود را به ورودی یا فایل واقعی همان پروژه وصل کن؛ دامنهٔ مالکیت را برای سبزکردن اجرا به فایل‌های نامرتبط گسترش نده و فایل صوری نساز.",
                 "missing_dependency": "وابستگی گمشده را در کپی ایزوله نصب/تأمین کن یا یک قرارداد بررسی امن در .empy/verification.json تعریف کن؛ تست لازم نباید بی‌صدا رد شود.",
                 "missing_verification_contract": "قرارداد .empy/verification.json یا ورودی تست/build/lint پشتیبانی‌شده را اصلاح کن تا Verification دقیقاً بداند چه چیزی را باید اجرا کند.",
                 "missing_file_or_route": "بررسی کن فایل یا مسیر گزارش‌شده واقعاً برای پروژه لازم است یا تست با ورودی واقعی پروژه ناسازگار است. قرارداد تست را اصلاح کن؛ فقط برای سبزکردن تست فایل صوری نساز.",
@@ -1604,6 +1672,28 @@ class GuidedState:
                 next_step = (
                     "روی «اصلاح خودکار و اجرای دوباره» بزنید؛ Empy بررسی می‌کند وضعیت درخواستی "
                     "از قبل وجود دارد یا تغییر محدود لازم است."
+                )
+        if first_kind == "ownership_mismatch":
+            if self.language == "en":
+                title = "The selected file target does not match this project"
+                summary = (
+                    "Empy found the requested work, but the node was assigned a file that is not the project's real entry point or asset. "
+                    "No unapproved file was changed."
+                )
+                next_step = (
+                    "Choose Automatically repair and rerun. Empy will refresh the project map and assign the real target before using another Agent."
+                    if self.repair_attempts < self.recovery.policy.max_attempts
+                    else "Continue and fix the ticket after selecting the real project target."
+                )
+            else:
+                title = "هدف فایل با ساختار واقعی پروژه یکی نیست"
+                summary = (
+                    "Empy فایل لازم را در محدودهٔ واقعی پروژه پیدا نکرد؛ نود اجازهٔ تغییر فایل درست را نداشت و هیچ تغییر تأییدنشده‌ای ثبت نشد."
+                )
+                next_step = (
+                    "روی «اصلاح خودکار و اجرای دوباره» بزنید؛ Empy فهرست پروژه را تازه می‌کند و قبل از مصرف دوباره، فایل واقعی را به نود می‌دهد."
+                    if self.repair_attempts < self.recovery.policy.max_attempts
+                    else "ابتدا هدف واقعی پروژه را مشخص کنید و سپس «ادامه و اصلاح تیکت» را بزنید."
                 )
         if first_kind == "dirty_worktree":
             if self.language == "en":

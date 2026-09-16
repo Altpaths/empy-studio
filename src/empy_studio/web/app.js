@@ -29,6 +29,99 @@ const t = {
 function text() { return t[language]; }
 function escapeHtml(value = "") { return String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c])); }
 function localizeMessage(value = "") {
+  value = String(value || "");
+  const normalized = value.toLowerCase();
+  if (
+    normalized.includes("outside this node's ownership")
+    || normalized.includes("outside this wave's ownership")
+    || normalized.includes("outside the allowed files")
+    || normalized.includes("not in the list of allowed")
+    || normalized.includes("ownership mismatch")
+    || value.includes("فایل مالکیت‌داده‌شده")
+    || value.includes("فهرست فایل‌های مجاز")
+    || value.includes("محدودهٔ مجاز")
+    || value.includes("محدوده مجاز")
+  ) {
+    return language === "fa"
+      ? "هدف فایل با ساختار واقعی پروژه منطبق نیست؛ اجرای Agent پیش از تغییر متوقف شد و فایل اصلی تغییر نکرده است. روی «اصلاح خودکار و اجرای دوباره» بزنید تا ورودی واقعی پروژه انتخاب شود."
+      : "The selected file target does not match the project's real layout. Empy stopped before changing the original project; choose automatic repair to map the Agent to the real target.";
+  }
+  if (
+    normalized.includes("api key")
+    || normalized.includes("apikey")
+    || normalized.includes("credential is missing")
+    || normalized.includes("dedicated route credential")
+    || normalized.includes("unauthorized")
+    || normalized.includes("not authenticated")
+    || normalized.includes("not signed in")
+    || normalized.includes("codex login")
+    || normalized.includes("requires authentication")
+  ) {
+    return language === "fa"
+      ? "این اتصال به احراز هویت یا کلید معتبر نیاز دارد؛ در مسیر Codex یک‌بار «codex login» را کامل کنید یا در مسیر OmniRoute متغیر محیطی کلید را تنظیم و وضعیت را Refresh کنید."
+      : "This connection needs valid authentication or a key; complete `codex login` for the Codex route, or set the OmniRoute key environment variable and refresh its status.";
+  }
+  if (
+    normalized.includes("selected free/local model is absent")
+    || normalized.includes("model_not_found")
+    || normalized.includes("unknown model")
+    || normalized.includes("unsupported model")
+    || normalized.includes("unsupported endpoint")
+    || normalized.includes("responses is not supported")
+  ) {
+    return language === "fa"
+      ? "مدل انتخاب‌شده در این اتصال در دسترس نیست؛ فهرست مدل‌های همان مسیر را Refresh کنید و یک مدل صریحِ موجود انتخاب کنید."
+      : "The selected model is not available on this connection; refresh its model list and choose an explicit model advertised there.";
+  }
+  if (
+    normalized.includes("local gateway preflight failed")
+    || normalized.includes("gateway /models check failed")
+    || normalized.includes("connection refused")
+    || normalized.includes("failed to connect")
+    || normalized.includes("no route to host")
+  ) {
+    return language === "fa"
+      ? "اتصال مدل محلی پاسخ نداد؛ روشن‌بودن OmniRoute و نشانی تنظیم‌شده را بررسی کنید و سپس وضعیت اتصال را Refresh کنید."
+      : "The local model gateway did not respond; check that OmniRoute is running at the configured address, then refresh the connection status.";
+  }
+  if (
+    normalized.includes("fresh-token limit")
+    || normalized.includes("token budget")
+    || normalized.includes("token guard")
+    || normalized.includes("budget_exceeded")
+  ) {
+    return language === "fa"
+      ? "سقف امن توکن این مرحله پر شد و نتیجهٔ کامل تولید نشد؛ همان کار را با context کوچک‌تر و بدون discovery تکراری دوباره اجرا کنید."
+      : "This step reached Empy's safe token limit before producing a complete result; retry with compact context and no repeated discovery.";
+  }
+  if (
+    normalized.includes("produced no project change")
+    || normalized.includes("no project change")
+    || normalized.includes("no project file was changed")
+    || normalized.includes("no file change")
+  ) {
+    return language === "fa"
+      ? "Agent تغییر قابل‌تأیید نداد؛ بررسی کنید وضعیت درخواستی از قبل وجود دارد یا فایل هدف درست انتخاب نشده است. Verification و ZIP تا نتیجهٔ واقعی متوقف می‌مانند."
+      : "The Agent produced no verifiable change; check whether the requested state already exists or the wrong target was selected. Verification and ZIP remain blocked until the result is real.";
+  }
+  if (
+    normalized.includes("codex cli was not found")
+    || normalized.includes("codex is disabled")
+    || normalized.includes("lacks required isolated execution capabilities")
+    || normalized.includes("non-interactive execution")
+  ) {
+    return language === "fa"
+      ? "Codex برای اجرای واقعی آماده نیست؛ نصب/فعال‌بودن Codex CLI و پشتیبانی از اجرای isolated را بررسی کنید و سپس وضعیت را Refresh کنید."
+      : "Codex is not ready for a real run; check that Codex CLI is installed, enabled, and supports isolated non-interactive execution, then refresh its status.";
+  }
+  if (
+    normalized.includes("the agent run ended without a complete result")
+    || normalized.includes("the agent run did not complete successfully")
+  ) {
+    return language === "fa"
+      ? "اجرای Agent به نتیجهٔ کامل و قابل‌تأیید نرسید؛ علت قطعی را در بخش شکست بررسی کنید و فقط پس از Verification موفق ادامه دهید."
+      : "The Agent run did not produce a complete, verifiable result; inspect the confirmed failure and continue only after Verification passes.";
+  }
   if (value.includes("no writable files for writing roles") || value.includes("no writable files") || value.includes("فایل قابل‌ویرایش") || value.includes("فایل قابل ویرایش") || value.includes("فایل امن و قابل‌ویرایشی") || value.includes("فایل امن و قابل ویرایشی")) {
     return language === "fa"
       ? "این تیکت به فایل قابل‌ویرایش وصل نشد؛ Empy باید فهرست فایل‌های پروژه را دوباره بسازد یا فایل لازم را به‌عنوان هدف امن ایجاد کند. فایل اصلی تغییر نکرده است."
@@ -184,7 +277,9 @@ function renderModelRoute() {
   return `<details class="model-route"><summary>${fa ? "اتصال مدل: مستقیم یا OmniRoute" : "Model connection: direct or OmniRoute"}</summary><p class="muted">${fa ? "مدل‌های رایگان/محلی مجازند. fallback فقط از مدل‌هایی استفاده می‌کند که شما صریحاً در همین مسیر ثبت می‌کنید؛ مدل پولی نیاز به اجازهٔ جداگانه دارد." : "Free/local models are allowed. Fallback uses only models explicitly listed for this route; paid models require separate opt-in."}</p><label>${fa ? "مسیر" : "Route"}<select id="model-route-mode" ${disabled}><option value="direct" ${route.mode !== "omniroute" ? "selected" : ""}>Codex — ${fa ? "حساب فعلی؛ مصرف طبق حساب" : "current account; account usage applies"}</option><option value="omniroute" ${route.mode === "omniroute" ? "selected" : ""}>OmniRoute — ${fa ? "محلی / انتخاب‌شده" : "local / selected model"}</option></select></label><label>${fa ? "نشانی OmniRoute روی همین مک" : "OmniRoute URL on this Mac"}<input id="model-route-url" value="${escapeHtml(route.base_url || "http://127.0.0.1:20129/v1")}" ${disabled}></label><label>${fa ? "شناسهٔ مدل اصلی" : "Primary explicit model ID"}<input id="model-route-model" value="${escapeHtml(route.model || "oc/north-mini-code-free")}" ${disabled}></label><label>${fa ? "مدل‌های fallback (با کاما، حداکثر ۳ مدل)" : "Fallback models (comma-separated, up to 3)"}<input id="model-route-fallbacks" value="${escapeHtml((route.fallback_models || []).join(", "))}" placeholder="ollama/codellama, lmstudio/local-code" ${disabled}></label><label><input id="model-route-paid" type="checkbox" ${route.allow_paid === true ? "checked" : ""} ${disabled}> ${fa ? "اجازهٔ صریح مدل پولی" : "Explicitly allow a paid model"}</label><label>${fa ? "نام متغیر محیطی کلید، اختیاری؛ خود کلید را ننویسید" : "Optional key environment variable NAME; never enter the key"}<input id="model-route-env" value="${escapeHtml(route.env_key || "")}" placeholder="EMPY_OMNIROUTE_API_KEY" ${disabled}></label><button type="button" class="secondary" data-action="save-model-route" ${disabled}>${fa ? "ذخیرهٔ اتصال" : "Save connection"}</button></details>`;
 }
 function renderEngine(engine) {
-  return `<div class="engine"><div class="row"><strong>${escapeHtml(engine.provider || text().engine)}: ${engine.ready ? text().ready : text().unavailable}</strong><span class="status-pill ${engine.ready ? "completed" : "failed"}">${engine.ready ? text().ready : text().unavailable}</span></div><small>${escapeHtml(engine.message || "")}</small>${engine.remediation ? `<small class="engine-help">${escapeHtml(engine.remediation)}</small>` : `<small class="engine-help">${text().engineHelp}</small>`}<div class="actions"><button type="button" class="secondary" data-action="refresh-engine">${text().refresh}</button><button type="button" class="secondary" data-action="open-engine">${text().openCodex}</button></div>${renderModelRoute()}</div>`;
+  const message = localizeMessage(engine.message || "");
+  const remediation = localizeMessage(engine.remediation || "");
+  return `<div class="engine"><div class="row"><strong>${escapeHtml(engine.provider || text().engine)}: ${engine.ready ? text().ready : text().unavailable}</strong><span class="status-pill ${engine.ready ? "completed" : "failed"}">${engine.ready ? text().ready : text().unavailable}</span></div>${message ? `<small>${escapeHtml(message)}</small>` : ""}${remediation ? `<small class="engine-help">${escapeHtml(remediation)}</small>` : `<small class="engine-help">${text().engineHelp}</small>`}<div class="actions"><button type="button" class="secondary" data-action="refresh-engine">${text().refresh}</button><button type="button" class="secondary" data-action="open-engine">${text().openCodex}</button></div>${renderModelRoute()}</div>`;
 }
 function renderProject() {
   const engine = state.engine || {};
@@ -361,7 +456,16 @@ function renderRunReport() {
 function renderRun() {
   const nodes = state.plan?.nodes || [];
   const title = state.running ? text().run : state.run_status === "cancelled" ? text().cancelled : text().failed;
-  const error = state.run_error ? `<p class="muted">${escapeHtml(state.run_error)}</p>` : "";
+  const error = state.run_error && !state.failure_context
+    ? `<p class="run-error">${escapeHtml(localizeMessage(state.run_error))}</p>`
+    : "";
+  const rawError = state.run_error && state.failure_context
+    ? `<p class="muted"><strong>${text().failureFinding}:</strong> ${escapeHtml(state.run_error)}</p>`
+    : "";
+  const logText = (state.logs || []).map(item => `[${escapeHtml(item.time)}] ${escapeHtml(item.text)}`).join("\n");
+  const technical = rawError || logText
+    ? `<details class="technical-details run-technical"><summary>${text().technicalDetails}</summary>${rawError}${logText ? `<pre class="log">${logText}</pre>` : ""}</details>`
+    : "";
   const dependency = state.dependency_bootstrap || null;
   const dependencyInfo = dependency?.message
     ? `<section class="dependency-status ${dependency.successful ? "ready" : "blocked"}"><strong>${escapeHtml(dependency.manager || "Dependency")}</strong><p>${escapeHtml(localizeMessage(dependency.message))}</p>${dependency.generated_scope ? `<small>${escapeHtml(dependency.generated_scope)}</small>` : ""}</section>`
@@ -372,7 +476,7 @@ function renderRun() {
   const action = state.running
     ? `<button type="button" class="danger" data-action="cancel-run">${text().cancel}</button>`
     : `${dependencyRetry}${state.failure_context ? renderRecoveryActions(state.failure_context) : `<button type="button" class="${dependencyRetry ? "secondary" : "primary"}" data-action="resume-ticket">${text().continueTicket}</button>`}`;
-  return `<div class="card"><h1>${title}</h1>${error}${state.failure_context ? renderFailureContext(state.failure_context) : ""}${dependencyInfo}<div class="node-list">${nodes.map(node => `<div class="node ${node.status}"><span>${escapeHtml(statusLabel(node.status))}</span><strong>${escapeHtml(node.title)}</strong></div>`).join("")}</div><pre class="log">${(state.logs || []).map(item => `[${escapeHtml(item.time)}] ${escapeHtml(item.text)}`).join("\n")}</pre><div class="actions">${action}</div></div>`;
+  return `<div class="card"><h1>${title}</h1>${error}${state.failure_context ? renderFailureContext(state.failure_context) : ""}${dependencyInfo}<div class="node-list">${nodes.map(node => `<div class="node ${node.status}"><span>${escapeHtml(statusLabel(node.status))}</span><strong>${escapeHtml(node.title)}</strong></div>`).join("")}</div>${technical}<div class="actions">${action}</div></div>`;
 }
 function enhanceImportUi() {
   if (state?.phase !== "task") return;

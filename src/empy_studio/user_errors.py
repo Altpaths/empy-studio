@@ -20,9 +20,156 @@ def _generic(language: str) -> str:
     )
 
 
+def _known_actionable_message(message: str, *, language: str) -> str | None:
+    """Map common provider/workflow failures to one safe next action.
+
+    The exception text is an implementation diagnostic, not a user interface.
+    Keep this mapping deliberately small and specific so an unknown failure is
+    still handled by the path-redacting fallback below.
+    """
+
+    lowered = message.casefold()
+    if any(
+        marker in lowered
+        for marker in (
+            "api key",
+            "apikey",
+            "dedicated route credential",
+            "credential is missing",
+            "authentication",
+            "unauthorized",
+            "not signed in",
+            "not authenticated",
+            "not logged in",
+            "sign in",
+            "codex login",
+        )
+    ):
+        return (
+            "برای اجرای این اتصال احراز هویت یا کلید لازم است. در مسیر Codex یک‌بار «codex login» را کامل کنید؛ در مسیر OmniRoute متغیر محیطی کلید همان اتصال را تنظیم و سپس وضعیت را Refresh کنید."
+            if language == "fa"
+            else "This connection needs valid authentication or a key. For the Codex route, complete `codex login`; for OmniRoute, set the route's key environment variable and refresh its status."
+        )
+    if any(
+        marker in lowered
+        for marker in (
+            "selected free/local model is absent",
+            "model_not_found",
+            "unknown model",
+            "unsupported model",
+            "unsupported endpoint",
+            "responses is not supported",
+        )
+    ):
+        return (
+            "مدل انتخاب‌شده در اتصال فعلی در دسترس نیست؛ فهرست مدل‌های همان مسیر را Refresh کنید و یک مدل صریحِ موجود انتخاب کنید."
+            if language == "fa"
+            else "The selected model is not available on this connection. Refresh its model list and choose an explicit model that is advertised there."
+        )
+    if any(
+        marker in lowered
+        for marker in (
+            "local gateway preflight failed",
+            "gateway /models check failed",
+            "connection refused",
+            "failed to connect",
+            "no route to host",
+        )
+    ):
+        return (
+            "اتصال مدل محلی پاسخ نداد؛ نشانی OmniRoute و روشن‌بودن gateway را بررسی کنید و سپس وضعیت اتصال را Refresh کنید."
+            if language == "fa"
+            else "The local model gateway did not respond. Check that OmniRoute is running at the configured address, then refresh the connection status."
+        )
+    if any(
+        marker in lowered
+        for marker in (
+            "outside this node's ownership",
+            "outside this wave's ownership",
+            "ownership mismatch",
+            "فایل مالکیت‌داده‌شده",
+            "فهرست فایل‌های مجاز",
+            "محدودهٔ مجاز",
+        )
+    ):
+        return (
+            "هدف فایل با ساختار واقعی پروژه منطبق نیست؛ Empy اجرای دوباره را تا اصلاح نقشهٔ پروژه متوقف کرد و فایل اصلی تغییر نکرده است."
+            if language == "fa"
+            else "The selected file target does not match the project's real layout. Empy paused before another run; the original project was not changed."
+        )
+    if any(
+        marker in lowered
+        for marker in (
+            "produced no project change",
+            "no project change",
+            "no project file was changed",
+            "no file change",
+        )
+    ):
+        return (
+            "Agent تغییر قابل‌تأیید نداد؛ ابتدا بررسی کنید وضعیت درخواستی از قبل وجود دارد یا فایل هدف درست انتخاب نشده است. Verification و ZIP تا نتیجهٔ واقعی متوقف می‌مانند."
+            if language == "fa"
+            else "The Agent produced no verifiable change. Check whether the requested state already exists or whether the wrong target was selected; Verification and ZIP remain blocked until the result is real."
+        )
+    if any(
+        marker in lowered
+        for marker in (
+            "codex cli was not found",
+            "codex is disabled",
+            "lacks required isolated execution capabilities",
+            "non-interactive execution",
+        )
+    ):
+        return (
+            "Codex برای اجرای واقعی آماده نیست؛ نصب/فعال‌بودن Codex CLI و پشتیبانی از اجرای isolated را بررسی کنید، سپس وضعیت را Refresh کنید."
+            if language == "fa"
+            else "Codex is not ready for a real run. Check that Codex CLI is installed, enabled and supports isolated non-interactive execution, then refresh its status."
+        )
+    if any(
+        marker in lowered
+        for marker in (
+            "dependency preparation blocked",
+            "dependency bootstrap",
+            "composer is not installed",
+            "npm is not installed",
+            "vendor/autoload.php is missing",
+        )
+    ):
+        return (
+            "وابستگی لازم در کپی ایزوله آماده نشد؛ ابزار وابستگی پروژه (Composer یا npm) و lockfile متناظر را بررسی کنید و دوباره اجرا کنید."
+            if language == "fa"
+            else "A required dependency was not prepared in the isolated copy. Check the project's Composer/npm tool and matching lockfile, then retry."
+        )
+    if any(
+        marker in lowered
+        for marker in (
+            "fresh-token limit",
+            "token budget",
+            "token guard",
+            "budget_exceeded",
+        )
+    ):
+        return (
+            "سقف توکن این مرحله پر شد و نتیجهٔ کامل تولید نشد؛ همان کار را با context کوچک‌تر و بدون discovery تکراری دوباره اجرا کنید."
+            if language == "fa"
+            else "This step reached Empy's safe token limit before producing a complete result. Retry the same work with compact context and no repeated discovery."
+        )
+    if "build a plan first" in lowered:
+        return (
+            "ابتدا تیکت را ثبت و برنامهٔ اجرا را بسازید؛ سپس اجرای Agent را شروع کنید."
+            if language == "fa"
+            else "Build the ticket plan first, then start the Agent run."
+        )
+    return None
+
+
 def safe_user_error(error: BaseException, *, language: str = "fa") -> str:
     """Convert OS/provider failures to useful messages without leaking host paths."""
-    lowered = str(error).casefold()
+    message = str(error).strip()
+    lowered = message.casefold()
+    actionable = _known_actionable_message(message, language=language)
+    if actionable is not None:
+        return actionable
     if lowered.startswith("verification preflight blocked the provider run:"):
         detail = str(error).split(":", 1)[1].strip()
         # Preflight diagnostics are project-relative by contract.  Keep that
@@ -73,7 +220,6 @@ def safe_user_error(error: BaseException, *, language: str = "fa") -> str:
     if isinstance(error, IsADirectoryError):
         return "برای این عملیات باید فایل ZIP انتخاب شود." if language == "fa" else "This operation requires a ZIP file."
     if isinstance(error, ValueError):
-        message = str(error).strip()
         if any(
             marker in message.casefold()
             for marker in ("no writable files for writing roles", "no writable files")

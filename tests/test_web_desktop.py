@@ -1070,6 +1070,94 @@ def test_dirty_worktree_failure_has_a_bilingual_recovery_path(tmp_path: Path) ->
     assert "original project is unchanged" in en["summary"]
 
 
+def test_failed_agent_report_is_recovered_as_a_specific_ownership_error(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("before\n", encoding="utf-8")
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+    state.create_plan("Update the project UI")
+
+    assert state.graph is not None
+    assert state.task is not None
+    assert state.detection is not None
+    node = state.graph.nodes[0]
+    final_message = state.workspace_root / "runs" / "failed" / "final-message.md"
+    final_message.parent.mkdir(parents=True)
+    final_message.write_text(
+        "فایل مالکیت‌داده‌شده در فهرست فایل‌های مجاز این نود نیست؛ "
+        "public_html/index.html در پروژه وجود ندارد. EMPY_NODE_RESULT: FAIL\n",
+        encoding="utf-8",
+    )
+    node_result = CodexNodeExecution(
+        node_id=node.node_id,
+        task_id=f"{state.task.task_id}:{node.step_id}",
+        status="failed",
+        started_at="now",
+        finished_at="now",
+        return_code=1,
+        thread_id="thread-failed",
+        summary="The implementation Agent completed its process but produced no project change.",
+        changed_files=(),
+        event_count=1,
+        events_path=str(final_message.with_name("events.jsonl")),
+        stderr_path=str(final_message.with_name("stderr.txt")),
+        final_message_path=str(final_message),
+        command_path=str(final_message.with_name("command.json")),
+        error_code="objective_not_met",
+        error_message="The implementation Agent completed its process but produced no project change.",
+    )
+    state.run = CodexGraphExecution(
+        schema_version=1,
+        run_id="failed-ownership-run",
+        graph_id=state.graph.graph_id,
+        task_id=state.task.task_id,
+        project_root=str(state.detection.descriptor.root),
+        provider="codex",
+        status="failed",
+        started_at="now",
+        finished_at="now",
+        installation=CodexInstallation(
+            availability="available",
+            executable="codex",
+            version="test",
+            authenticated=True,
+            message="ready",
+        ),
+        node_results=(node_result,),
+        events=(),
+        usage=None,
+        schedule=(),
+        error_code="objective_not_met",
+        error_message=(
+            "The implementation Agent completed its process but produced no project change "
+            "and did not provide a PASS attestation."
+        ),
+    )
+    state.failure_context = {
+        "kind": "no_change",
+        "diagnostics": ["old generic context"],
+        "failures": [
+            {
+                "label": "Agent execution",
+                "kind": "no_change",
+                "detail": "old generic context",
+            },
+        ],
+    }
+
+    context = state.public()["failure_context"]
+
+    assert context is not None
+    assert context["kind"] == "ownership_mismatch"
+    assert context["failures"][0]["kind"] == "ownership_mismatch"
+    assert "ساختار واقعی پروژه" in context["failures"][0]["user_finding"]
+    assert "Agent report" in context["failures"][0]["detail"]
+    assert "public_html/index.html" in context["findings"][0]
+
+
 def test_runtime_failure_has_an_automatic_continuation_hook(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
