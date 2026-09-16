@@ -1,3 +1,47 @@
+# Empy Studio 0.1.62 — hard budget enforcement with verified recovery
+
+Empy no longer treats a provider completion allowance as a successful node.
+Every provider-reported fresh-token overage stays an explicit
+`budget_exceeded` result and is shown in the run evidence. If the provider has
+already emitted its terminal event and materialized a change inside the
+approved ownership scope, Empy preserves that exact change for deterministic
+Verification without paying for a blind retry. The change is promoted only
+after all applicable checks pass; a failed check keeps the run failed and feeds
+only that finding into the bounded repair workflow. A non-terminal overage, or
+any unexpected follow-up turn after a terminal overage, is interrupted
+immediately.
+
+The reproduced ۳۰٬۳۸۶/۳۰٬۱۱۶ usage shape now remains budget-limited instead of
+being accepted by a grace window. Regression, full-suite, and packaged
+acceptance checks cover both the hard stop and the verified recovery path. No
+provider call is made by the test suite.
+
+## Previous release context
+
+# Empy Studio 0.1.61 — packaged Verification entrypoint
+
+The packaged macOS app now runs Empy’s built-in Static HTML/CSS/JS check
+through a dedicated non-GUI entrypoint. Previously the frozen app interpreted
+the `-m empy_studio.verification_pipeline` arguments as GUI arguments, causing
+valid projects to fail Verification and enter a pointless repair loop. Python
+project checks also select a host `python3`/`python` interpreter when the app
+is frozen, while an unavailable interpreter remains a visible failed check.
+
+The full suite and packaged macOS acceptance cover this path. The acceptance
+provider is deterministic and local; no live model call is used.
+
+## Previous release context
+
+# Empy Studio 0.1.60 — bounded provider completion accounting
+
+This patch fixed a false failure observed when Codex completed a scoped file
+change but its final fresh-token accounting landed 270 tokens above the locked
+economy node allocation. The completion allowance from that release has been
+removed in 0.1.62; the overage is now kept as an explicit budget failure and
+sent through verified recovery.
+
+## Previous release context
+
 # Empy Studio 0.1.56 — Semantic scope routing and exact creation ownership
 
 This patch fixes the live Holda failure where a Persian request for an asset
@@ -36,30 +80,3 @@ Run `scripts/benchmark_token_efficiency.py` to measure deterministic planning
 overhead without calling a provider.
 The accompanying acceptance report distinguishes mocked tests from real free
 provider failures; no real cost reduction or successful free coding is claimed.
-# Empy Studio 0.1.60 — bounded provider completion accounting
-
-This patch fixes a false failure observed when Codex completed a scoped file
-change but its final fresh-token accounting landed 270 tokens above the locked
-economy node allocation. Empy now keeps the hard per-node boundary and allows
-only a bounded final-accounting allowance (up to 512 tokens or 1.5% for normal
-node sizes); a larger overage still terminates the node. Any accepted allowance
-is recorded as a warning and must pass Empy's deterministic Verification before
-Review or ZIP release.
-
-The reproduced usage shape and the hard-overage path are covered by regression
-tests. No provider call is made by the test suite.
-
-## Previous release context
-# Empy Studio 0.1.61 — packaged Verification entrypoint
-
-The packaged macOS app now runs Empy’s built-in Static HTML/CSS/JS check
-through a dedicated non-GUI entrypoint. Previously the frozen app interpreted
-the `-m empy_studio.verification_pipeline` arguments as GUI arguments, causing
-valid projects to fail Verification and enter a pointless repair loop. Python
-project checks also select a host `python3`/`python` interpreter when the app
-is frozen, while an unavailable interpreter remains a visible failed check.
-
-The full suite and packaged macOS acceptance cover this path. The acceptance
-provider is deterministic and local; no live model call is used.
-
-## Previous release context

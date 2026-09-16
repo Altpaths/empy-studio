@@ -1,3 +1,17 @@
+## [0.1.62] - 2026-09-16
+
+- Remove the completion allowance that could make provider overage look like a
+  successful Agent node. Fresh-token allocations are hard again: any reported
+  overage remains `budget_exceeded` and is visible in the run evidence.
+- When a terminal provider event has already materialized a scoped change, keep
+  the evidence and pass the failed node to deterministic Verification. Promote
+  it only when the project checks pass; otherwise keep the run failed and repair
+  only the recorded finding.
+- Stop a provider immediately when a non-terminal usage event crosses the locked
+  allocation, and stop any unexpected follow-up turn after a terminal overage.
+- Add regression coverage for terminal overage recovery and live overage
+  interruption.
+
 ## [0.1.61] - 2026-09-16
 
 - Make the built-in Static HTML/CSS/JS Verification check work from the

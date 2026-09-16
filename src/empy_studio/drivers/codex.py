@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 import os
 import shutil
 import signal
@@ -71,28 +70,23 @@ CodexEventLevel = Literal["info", "warning", "error"]
 
 DEFAULT_PREFLIGHT_TIMEOUT: Final[float] = 8.0
 DEFAULT_CANCEL_GRACE_SECONDS: Final[float] = 2.0
+BUDGET_COMPLETION_FLUSH_SECONDS: Final[float] = 2.0
 MAX_PREFLIGHT_OUTPUT_CHARS: Final[int] = 16_384
 
-# Provider usage is reported after a turn has finished.  A small amount of
-# accounting jitter can therefore arrive after the locked node allocation even
-# though the provider has already completed the approved work.  This is a
-# completion allowance, not a larger execution budget: the process is still
-# terminated when it crosses the hard cap below this bounded window, and
-# deterministic Verification remains mandatory before a result is released.
-PROVIDER_COMPLETION_GRACE_RATIO: Final[float] = 0.015
-PROVIDER_COMPLETION_GRACE_MAX_TOKENS: Final[int] = 512
-PROVIDER_COMPLETION_GRACE_MIN_LIMIT: Final[int] = 1_000
-
-
-def completion_grace_tokens(limit: int | None) -> int:
-    """Return the bounded final-accounting allowance for a provider node."""
-
-    if limit is None or limit < PROVIDER_COMPLETION_GRACE_MIN_LIMIT:
-        return 0
-    return min(
-        PROVIDER_COMPLETION_GRACE_MAX_TOKENS,
-        max(1, math.ceil(limit * PROVIDER_COMPLETION_GRACE_RATIO)),
-    )
+# Usage is an authorization boundary, not a success hint.  A provider may
+# report its final usage after it has already materialized a scoped file change;
+# that result stays budget_exceeded and is handed to Empy's deterministic
+# Verification recovery path.  Only a non-terminal overage is interrupted
+# immediately; a terminal overage is allowed to flush its evidence and then is
+# rejected explicitly below.
+TERMINAL_USAGE_EVENT_TYPES: Final[frozenset[str]] = frozenset(
+    {
+        "turn.completed",
+        "task_complete",
+        "response.completed",
+        "response_complete",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -733,18 +727,16 @@ class CodexDriver(BaseDriver):
         thread_id: str | None = None
         parse_error: str | None = None
         budget_exceeded = threading.Event()
-        budget_grace_used = threading.Event()
+        budget_exceeded_after_completion = threading.Event()
         change_handoff_ready = threading.Event()
         budget_warning_emitted = False
-        budget_grace_warning_emitted = False
-        budget_grace_overage_tokens = 0
+        budget_completion_deadline: float | None = None
         observed_usage: TokenUsage | None = None
         event_lock = threading.Lock()
 
         def read_stdout(stream: IO[str]) -> None:
             nonlocal thread_id, parse_error
-            nonlocal budget_warning_emitted, budget_grace_warning_emitted
-            nonlocal budget_grace_overage_tokens, observed_usage
+            nonlocal budget_warning_emitted, budget_completion_deadline, observed_usage
             with events_path.open("w", encoding="utf-8") as event_file:
                 for raw_line in stream:
                     event_file.write(raw_line)
@@ -768,6 +760,12 @@ class CodexDriver(BaseDriver):
                         parse_error = "Codex JSONL event was not an object."
                         continue
                     event = cast(dict[str, object], value)
+                    if budget_exceeded_after_completion.is_set():
+                        # A single `exec` should end after its terminal usage
+                        # event. If the provider emits more work afterwards,
+                        # stop it rather than allowing a second turn to spend
+                        # outside the locked allocation.
+                        self._terminate_process(process)
                     with event_lock:
                         events.append(event)
                     event_type_value = str(event.get("type", ""))
@@ -820,8 +818,17 @@ class CodexDriver(BaseDriver):
                         if usage is not None and request.fresh_token_limit is not None:
                             limit = request.fresh_token_limit
                             overage = usage.uncached_total - limit
-                            grace = completion_grace_tokens(limit)
-                            if overage > grace:
+                            if overage > 0:
+                                if event_type_value in TERMINAL_USAGE_EVENT_TYPES:
+                                    # The provider has finished its single exec turn.
+                                    # Let it flush the final message and evidence, but
+                                    # never promote the node: the graph runtime will
+                                    # verify any scoped change before deciding whether
+                                    # a recovery is safe.
+                                    budget_exceeded_after_completion.set()
+                                    budget_completion_deadline = (
+                                        self.monotonic() + BUDGET_COMPLETION_FLUSH_SECONDS
+                                    )
                                 budget_exceeded.set()
                                 if not budget_warning_emitted:
                                     budget_warning_emitted = True
@@ -830,34 +837,17 @@ class CodexDriver(BaseDriver):
                                         level="error",
                                         event_type="run.budget_exceeded",
                                         message=(
-                                            "Codex exceeded Empy's fresh-token limit "
-                                            f"({limit}); this node cannot be "
-                                            "reported as successful."
+                                            "Codex exceeded Empy's locked fresh-token "
+                                            f"allocation by {overage} token(s) "
+                                            f"({usage.uncached_total} used vs {limit}). "
+                                            "The node remains failed; any scoped "
+                                            "change will be checked by deterministic "
+                                            "Verification before recovery."
                                         ),
                                         node_id=node_id,
                                     )
-                                self._terminate_process(process)
-                            elif overage > 0:
-                                budget_grace_used.set()
-                                budget_grace_overage_tokens = max(
-                                    budget_grace_overage_tokens,
-                                    overage,
-                                )
-                                if not budget_grace_warning_emitted:
-                                    budget_grace_warning_emitted = True
-                                    self._emit(
-                                        on_progress,
-                                        level="warning",
-                                        event_type="run.budget_grace",
-                                        message=(
-                                            "Codex finished within Empy's bounded "
-                                            f"completion allowance ({overage} tokens over "
-                                            f"the {limit}-token node allocation). "
-                                            "Empy will require deterministic Verification "
-                                            "before releasing the result."
-                                        ),
-                                        node_id=node_id,
-                                    )
+                                if not budget_exceeded_after_completion.is_set():
+                                    self._terminate_process(process)
                     candidate = self._thread_id_from_event(event)
                     if candidate is not None:
                         thread_id = candidate
@@ -950,9 +940,17 @@ class CodexDriver(BaseDriver):
                 self._terminate_process(process)
                 break
             if budget_exceeded.is_set():
-                terminal_status = "failed"
-                self._terminate_process(process)
-                break
+                if not budget_exceeded_after_completion.is_set():
+                    terminal_status = "failed"
+                    self._terminate_process(process)
+                    break
+                if (
+                    budget_completion_deadline is not None
+                    and self.monotonic() >= budget_completion_deadline
+                ):
+                    terminal_status = "failed"
+                    self._terminate_process(process)
+                    break
             self.sleep(0.05)
 
         try:
@@ -1134,12 +1132,6 @@ class CodexDriver(BaseDriver):
 
         self._status = "completed"
         summary = final_message or "Codex completed the approved node."
-        if budget_grace_used.is_set():
-            summary = (
-                f"{summary}\n\nEmpy accepted a bounded provider completion "
-                f"accounting overage of {budget_grace_overage_tokens} token(s); "
-                "deterministic Verification is required before release."
-            )
         self._emit(
             on_progress,
             level="info",

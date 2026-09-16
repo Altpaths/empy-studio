@@ -427,7 +427,7 @@ def test_rejects_final_turn_accounting_overage_after_process_completion(
     assert result.usage.uncached_total == 65
 
 
-def test_accepts_bounded_completion_accounting_overage(
+def test_rejects_completion_accounting_overage_but_preserves_scoped_change(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -448,7 +448,7 @@ def test_accepts_bounded_completion_accounting_overage(
         )
         process = FakeProcess(
             stdout=(
-                '{"type":"thread.started","thread_id":"thread-grace"}\n'
+                '{"type":"thread.started","thread_id":"thread-overage"}\n'
                 '{"type":"item.completed","item":{"type":"file_change",'
                 '"status":"completed","changes":[{"path":"src/example.py",'
                 '"kind":"update"}]}}\n'
@@ -468,22 +468,69 @@ def test_accepts_bounded_completion_accounting_overage(
     )
     result = driver.execute_streaming(
         replace(request(tmp_path), fresh_token_limit=30_116),
-        node_id="node-budget-grace",
-        artifact_dir=tmp_path / "run" / "node-budget-grace",
+        node_id="node-budget-overage",
+        artifact_dir=tmp_path / "run" / "node-budget-overage",
         on_progress=events.append,
     )
 
-    assert result.status == "completed"
-    assert result.error_code is None
+    assert result.status == "failed"
+    assert result.error_code == "budget_exceeded"
     assert result.changed_files == ("src/example.py",)
     assert result.usage is not None
     assert result.usage.uncached_total == 30_386
-    assert any(event.event_type == "run.budget_grace" for event in events)
-    assert "bounded provider completion" in result.summary
+    assert any(event.event_type == "run.budget_exceeded" for event in events)
+    assert "fresh-token limit" in result.error_message
     assert created["process"].terminated is False
 
 
-def test_rejects_overage_above_bounded_completion_allowance(
+def test_interrupts_non_terminal_usage_overage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "empy_studio.drivers.codex.shutil.which",
+        lambda value: "/usr/local/bin/codex",
+    )
+
+    created: dict[str, FakeProcess] = {}
+
+    def process_factory(command: list[str], **kwargs: Any) -> FakeProcess:
+        del kwargs
+        final_path = Path(command[command.index("--output-last-message") + 1])
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        final_path.write_text("Partial change\n", encoding="utf-8")
+        process = FakeProcess(
+            running=True,
+            stdout=(
+                '{"type":"turn.started"}\n'
+                '{"type":"event_msg","payload":{"total_token_usage":'
+                '{"input_tokens":60,"output_tokens":5,"cached_input_tokens":0,'
+                '"total_tokens":65}}}\n'
+            )
+        )
+        created["process"] = process
+        return process
+
+    events = []
+    driver = CodexDriver(
+        artifact_root=tmp_path,
+        command_runner=ready_runner,
+        process_factory=process_factory,
+    )
+    result = driver.execute_streaming(
+        replace(request(tmp_path), fresh_token_limit=50),
+        node_id="node-budget-live-overage",
+        artifact_dir=tmp_path / "run" / "node-budget-live-overage",
+        on_progress=events.append,
+    )
+
+    assert result.status == "failed"
+    assert result.error_code == "budget_exceeded"
+    assert created["process"].terminated is True
+    assert any(event.event_type == "run.budget_exceeded" for event in events)
+
+
+def test_rejects_terminal_usage_overage(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
