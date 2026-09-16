@@ -1,3 +1,17 @@
+## [0.1.63] - 2026-09-16
+
+- Add a shared task token ledger that reserves each locked node allocation once,
+  settles only provider-reported uncached usage, and charges unknown usage
+  conservatively so retries cannot create free capacity.
+- Add immutable content-addressed context manifests and compact read-only
+  handoffs so later specialists do not receive the same source excerpts again.
+- Add an explicit, bounded OmniRoute fallback list. Route switching is allowed
+  only for a reported transient failure with no provider or worktree mutation;
+  authentication, quota, budget, scope, and unknown-usage failures stop safely.
+- Keep fallback attempts inside the same node allocation, audit unreported Git
+  mutations before switching, persist route/ledger/context evidence, and expose
+  it in the run report.
+
 ## [0.1.62] - 2026-09-16
 
 - Remove the completion allowance that could make provider overage look like a

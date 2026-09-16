@@ -4,6 +4,14 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
+from empy_studio.core import (
+    ContextManifest,
+    ContextManifestFile,
+    LedgerEntry,
+    RouteAttempt,
+    RouteReport,
+    TaskLedgerSnapshot,
+)
 from empy_studio.desktop.codex_execution_workspace_adapter import (
     CodexExecutionWorkspaceAdapter,
 )
@@ -103,6 +111,70 @@ def test_round_trip_persists_run_evidence(tmp_path: Path) -> None:
     assert adapter.get_for_graph("graph-11") == run
     assert adapter.list_runs() == (run,)
     assert adapter.path.is_file()
+
+
+def test_round_trip_persists_context_ledger_and_route_evidence(tmp_path: Path) -> None:
+    adapter = CodexExecutionWorkspaceAdapter(tmp_path / "workspace")
+    run = replace(
+        sample_run(tmp_path),
+        prompt_estimates=(("node-1", 42),),
+        context_manifest=ContextManifest(
+            schema_version=1,
+            project_root=str(tmp_path.resolve()),
+            selection_id="selection-11",
+            snapshot_sha256="b" * 64,
+            files=(
+                ContextManifestFile(
+                    relative_path="src/example.py",
+                    sha256="a" * 64,
+                    selected_bytes=12,
+                    content_included=True,
+                ),
+            ),
+            selected_bytes=12,
+        ),
+        task_ledger=TaskLedgerSnapshot(
+            schema_version=1,
+            total_limit_tokens=100,
+            fixed_commitment_tokens=10,
+            charged_tokens=20,
+            reserved_tokens=0,
+            remaining_tokens=70,
+            usage_complete=True,
+            entries=(
+                LedgerEntry(
+                    operation_id="node-1",
+                    provider_id="codex",
+                    reserved_tokens=40,
+                    charged_tokens=20,
+                    usage_state="reported",
+                    fresh_tokens=9,
+                    cached_tokens=3,
+                    total_tokens=12,
+                    status="completed",
+                ),
+            ),
+        ),
+        route_report=RouteReport(
+            attempts=(
+                RouteAttempt(
+                    provider_id="codex",
+                    model=None,
+                    attempt=1,
+                    status="completed",
+                    usage=TokenUsage(input=12, output=5, cached=3, total=17, source="provider", provider="codex"),
+                    usage_state="reported",
+                ),
+            ),
+            selected_provider_id="codex",
+            reason="Route completed.",
+        ),
+    )
+    adapter.save_run(run)
+
+    restored = CodexExecutionWorkspaceAdapter(tmp_path / "workspace").get_run(run.run_id)
+
+    assert restored == run
 
 
 def test_loads_legacy_run_json_without_usage(tmp_path: Path) -> None:

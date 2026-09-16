@@ -27,14 +27,19 @@ class CodexRouteConfig:
     model: str = "oc/north-mini-code-free"
     env_key: str | None = None
     allow_paid: bool = False
+    fallback_models: tuple[str, ...] = ()
 
     def validate(self) -> None:
         if (not all(isinstance(v, str) for v in (self.mode, self.base_url, self.model))
                 or self.env_key is not None and not isinstance(self.env_key, str)
-                or type(self.allow_paid) is not bool):
+                or type(self.allow_paid) is not bool
+                or not isinstance(self.fallback_models, tuple)
+                or any(not isinstance(item, str) for item in self.fallback_models)):
             raise ValueError("Route settings must be strings")
         if self.mode not in {"direct", "omniroute"}:
             raise ValueError("Unsupported Codex route mode")
+        if self.mode == "direct" and self.fallback_models:
+            raise ValueError("fallback models require the explicit OmniRoute mode")
         url = urlsplit(self.base_url)
         try:
             local = ipaddress.ip_address(url.hostname or "").is_loopback
@@ -56,6 +61,18 @@ class CodexRouteConfig:
             raise ValueError("Choose one explicit model ID; automatic selection is disabled")
         if self.model not in FREE_MODELS and not local_model and not self.allow_paid:
             raise ValueError("Only free/local models are allowed unless paid routing is explicitly enabled")
+        if len(self.fallback_models) > 3:
+            raise ValueError("At most three bounded fallback models are allowed")
+        if self.model in self.fallback_models or len(set(self.fallback_models)) != len(self.fallback_models):
+            raise ValueError("fallback models must be unique and differ from the primary model")
+        for fallback in self.fallback_models:
+            if fallback in {"auto", "default"} or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/-]*", fallback) is None:
+                raise ValueError("Choose explicit fallback model IDs")
+            fallback_local = re.fullmatch(
+                r"(?:ollama|lmstudio)/[A-Za-z0-9][A-Za-z0-9_.:/-]*", fallback
+            ) is not None
+            if fallback not in FREE_MODELS and not fallback_local and not self.allow_paid:
+                raise ValueError("Only free/local fallback models are allowed unless paid routing is explicitly enabled")
         if self.env_key is not None and (
             not re.fullmatch(r"[A-Z_][A-Z0-9_]*", self.env_key)
             or self.env_key.startswith(("OPENAI_", "CODEX_"))
@@ -71,15 +88,18 @@ class CodexRouteConfig:
     def from_dict(cls, value: dict[str, object]) -> CodexRouteConfig:
         if not isinstance(value, dict):
             raise ValueError("Route settings must be an object")  # noqa: TRY004 - settings validation contract
-        allowed = {"mode", "base_url", "model", "env_key", "allow_paid"}
+        allowed = {"mode", "base_url", "model", "env_key", "allow_paid", "fallback_models"}
         if set(value) - allowed:
             raise ValueError("Unknown route setting")
         if any(
             not isinstance(v, str)
             and not (k == "env_key" and v is None)
             and not (k == "allow_paid" and type(v) is bool)
+            and not (k == "fallback_models" and isinstance(v, (list, tuple)) and all(isinstance(item, str) for item in v))
                for k, v in value.items()):
             raise ValueError("Route settings must be strings")
+        if "fallback_models" in value and isinstance(value["fallback_models"], (list, tuple)):
+            value = {**value, "fallback_models": tuple(value["fallback_models"])}
         result = cls(**value)  # type: ignore[arg-type]
         result.validate()
         return result

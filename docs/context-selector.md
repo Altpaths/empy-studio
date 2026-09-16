@@ -25,9 +25,12 @@ Build a visible, bounded context pack for every approved plan step without sendi
 - Maximum bytes per pack: 192 KiB
 - Maximum candidate file size: 1 MiB
 
-These are context-selection limits. Provider nodes also receive a compact
-quality manifest instead of a repeated source pack, and token budgets/retry
-limits remain enforced by the driver and Ticket 9 controller.
+These are context-selection limits. Provider Quality nodes receive a compact
+manifest instead of a repeated source pack. After an upstream handoff,
+writing nodes also receive hashes and bounded references for read-only files;
+only their owned excerpts remain inline unless a specific omitted section is
+needed. Token budgets, shared task reservations, and retry limits remain
+enforced by the runtime and driver.
 
 ## Security rules
 
