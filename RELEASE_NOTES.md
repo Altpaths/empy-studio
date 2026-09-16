@@ -1,3 +1,29 @@
+# Empy Studio 0.1.63 — shared token ledger and safe provider routing
+
+Empy now accounts for the whole task with one shared ledger. Each graph node
+reserves its locked allocation before a provider call; a reported provider
+usage settles that reservation, while missing or estimated usage consumes the
+full reservation. A fallback attempt receives only the unused part of the same
+node allocation, so route switching cannot silently double the approved token
+cap.
+
+The run creates one immutable context manifest. Later writing specialists get
+hashes and bounded handoff evidence for read-only files instead of receiving
+the same source excerpts again. The manifest, ledger entries, prompt estimates,
+and route attempts survive restart and are shown in the final report.
+
+Fallbacks are explicit and bounded. They currently cover Codex-compatible
+models configured through the local OmniRoute connection. Empy switches only
+after a reported transient failure with no provider-reported or independently
+audited worktree mutation. Authentication, quota, budget, policy, partial
+mutation, and unknown-usage failures stop for verification or repair; paid
+routes remain opt-in and are never selected automatically.
+
+The full regression suite, strict lint, strict type checking, bytecode check,
+and JavaScript syntax check pass. No provider call is made by the tests.
+
+## Previous release context
+
 # Empy Studio 0.1.62 — hard budget enforcement with verified recovery
 
 Empy no longer treats a provider completion allowance as a successful node.

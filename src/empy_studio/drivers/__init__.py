@@ -20,6 +20,7 @@ from .codex import (
 from .codex_runtime import (
     CodexGraphExecution,
     CodexGraphRuntime,
+    CodexNodeDriver,
     CodexRunStatus,
     CodexWaveExecution,
     build_codex_node_prompt,
@@ -32,6 +33,7 @@ from .registry import (
     UnavailableDriver,
     default_driver_registry,
 )
+from .router import RoutedCodexNodeDriver, RouteDriverCandidate
 
 __all__ = [
     "BaseDriver",
@@ -44,6 +46,7 @@ __all__ = [
     "CodexGraphExecution",
     "CodexGraphRuntime",
     "CodexInstallation",
+    "CodexNodeDriver",
     "CodexNodeExecution",
     "CodexNodeStatus",
     "CodexProgressEvent",
@@ -53,6 +56,8 @@ __all__ = [
     "DriverFactory",
     "DriverManager",
     "DriverRegistry",
+    "RouteDriverCandidate",
+    "RoutedCodexNodeDriver",
     "UnavailableDriver",
     "build_codex_node_prompt",
     "default_driver_registry",

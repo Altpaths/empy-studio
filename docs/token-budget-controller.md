@@ -45,6 +45,13 @@ events. If a provider omits usage, Empy reports `not_reported` rather than
 turning an estimate into a false exact value. The local benchmark and provider
 usage are shown as separate signals.
 
+At execution time a task-wide ledger adds one shared admission boundary. It
+reserves each locked node allocation before the provider call, releases unused
+capacity only when provider usage is reported, and charges the complete
+reservation when usage is missing. A bounded route fallback shares that same
+reservation and receives only its remaining capacity; it cannot create a
+second full allocation by switching models.
+
 ## Locking
 
 A budget starts as `draft`. The user can change the preset and recalculate it.
@@ -92,4 +99,6 @@ Approved Plan
 
 The panel exposes the total local estimate and the allocation for every planned step.
 Ticket 9 does not dispatch agents. The locked budget becomes an input to Ticket
-10, Agent Dispatcher.
+10, Agent Dispatcher. Route and ledger evidence are persisted with the graph
+run so a later ticket can reuse the recorded context identity instead of
+rediscovering and resending the same files.

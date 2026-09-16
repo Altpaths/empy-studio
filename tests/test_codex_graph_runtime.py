@@ -146,6 +146,41 @@ def test_prompt_contains_bounded_context_and_safety_rules(tmp_path: Path) -> Non
     assert "line counts are unsafe" in prompt
     assert str(node.token_limit) in prompt
 
+    compact_node = replace(
+        node,
+        owned_files=(node.owned_files[0],),
+        read_only_files=(node.owned_files[1],),
+    )
+    compact_prompt = build_codex_node_prompt(
+        graph=graph,
+        selection=selection,
+        node=compact_node,
+        dependency_results=(
+            CodexNodeExecution(
+                node_id="upstream",
+                task_id="runtime-task:upstream",
+                status="completed",
+                started_at="2026-08-04T00:00:00+00:00",
+                finished_at="2026-08-04T00:00:01+00:00",
+                return_code=0,
+                thread_id=None,
+                summary="upstream completed",
+                changed_files=(),
+                event_count=0,
+                events_path=str(tmp_path / "events.jsonl"),
+                stderr_path=str(tmp_path / "stderr.log"),
+                final_message_path=str(tmp_path / "final.md"),
+                command_path=str(tmp_path / "command.json"),
+            ),
+        ),
+        compact_read_only_context=True,
+    )
+    read_only_file = next(
+        item for item in selection.packs[0].files if item.relative_path == compact_node.read_only_files[0]
+    )
+    assert read_only_file.content not in compact_prompt
+    assert read_only_file.sha256 in compact_prompt
+
     without_quality_nodes = tuple(
         item for item in graph.nodes if item.agent_role != "quality"
     )

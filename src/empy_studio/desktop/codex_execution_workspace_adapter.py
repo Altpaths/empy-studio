@@ -4,6 +4,17 @@ import json
 from pathlib import Path
 from typing import Literal, cast
 
+from empy_studio.core import (
+    ContextManifest,
+    ContextManifestFile,
+    LedgerEntry,
+    RouteAttempt,
+    RouteDecisionAction,
+    RouteFailureClass,
+    RouteReport,
+    TaskLedgerSnapshot,
+    UsageState,
+)
 from empy_studio.core.token_budget import ProviderBudgetReport, ProviderNodeBudgetReport
 from empy_studio.drivers import (
     CodexAvailability,
@@ -45,6 +56,19 @@ def _string_tuple(value: object) -> tuple[str, ...]:
     return tuple(str(item) for item in value)
 
 
+def _prompt_estimates(value: object) -> tuple[tuple[str, int], ...]:
+    if not isinstance(value, list):
+        return ()
+    estimates: list[tuple[str, int]] = []
+    for item in value:
+        if not isinstance(item, dict) or "node_id" not in item:
+            continue
+        estimates.append(
+            (str(item["node_id"]), _as_int(item.get("prompt_tokens", 0), "prompt_tokens"))
+        )
+    return tuple(estimates)
+
+
 def _raw_dict(value: object) -> dict[str, object] | None:
     if not isinstance(value, dict):
         return None
@@ -55,6 +79,115 @@ def _usage(value: object) -> TokenUsage | None:
     if not isinstance(value, dict):
         return None
     return TokenUsage.from_dict({str(key): item for key, item in value.items()})
+
+
+def _context_manifest(value: object) -> ContextManifest | None:
+    if not isinstance(value, dict):
+        return None
+    raw_files = value.get("files", [])
+    if not isinstance(raw_files, list):
+        return None
+    files = tuple(
+        ContextManifestFile(
+            relative_path=str(item["relative_path"]),
+            sha256=str(item["sha256"]),
+            selected_bytes=_as_int(item["selected_bytes"], "context.selected_bytes"),
+            content_included=bool(item.get("content_included", False)),
+        )
+        for item in raw_files
+        if isinstance(item, dict)
+    )
+    manifest = ContextManifest(
+        schema_version=_as_int(value.get("schema_version", 1), "context.schema_version"),
+        project_root=str(value["project_root"]),
+        selection_id=str(value["selection_id"]),
+        snapshot_sha256=str(value["snapshot_sha256"]),
+        files=files,
+        selected_bytes=_as_int(value["selected_bytes"], "context.selected_bytes"),
+    )
+    manifest.validate()
+    return manifest
+
+
+def _task_ledger(value: object) -> TaskLedgerSnapshot | None:
+    if not isinstance(value, dict):
+        return None
+    raw_entries = value.get("entries", [])
+    if not isinstance(raw_entries, list):
+        raw_entries = []
+    entries = tuple(
+        LedgerEntry(
+            operation_id=str(item["operation_id"]),
+            provider_id=str(item["provider_id"]),
+            reserved_tokens=_as_int(item["reserved_tokens"], "ledger.reserved_tokens"),
+            charged_tokens=_as_int(item["charged_tokens"], "ledger.charged_tokens"),
+            usage_state=cast(UsageState, str(item["usage_state"])),
+            fresh_tokens=(
+                _optional_int(item.get("fresh_tokens"), "ledger.fresh_tokens")
+                if item.get("fresh_tokens") is not None else None
+            ),
+            cached_tokens=(
+                _optional_int(item.get("cached_tokens"), "ledger.cached_tokens")
+                if item.get("cached_tokens") is not None else None
+            ),
+            total_tokens=(
+                _optional_int(item.get("total_tokens"), "ledger.total_tokens")
+                if item.get("total_tokens") is not None else None
+            ),
+            status=str(item["status"]),
+        )
+        for item in raw_entries
+        if isinstance(item, dict)
+    )
+    snapshot = TaskLedgerSnapshot(
+        schema_version=_as_int(value.get("schema_version", 1), "ledger.schema_version"),
+        total_limit_tokens=_as_int(value["total_limit_tokens"], "ledger.total"),
+        fixed_commitment_tokens=_as_int(value.get("fixed_commitment_tokens", 0), "ledger.fixed"),
+        charged_tokens=_as_int(value.get("charged_tokens", 0), "ledger.charged"),
+        reserved_tokens=_as_int(value.get("reserved_tokens", 0), "ledger.reserved"),
+        remaining_tokens=_as_int(value.get("remaining_tokens", 0), "ledger.remaining"),
+        usage_complete=bool(value.get("usage_complete", False)),
+        unknown_operation_ids=_string_tuple(value.get("unknown_operation_ids")),
+        entries=entries,
+    )
+    snapshot.validate()
+    return snapshot
+
+
+def _route_report(value: object) -> RouteReport | None:
+    if not isinstance(value, dict):
+        return None
+    raw_attempts = value.get("attempts", [])
+    if not isinstance(raw_attempts, list):
+        raw_attempts = []
+    attempts = tuple(
+        RouteAttempt(
+            provider_id=str(item["provider_id"]),
+            model=_optional_string(item.get("model")),
+            attempt=_as_int(item["attempt"], "route.attempt"),
+            status=str(item["status"]),
+            failure_class=(
+                cast(RouteFailureClass, str(item["failure_class"]))
+                if item.get("failure_class") is not None
+                else None
+            ),
+            error_code=_optional_string(item.get("error_code")),
+            changed_files=_string_tuple(item.get("changed_files")),
+            usage=_usage(item.get("usage")),
+            usage_state=cast(UsageState, str(item.get("usage_state", "unknown"))),
+        )
+        for item in raw_attempts
+        if isinstance(item, dict)
+    )
+    report = RouteReport(
+        attempts=attempts,
+        selected_provider_id=_optional_string(value.get("selected_provider_id")),
+        switched=bool(value.get("switched", False)),
+        decision=cast(RouteDecisionAction, str(value.get("decision", "stop"))),
+        reason=str(value.get("reason", "No route attempt was made.")),
+    )
+    report.validate()
+    return report
 
 
 class CodexExecutionWorkspaceAdapter:
@@ -224,6 +357,9 @@ class CodexExecutionWorkspaceAdapter:
                 nodes=tuple(ProviderNodeBudgetReport(**node) for node in raw_budget.get("nodes", [])),
             )
         raw_error_code = value.get("error_code")
+        context_manifest = _context_manifest(value.get("context_manifest"))
+        task_ledger = _task_ledger(value.get("task_ledger"))
+        route_report = _route_report(value.get("route_report"))
         run = CodexGraphExecution(
             schema_version=_as_int(value["schema_version"], "schema_version"),
             run_id=str(value["run_id"]),
@@ -246,6 +382,10 @@ class CodexExecutionWorkspaceAdapter:
             usage=_usage(value.get("usage")),
             schedule=tuple(schedule),
             budget_accounting=budget_report,
+            prompt_estimates=_prompt_estimates(value.get("prompt_estimates")),
+            context_manifest=context_manifest,
+            task_ledger=task_ledger,
+            route_report=route_report,
         )
         run.validate()
         return run

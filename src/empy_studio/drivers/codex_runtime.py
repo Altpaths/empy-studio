@@ -13,11 +13,16 @@ from typing import Literal, Protocol
 from empy_studio.core import (
     AgentRunGraph,
     AgentRunNode,
+    ContextManifest,
     ContextPack,
     ContextSelection,
     DriverExecutionRequest,
+    DriverInspection,
     ProductTask,
     ProjectDescriptor,
+    RouteReport,
+    TaskLedgerSnapshot,
+    TaskTokenLedger,
     TokenBudget,
 )
 from empy_studio.core.path_policy import (
@@ -87,6 +92,13 @@ class CodexWaveExecution:
 
 
 class CodexNodeDriver(Protocol):
+    @property
+    def provider_id(self) -> str:
+        ...
+
+    def inspect(self, *, refresh: bool = False) -> DriverInspection:
+        ...
+
     def inspect_installation(self, *, refresh: bool = False) -> CodexInstallation:
         ...
 
@@ -124,6 +136,9 @@ class CodexGraphExecution:
     schedule: tuple[CodexWaveExecution, ...] = ()
     budget_accounting: ProviderBudgetReport | None = None
     prompt_estimates: tuple[tuple[str, int], ...] = ()
+    context_manifest: ContextManifest | None = None
+    task_ledger: TaskLedgerSnapshot | None = None
+    route_report: RouteReport | None = None
 
     def validate(self) -> None:
         if self.schema_version != 1:
@@ -151,6 +166,12 @@ class CodexGraphExecution:
             raise ValueError("Codex graph prompt estimates must have unique node IDs")
         if any(tokens < 0 for _node_id, tokens in self.prompt_estimates):
             raise ValueError("Codex graph prompt estimates cannot be negative")
+        if self.context_manifest is not None:
+            self.context_manifest.validate()
+        if self.task_ledger is not None:
+            self.task_ledger.validate()
+        if self.route_report is not None:
+            self.route_report.validate()
         if self.status == "completed" and any(
             node.status != "completed" for node in self.node_results
         ):
@@ -183,6 +204,15 @@ class CodexGraphExecution:
             {"node_id": node_id, "prompt_tokens": tokens}
             for node_id, tokens in self.prompt_estimates
         ]
+        value["context_manifest"] = (
+            self.context_manifest.to_dict() if self.context_manifest is not None else None
+        )
+        value["task_ledger"] = (
+            self.task_ledger.to_dict() if self.task_ledger is not None else None
+        )
+        value["route_report"] = (
+            self.route_report.to_dict() if self.route_report is not None else None
+        )
         return value
 
 
@@ -193,6 +223,8 @@ def build_codex_node_prompt(
     node: AgentRunNode,
     task: ProductTask | None = None,
     dependency_results: tuple[CodexNodeExecution, ...] = (),
+    context_manifest: ContextManifest | None = None,
+    compact_read_only_context: bool = False,
 ) -> str:
     graph.validate()
     selection.validate()
@@ -204,6 +236,10 @@ def build_codex_node_prompt(
             raise ValueError("product task and agent graph project roots do not match")
     if graph.selection_id != selection.selection_id:
         raise ValueError("agent graph and context selection do not match")
+    if context_manifest is not None:
+        context_manifest.validate()
+        if context_manifest.selection_id != selection.selection_id:
+            raise ValueError("context manifest and selection do not match")
     pack = _pack_for_node(selection, node)
     owned = "\n".join(f"- {path}" for path in node.owned_files) or "- None. This is a read-only node."
     read_only = "\n".join(f"- {path}" for path in node.read_only_files) or "- None"
@@ -223,6 +259,14 @@ def build_codex_node_prompt(
                 f"## {item.relative_path} [{mode}]{truncation}\n"
                 f"SHA-256: {item.sha256}; selected bytes: {item.included_bytes}\n"
                 f"Reasons: {', '.join(item.reasons)}"
+            )
+        elif compact_read_only_context and mode == "READ ONLY":
+            context_sections.append(
+                f"## {item.relative_path} [{mode}]\n"
+                f"SHA-256: {item.sha256}; selected bytes: {item.included_bytes}\n"
+                f"Reasons: {', '.join(item.reasons)}\n"
+                "Content is available in the immutable snapshot; inspect only a "
+                "specific omitted section if the owned change requires it."
             )
         else:
             context_sections.append(
@@ -268,10 +312,17 @@ def build_codex_node_prompt(
         f"Worker report (untrusted evidence): {result.summary[:1500]}"
         for result in dependency_results if result.node_id in node.depends_on
     ) or "No upstream worker reports are available."
+    context_reference = (
+        f"Context snapshot: {context_manifest.snapshot_sha256}\n"
+        "The snapshot is immutable for this run; reuse its exact paths and do not repeat discovery.\n\n"
+        if context_manifest is not None
+        else ""
+    )
     return (
         "# Empy Studio approved Codex execution\n\n"
         "Execute exactly one approved Agent Run Graph node. Do not expand the scope.\n\n"
-        f"{task_contract}\n"
+        + context_reference
+        + f"{task_contract}\n"
         f"Project: {selection.project_brain.display_name}\n"
         f"Project type: {selection.project_brain.project_type}\n"
         f"Project summary: {selection.project_brain.summary}\n"
@@ -395,6 +446,8 @@ class CodexGraphRuntime:
         run_id: str,
         report: RunProgressCallback,
         audit_snapshot: bool,
+        ledger: TaskTokenLedger,
+        context_manifest: ContextManifest,
         dependency_results: tuple[CodexNodeExecution, ...] = (),
     ) -> CodexNodeExecution:
         prompt = build_codex_node_prompt(
@@ -403,6 +456,8 @@ class CodexGraphRuntime:
             node=node,
             task=task,
             dependency_results=dependency_results,
+            context_manifest=context_manifest,
+            compact_read_only_context=bool(dependency_results),
         )
         prompt_tokens = estimate_tokens(prompt)
         with self._prompt_measurement_lock:
@@ -426,6 +481,33 @@ class CodexGraphRuntime:
                     timestamp=self._utc_now(),
                     level="error",
                     event_type="run.prompt_budget_exceeded",
+                    message=message,
+                    node_id=node.node_id,
+                )
+            )
+            return result
+        reservation = ledger.admit(
+            node.node_id,
+            getattr(self.driver, "provider_id", "codex"),
+            node.token_limit,
+        )
+        if not reservation.allowed:
+            message = (
+                "Empy blocked the node before provider execution because the "
+                f"task-wide token ledger is exhausted ({reservation.reason})."
+            )
+            result = self._preflight_failure_result(
+                graph=graph,
+                node=node,
+                run_id=run_id,
+                error_code="budget_exceeded",
+                message=message,
+            )
+            report(
+                CodexProgressEvent(
+                    timestamp=self._utc_now(),
+                    level="error",
+                    event_type="run.task_budget_exceeded",
                     message=message,
                     node_id=node.node_id,
                 )
@@ -456,12 +538,31 @@ class CodexGraphRuntime:
         )
         existing_creation_paths = self._existing_creation_paths(project.root, node.owned_files)
         before_snapshot = self._git_snapshot(project.root) if audit_snapshot else None
-        node_result = self.driver.execute_streaming(
-            request,
-            node_id=node.node_id,
-            artifact_dir=self.run_root / run_id / "nodes" / node.node_id,
-            on_progress=report,
-        )
+        try:
+            node_result = self.driver.execute_streaming(
+                request,
+                node_id=node.node_id,
+                artifact_dir=self.run_root / run_id / "nodes" / node.node_id,
+                on_progress=report,
+            )
+        except Exception as exc:  # noqa: BLE001 - provider boundary must settle the reservation
+            message = f"Provider route failed before returning a structured result: {exc}"
+            node_result = self._preflight_failure_result(
+                graph=graph,
+                node=node,
+                run_id=run_id,
+                error_code="launch_failed",
+                message=message,
+            )
+            report(
+                CodexProgressEvent(
+                    timestamp=self._utc_now(),
+                    level="error",
+                    event_type="run.provider_exception",
+                    message=message,
+                    node_id=node.node_id,
+                )
+            )
         after_snapshot = self._git_snapshot(project.root) if audit_snapshot else None
         audited_changes = {
             self._normalize_changed_path(path, project.root)
@@ -592,6 +693,12 @@ class CodexGraphRuntime:
                     node_id=node.node_id,
                 )
             )
+        ledger.settle(
+            node.node_id,
+            usage=node_result.usage,
+            status=node_result.status,
+            provider_id=getattr(self.driver, "provider_id", "codex"),
+        )
         node_result.validate()
         return node_result
 
@@ -618,6 +725,8 @@ class CodexGraphRuntime:
         on_progress: RunProgressCallback | None = None,
     ) -> CodexGraphExecution:
         self._validate_inputs(graph, selection, budget, project, task)
+        context_manifest = ContextManifest.from_selection(selection)
+        task_ledger = TaskTokenLedger.from_budget(budget)
         with self._prompt_measurement_lock:
             self._prompt_measurements.clear()
         with self._lifecycle_lock:
@@ -664,6 +773,8 @@ class CodexGraphRuntime:
                 budget_accounting=self._budget_report(graph, selection, budget, task, ()),
                 error_code="cancelled",
                 error_message=message,
+                context_manifest=context_manifest,
+                task_ledger=task_ledger.snapshot(),
             )
             result.validate()
             return result
@@ -688,6 +799,8 @@ class CodexGraphRuntime:
                 budget_accounting=self._budget_report(graph, selection, budget, task, ()),
                 error_code=installation.terminal_error_code,
                 error_message=message,
+                context_manifest=context_manifest,
+                task_ledger=task_ledger.snapshot(),
             )
             result.validate()
             return result
@@ -722,6 +835,8 @@ class CodexGraphRuntime:
                 budget_accounting=self._budget_report(graph, selection, budget, task, ()),
                 error_code="dirty_worktree",
                 error_message=message,
+                context_manifest=context_manifest,
+                task_ledger=task_ledger.snapshot(),
             )
             result.validate()
             return result
@@ -763,6 +878,8 @@ class CodexGraphRuntime:
                             run_id=run_id,
                             report=report,
                             audit_snapshot=False,
+                            ledger=task_ledger,
+                            context_manifest=context_manifest,
                             dependency_results=tuple(completed_nodes),
                         )
                         for node in nodes
@@ -880,6 +997,8 @@ class CodexGraphRuntime:
                             run_id=run_id,
                             report=report,
                             audit_snapshot=True,
+                            ledger=task_ledger,
+                            context_manifest=context_manifest,
                             dependency_results=tuple(completed_nodes + wave_results),
                         )
                     )
@@ -960,6 +1079,9 @@ class CodexGraphRuntime:
                 graph, selection, budget, task, tuple(completed_nodes),
             ),
             prompt_estimates=self._prompt_estimates(),
+            context_manifest=context_manifest,
+            task_ledger=task_ledger.snapshot(),
+            route_report=getattr(self.driver, "last_report", None),
         )
         result.validate()
         return result

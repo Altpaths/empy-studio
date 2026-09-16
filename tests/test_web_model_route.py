@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from empy_studio.drivers import CodexDriver
+from empy_studio.drivers import CodexDriver, RoutedCodexNodeDriver
 from empy_studio.drivers.omniroute import OmniRouteCodexDriver
 from empy_studio.web_desktop import GuidedState, RequestHandler
 
@@ -20,6 +20,22 @@ def test_route_persists_without_changing_fresh_start_or_economy(tmp_path: Path) 
     assert restored.active_task_id is None
     restored.set_model_route({'mode': 'direct'})
     assert type(restored.driver) is CodexDriver
+
+
+def test_explicit_fallback_models_build_a_bounded_router(tmp_path: Path) -> None:
+    state = GuidedState(tmp_path)
+    state.set_model_route(
+        {
+            "mode": "omniroute",
+            "model": "oc/big-pickle",
+            "fallback_models": ["ollama/codellama"],
+        }
+    )
+
+    assert isinstance(state.driver, RoutedCodexNodeDriver)
+    assert state.model_route.fallback_models == ("ollama/codellama",)
+    assert state.driver.policy.allow_paid is False
+    assert state.driver.policy.max_attempts == 2
 
 
 def test_invalid_routes_do_not_replace_configuration(tmp_path: Path) -> None:

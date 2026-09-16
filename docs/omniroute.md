@@ -1,16 +1,24 @@
-# Experimental OmniRoute connection and adaptive token economy (0.1.55)
+# OmniRoute connection, bounded fallbacks, and token economy (0.1.63)
 
 Choose **Model connection: direct or OmniRoute** on the project screen. Direct
 keeps the existing Codex account route; its normal account usage applies.
-OmniRoute is an explicit alternative, not a fallback from Direct.
+OmniRoute is an explicit alternative to Direct. Within OmniRoute, up to three
+additional explicit free/local model IDs can be configured as bounded
+fallbacks. Direct Codex and OmniRoute credentials are never mixed.
 
 The experimental route accepts literal loopback HTTP addresses ending in `/v1`
 (default `http://127.0.0.1:20129/v1`). Model IDs are explicit: `oc/north-mini-code-free`,
 `oc/big-pickle`, or a local `ollama/...` / `lmstudio/...` model advertised by the
 gateway. `auto` and `default` are rejected. Paid model IDs require the explicit
-`allow_paid` opt-in in the UI or route setting; there is never an automatic
-fallback or remapping. Availability and provider terms can change; an
+`allow_paid` opt-in in the UI or route setting; paid routes are never selected
+unless that opt-in is present. Availability and provider terms can change; an
 advertised catalog entry is not proof that inference works.
+
+Fallback is fail-closed: Empy tries the next explicitly configured route only
+after a reported transient transport/rate failure, no changed files, no
+independently observed Git mutation, and remaining shared node budget. An
+authentication, quota, budget, policy, partial-change, or unknown-usage result
+stops the route so Verification can inspect the exact worktree.
 
 ## Adaptive provider-call economy
 
@@ -58,9 +66,10 @@ during startup, execution and an active recovery gap. Run reports retain the rou
 used. Corrupt saved route settings fail closed until explicitly corrected.
 
 The OmniRoute route disables Codex HTTP/stream reconnect retries and web search.
-Empy's existing economy policy and internal token guard remain; a gateway does
-not remove the 41,616-token failure condition reported for the earlier ticket.
-No lower real cost or universal successful repair is claimed.
+Empy's task ledger, provider hard cap, and local benchmark remain active; a
+gateway does not make missing usage free and does not guarantee successful
+repair. Route attempts, their usage state, and the remaining ledger capacity
+are persisted in the run report.
 
 Tests on 2026-09-12: both free chat routes returned 403; the actual Responses
 coding route reported unsupported model / 401 and timed out after reconnects.

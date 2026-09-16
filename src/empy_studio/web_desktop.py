@@ -29,6 +29,8 @@ from empy_studio.core import (
     ExecutionPlan,
     ProductTask,
     ProjectDetection,
+    ProviderRoute,
+    RoutingPolicy,
     TaskKind,
     TokenBudget,
     approve_execution_plan,
@@ -65,7 +67,9 @@ from empy_studio.drivers import (
     CodexDriver,
     CodexGraphExecution,
     CodexGraphRuntime,
+    CodexNodeDriver,
     CodexProgressEvent,
+    RoutedCodexNodeDriver,
 )
 from empy_studio.drivers.omniroute import CodexRouteConfig, OmniRouteCodexDriver
 from empy_studio.platform_support import default_workspace_root
@@ -476,7 +480,7 @@ class GuidedState:
     node_states: dict[str, str] = field(default_factory=dict)
     running: bool = False
     lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
-    driver: CodexDriver = field(init=False, repr=False)
+    driver: CodexNodeDriver = field(init=False, repr=False)
     review_store: ReviewWorkspaceAdapter = field(init=False, repr=False)
     execution_store: CodexExecutionWorkspaceAdapter = field(init=False, repr=False)
     verification_store: VerificationWorkspaceAdapter = field(init=False, repr=False)
@@ -527,9 +531,45 @@ class GuidedState:
                 except (KeyError, OSError, RuntimeError, TypeError, ValueError):
                     self.store.set_setting("active_task_id", None)
 
-    def _route_driver(self, route: CodexRouteConfig) -> CodexDriver:
+    def _route_driver(self, route: CodexRouteConfig) -> CodexNodeDriver:
         if route.mode == "omniroute":
-            return OmniRouteCodexDriver(route=route, artifact_root=self.workspace_root / "codex-runs")
+            models = (route.model, *route.fallback_models)
+            if len(models) == 1:
+                return OmniRouteCodexDriver(
+                    route=route,
+                    artifact_root=self.workspace_root / "codex-runs",
+                )
+            candidates: list[tuple[ProviderRoute, CodexNodeDriver]] = []
+            for index, model in enumerate(models, start=1):
+                candidate_route = replace(
+                    route,
+                    model=model,
+                    fallback_models=(),
+                )
+                candidates.append(
+                    (
+                        ProviderRoute(
+                            provider_id=f"omniroute-{index}",
+                            display_name=f"Codex via OmniRoute ({model})",
+                            kind="omniroute",
+                            model=model,
+                            cost_class=("paid" if route.allow_paid and model not in {"oc/north-mini-code-free", "oc/big-pickle"} else "local"),
+                            allow_paid=route.allow_paid,
+                            credential_environment_variable=route.env_key,
+                        ),
+                        OmniRouteCodexDriver(
+                            route=candidate_route,
+                            artifact_root=self.workspace_root / "codex-runs",
+                        ),
+                    )
+                )
+            return RoutedCodexNodeDriver(
+                candidates=tuple(candidates),
+                policy=RoutingPolicy(
+                    allow_paid=route.allow_paid,
+                    max_attempts=len(candidates),
+                ),
+            )
         return CodexDriver(artifact_root=self.workspace_root / "codex-runs")
 
     def set_model_route(self, value: dict[str, Any]) -> None:
@@ -3612,6 +3652,9 @@ class GuidedState:
             "schedule": [item.to_dict() for item in self.run.schedule],
             "usage": self._provider_usage(),
             "budget_accounting": self.run.budget_accounting.to_dict() if self.run.budget_accounting else None,
+            "context_manifest": self.run.context_manifest.to_dict() if self.run.context_manifest else None,
+            "task_ledger": self.run.task_ledger.to_dict() if self.run.task_ledger else None,
+            "route_report": self.run.route_report.to_dict() if self.run.route_report else None,
             "estimates": estimates,
             "verification": {
                 "status": self.verification.status if self.verification is not None else "not_run",

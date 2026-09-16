@@ -38,6 +38,17 @@ def test_configuration_contains_only_key_name() -> None:
         CodexRouteConfig(env_key="OPENAI_API_KEY").validate()
 
 
+def test_explicit_fallback_models_round_trip_and_direct_route_rejects_them() -> None:
+    config = CodexRouteConfig(
+        mode="omniroute",
+        fallback_models=("ollama/codellama", "lmstudio/local-code"),
+    )
+    config.validate()
+    assert CodexRouteConfig.from_dict(config.to_dict()) == config
+    with pytest.raises(ValueError, match="explicit OmniRoute"):
+        CodexRouteConfig(mode="direct", fallback_models=("ollama/codellama",)).validate()
+
+
 def setup_driver(monkeypatch: pytest.MonkeyPatch, **kwargs: Any) -> OmniRouteCodexDriver:
     monkeypatch.setattr("empy_studio.drivers.codex.shutil.which", lambda _: "/fake/codex")
     def runner(command: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
