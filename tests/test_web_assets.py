@@ -71,6 +71,10 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert 'id="zip-upload"' in index
     assert 'aria-label=' in app_js
     assert "localizeMessage" in app_js
+    assert "localizeMessage(engine.message" in app_js
+    assert "run-technical" in app_js
+    assert "!state.failure_context" in app_js
+    assert "static web validation failed" in app_js
     assert "Codex execution requires a clean Git worktree" in app_js
     assert "recoverAndContinue" in app_js
     assert "renderRecoveryActions" in app_js

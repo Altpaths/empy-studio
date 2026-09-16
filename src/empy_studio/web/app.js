@@ -122,6 +122,16 @@ function localizeMessage(value = "") {
       ? "اجرای Agent به نتیجهٔ کامل و قابل‌تأیید نرسید؛ علت قطعی را در بخش شکست بررسی کنید و فقط پس از Verification موفق ادامه دهید."
       : "The Agent run did not produce a complete, verifiable result; inspect the confirmed failure and continue only after Verification passes.";
   }
+  if (
+    normalized.includes("static web validation failed")
+    && normalized.includes("local css target")
+  ) {
+    const targetMatch = value.match(/local css target ['\"]([^'\"]+)['\"] was not found/i);
+    const target = targetMatch ? targetMatch[1] : "the referenced local asset";
+    return language === "fa"
+      ? `Verification یک فایل محلیِ ارجاع‌شده را پیدا نکرد: «${target}». ابتدا این asset را در مسیر پروژه اضافه یا ارجاع CSS را اصلاح کنید؛ اجرای Agent بعد از رفع این پیش‌نیاز انجام می‌شود.`
+      : `Verification could not find the referenced local asset "${target}". Add it at the project path or repair the CSS reference before starting the Agent.`;
+  }
   if (value.includes("no writable files for writing roles") || value.includes("no writable files") || value.includes("فایل قابل‌ویرایش") || value.includes("فایل قابل ویرایش") || value.includes("فایل امن و قابل‌ویرایشی") || value.includes("فایل امن و قابل ویرایشی")) {
     return language === "fa"
       ? "این تیکت به فایل قابل‌ویرایش وصل نشد؛ Empy باید فهرست فایل‌های پروژه را دوباره بسازد یا فایل لازم را به‌عنوان هدف امن ایجاد کند. فایل اصلی تغییر نکرده است."
@@ -203,9 +213,10 @@ function importStatusMessage(report) {
   const readiness = report.verification_readiness || {};
   const diagnostics = readiness.diagnostics || [];
   if (readiness.status === "needs_attention" && diagnostics.length) {
+    const diagnostic = localizeMessage(diagnostics[0]);
     return language === "fa"
-      ? "واردسازی کامل شد؛ Empy پیش از مصرف توکن این پیش‌نیاز را در کپی ایزوله آماده می‌کند: " + diagnostics[0]
-      : "Import completed; Empy will prepare this prerequisite in the isolated copy before spending tokens: " + diagnostics[0];
+      ? "واردسازی کامل شد؛ Empy پیش از مصرف توکن این پیش‌نیاز را در کپی ایزوله آماده می‌کند: " + diagnostic
+      : "Import completed; Empy will prepare this prerequisite in the isolated copy before spending tokens: " + diagnostic;
   }
   if (!report.skipped_files) return "";
   if (language === "fa") return `پروژه در یک کپی ایزوله وارد شد؛ ${Number(report.copied_files || 0).toLocaleString()} فایل قابل‌استفاده کپی شد و ${Number(report.skipped_files || 0).toLocaleString()} مورد کنارگذاشته‌شده در بررسی واردسازی توضیح داده شده است.`;
