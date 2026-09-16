@@ -1,3 +1,17 @@
+## [0.1.64] - 2026-09-17
+
+- Map PHP frontend tickets to the real `index.php` entry point and existing
+  asset files; only homepage requests may receive an explicitly approved
+  virtual `index.html` creation target.
+- Preserve bounded Agent evidence when a graph stops with a generic
+  no-change/objective failure, classify ownership mismatches separately, and
+  carry the confirmed root cause into automatic repair.
+- Replace raw run failures and always-open logs in the web UI with one concise,
+  bilingual finding and next action; keep technical evidence available in a
+  collapsed details section.
+- Add regression coverage for PHP asset routing, provider authentication and
+  target errors, recovered Agent reports, and stale failure-context refresh.
+
 ## [0.1.63] - 2026-09-16
 
 - Add a shared task token ledger that reserves each locked node allocation once,

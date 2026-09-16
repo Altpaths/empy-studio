@@ -1,3 +1,22 @@
+# Empy Studio 0.1.64 — actionable failure diagnostics and PHP target routing
+
+Empy now maps PHP frontend tickets to the real entry point and existing asset
+files. A virtual `index.html` target is created only when the request is
+actually about the homepage, so an asset or chart ticket cannot fail merely
+because a PHP project does not contain that file.
+
+When a provider or graph stops with a generic no-change error, Empy preserves
+the bounded Agent report, classifies the concrete blocker (including ownership
+and layout mismatches), and passes that evidence into the recovery ticket.
+The web UI presents one short bilingual finding and next action; raw provider
+errors and run logs remain available only under collapsed technical details.
+
+The full regression suite (982 tests), Python compile check, Ruff, and
+JavaScript syntax check passed locally. No provider call is made by the test
+suite.
+
+## Previous release context
+
 # Empy Studio 0.1.63 — shared token ledger and safe provider routing
 
 Empy now accounts for the whole task with one shared ledger. Each graph node
