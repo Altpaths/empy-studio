@@ -1,3 +1,21 @@
+# Empy Studio 0.1.66 — root-cause recovery routing and deterministic static repair
+
+Empy now carries multiline Verification and execution diagnostics into the
+bounded recovery context. When a check names `public_html/assets/home.css`,
+that exact stylesheet becomes the frontend repair owner; the previous ticket's
+unrelated JavaScript files are not selected again.
+
+Before any provider inspection, the isolated project receives one narrow,
+deterministic repair for a stylesheet that refers to `assets/foo` from inside
+`assets/` while the existing `assets/foo` file is present. No placeholder file
+is created and ambiguous references remain a visible Verification failure.
+
+The full regression suite, strict lint, type checking, and compile checks pass
+locally. Provider billing, DirectAdmin extraction, and Apple notarization still
+require their respective external environments.
+
+## Previous release context
+
 # Empy Studio 0.1.65 — durable failure memory and duplicate-run prevention
 
 Empy now keeps a bounded, project-scoped failure ledger in the local workspace.

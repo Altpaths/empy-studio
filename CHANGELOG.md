@@ -880,6 +880,18 @@ Python, Linux, or Windows use.
 
 # Changelog
 
+## [0.1.66] - 2026-09-17
+
+- Route multiline recovery and verification diagnostics to the exact failing
+  project file and its bounded writer owner, preventing repeated edits to an
+  unrelated file after a failed run.
+- Repair only provable duplicate-directory CSS asset references in the
+  isolated copy before provider inspection; ambiguous or missing references
+  remain visible as verification failures.
+- Add regression coverage for recovery path ownership and deterministic CSS
+  repair, including query strings, missing targets, and the full verification
+  contract.
+
 All notable changes to Empy Studio are documented here.
 
 ## [Unreleased]
