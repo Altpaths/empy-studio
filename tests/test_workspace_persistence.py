@@ -9,9 +9,9 @@ from empy_studio.core import ProjectDescriptor
 from empy_studio.workspace import SQLiteWorkspaceStore
 
 
-def test_workspace_starts_at_schema_version_two(tmp_path: Path) -> None:
+def test_workspace_starts_at_schema_version_three(tmp_path: Path) -> None:
     store = SQLiteWorkspaceStore(tmp_path / "workspace.sqlite3")
-    assert store.schema_version() == 2
+    assert store.schema_version() == 3
 
 
 def test_projects_survive_store_restart(tmp_path: Path) -> None:
@@ -152,5 +152,5 @@ def test_schema_one_workspace_migrates_releases_table(tmp_path: Path) -> None:
 
     migrated = SQLiteWorkspaceStore(database)
 
-    assert migrated.schema_version() == 2
+    assert migrated.schema_version() == 3
     assert migrated.list_releases("missing") == ()
