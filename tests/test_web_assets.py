@@ -98,3 +98,24 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert ".export-files" in app_css
     assert ".message.warning" in app_css
     assert ".download-link{display:inline-block;text-decoration:none;font:inherit" in app_css
+
+
+def test_failure_memory_ui_is_bounded_localized_and_redacted() -> None:
+    app_js = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+    assert "failure_memory" in app_js
+    assert "function sanitizeFailureMemoryText" in app_js
+    assert "function normaliseFailureMemory" in app_js
+    assert "function renderFailureMemory" in app_js
+    assert "failureMemoryBlocked" in app_js
+    assert "این علت برای همین پروژه قبلاً ثبت شده است" in app_js
+    assert "This cause was already recorded for this project" in app_js
+    memory_ui = app_js.split("function renderFailureMemory", 1)[1].split("function renderRecoveryActions", 1)[0]
+    assert "escapeHtml(entry.summary" in memory_ui
+    assert "escapeHtml(entry.action" in memory_ui
+    assert 'entries.slice(0, 4)' in app_js
+    assert 'matched.slice(0, 4)' in app_js
+    assert 'summaries.slice(0, 4)' in app_js
+    assert 'Math.min(256' in app_js
+    assert '[project path]' in app_js
+    assert 'data-memory-state=' in memory_ui
+    assert 'role="${normalized.blocked ? "alert" : "status"}"' in memory_ui

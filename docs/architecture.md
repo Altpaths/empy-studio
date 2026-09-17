@@ -6,10 +6,10 @@ Empy Studio separates durable project knowledge from short-lived agent context.
                  Project Vault
                       │
 Request → Project Brain → Planner → Task Graph → Agent Host
-                      │              │
-          bounded Context Packs  Handoffs
-                      │              │
-                      └── Verification ──┐
+                      │              │             │
+          bounded Context Packs  Handoffs      Failure Ledger
+                      │              │             ↑
+                      └── Verification ────────────┘
                                         ↓
                               Release Integrator
                                         ↓
@@ -40,6 +40,10 @@ separately by the driver and never presented as a local estimate.
 
 Runs local commands, verifies artifacts, records checks that failed, and preserves environment-dependent checks as pending.
 
+### Durable failure ledger
+
+The SQLite-backed failure ledger stores bounded, redacted records scoped to a project. It fingerprints the confirmed cause and safe relative targets, coalesces repeated observations, and keeps a small set of actionable summaries. The runtime queries it before a provider call and can stop an unchanged repeat locally. It survives restarts and ticket changes within the project, but records are removed with the project and never cross project boundaries. A record changes to resolved only after the Verification gate accepts real evidence; incomplete or failed checks leave it open.
+
 ### Learning
 
 Merges validated, reusable lessons. Project-specific preferences stay in the Project Vault.
@@ -57,3 +61,5 @@ empy verify
 ## Boundary with coding agents
 
 Empy Studio is the control layer, not the language model. Codex or another host performs model-driven implementation. Empy Studio preserves scope, continuity, ownership, evidence, and release discipline.
+
+The ledger deliberately stores conclusions rather than provider transcripts. The UI exposes only a bounded cause, action, and count; raw diagnostics stay in the current run's optional technical details. This keeps the memory useful for future routing while avoiding secret, path, and token leakage.

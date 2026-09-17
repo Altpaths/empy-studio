@@ -21,6 +21,8 @@ Only relevant bounded context is sent to a worker. A second ticket should use
 the same project and workspace, rather than reimporting the project into a fresh
 workspace. Changed code still needs fresh verification.
 
+Failure memory extends this reuse boundary to confirmed failures. Planning, preflight, execution, and Verification failures are normalized into a project-scoped ledger. The same fingerprint is deduplicated across tickets and restarts, and only a bounded cause/action summary is shown. When the current target and project snapshot are unchanged, Empy blocks the duplicate provider run before it can spend tokens and tells the user what to correct. A changed target or corrective request creates a new opportunity to run. A ledger entry is resolved only by passing Verification with real evidence; a provider's claim of success is insufficient.
+
 ## Usage and specialist work
 
 Each graph node has a role, owned paths, dependencies and a token ceiling.
@@ -37,6 +39,11 @@ The Codex CLI guard is reactive: Empy stops when reported fresh usage exceeds
 the allocated threshold. If the provider reports late or omits usage, this
 cannot guarantee a hard billing cap. Workflow time limits and reservations
 reduce repeated execution, but are not a provider-enforced spending limit.
+
+The failure ledger is a local repetition guard, not a billing system. It removes
+avoidable duplicate model calls and keeps prior causes available without sending
+the old transcript back to the provider. It does not claim that provider usage
+is zero or that a late usage report can be undone.
 
 ## Recovery and review
 
