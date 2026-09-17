@@ -474,10 +474,12 @@ def test_recovery_evidence_promotes_failing_css_to_frontend_owner(
         objective="Improve the bank chart presentation",
         requirements=("Keep the existing chart behavior",),
         constraints=(
-            (
-                "Previous Empy verification findings: Static web validation failed: "
-                "public_html/assets/home.css: local css target 'assets/hero.png' was not found."
-            ),
+            "Recovery owner: frontend. Correct the confirmed failure only.",
+            "Preserve previous fixes and checkpoints.",
+            "Remain within the original request and approved ownership.",
+            "علت قطعی شکست قبلی / Exact failing checks:",
+            "Previous Empy verification findings from the last attempt must be addressed before release:",
+            "Static web validation failed: public_html/assets/home.css: local css target 'assets/hero.png' was not found.",
         ),
         definition_of_done=("The chart verification passes",),
         status="ready_for_planning",
@@ -491,14 +493,74 @@ def test_recovery_evidence_promotes_failing_css_to_frontend_owner(
     frontend_pack = next(
         pack for pack in selection.packs if pack.agent_role == "frontend"
     )
-    assert "public_html/assets/home.css" in {
-        item.relative_path for item in frontend_pack.files
-    }
+    frontend_paths = {item.relative_path for item in frontend_pack.files}
+    assert "public_html/assets/home.css" in frontend_paths
+    assert "public_html/assets/app.js" not in frontend_paths
+    css_context = next(
+        item for item in frontend_pack.files
+        if item.relative_path == "public_html/assets/home.css"
+    )
+    assert "explicitly named in ticket" in css_context.reasons
 
     budget = lock_token_budget(build_token_budget(plan=plan, selection=selection))
     graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
     frontend_node = next(node for node in graph.nodes if node.agent_role == "frontend")
     assert "public_html/assets/home.css" in frontend_node.owned_files
+    assert "public_html/assets/app.js" not in frontend_node.owned_files
+
+
+def test_execution_failure_diagnostic_promotes_named_css_without_unrelated_js(
+    tmp_path: Path,
+) -> None:
+    public_html = tmp_path / "public_html"
+    assets = public_html / "assets"
+    assets.mkdir(parents=True)
+    (public_html / "index.html").write_text(
+        '<script src="assets/app.js"></script>\n'
+        '<link rel="stylesheet" href="assets/home-v1.19.css">\n',
+        encoding="utf-8",
+    )
+    (assets / "app.js").write_text(
+        "document.body.dataset.chart = 'ready';\n",
+        encoding="utf-8",
+    )
+    (assets / "home-v1.19.css").write_text(
+        ".hero { background: url('../images/hero.png'); }\n",
+        encoding="utf-8",
+    )
+    project = DefaultProjectService().detect(tmp_path)
+    task = ProductTask(
+        task_id="execution-failure-css-scope",
+        project_root=str(tmp_path.resolve()),
+        kind="ui_improvement",
+        title="Improve the bank chart",
+        objective="Improve the bank chart presentation",
+        requirements=("Keep the existing chart behavior",),
+        constraints=(
+            "Recovery owner: frontend. Correct the confirmed failure only.",
+            "Previous Empy execution failed and the next attempt must resolve its confirmed root cause before release:",
+            "Static CSS validation failed: public_html/assets/home-v1.19.css: local target 'images/hero.png' was not found.",
+            "Do not change unrelated files.",
+        ),
+        definition_of_done=("The chart verification passes",),
+        status="ready_for_planning",
+    )
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+
+    selection = build_context_selection(task=task, project=project, plan=plan)
+    frontend_pack = next(
+        pack for pack in selection.packs if pack.agent_role == "frontend"
+    )
+    frontend_paths = {item.relative_path for item in frontend_pack.files}
+    assert frontend_paths == {"public_html/assets/home-v1.19.css"}
+
+    budget = lock_token_budget(build_token_budget(plan=plan, selection=selection))
+    graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+    frontend_node = next(node for node in graph.nodes if node.agent_role == "frontend")
+    assert frontend_node.owned_files == ("public_html/assets/home-v1.19.css",)
 
 
 def test_documentation_ticket_keeps_named_readme_in_writer_context(

@@ -766,6 +766,67 @@ def _explicit_task_paths(task_text: str) -> frozenset[str]:
     return frozenset(classify_intent(task_text).explicit_files)
 
 
+def _recovery_context_lines(constraints: tuple[str, ...]) -> tuple[str, ...]:
+    """Keep bounded recovery metadata and its file-bearing diagnostics.
+
+    ``build_product_task`` splits multiline continuation context into separate
+    constraints.  Selecting only the marker therefore dropped the diagnostic
+    line that named the failing file.  Collect the generated finding section
+    until its first non-diagnostic line so the exact path can participate in
+    scoring and ownership without admitting ordinary user constraints.
+    """
+
+    finding_prefixes = (
+        "Previous Empy verification findings",
+        "Previous Empy execution failed",
+    )
+    metadata_prefixes = (
+        "Recovery owner:",
+        "علت قطعی شکست قبلی / Exact failing checks:",
+    )
+    diagnostic_phrases = (
+        "validation failed",
+        "verification failed",
+        "check failed",
+        "failed:",
+        "پیدا نشد",
+    )
+    diagnostic_prefixes = (
+        "error",
+        "failure",
+        "خطا",
+        "ناموفق",
+        "شکست",
+    )
+
+    selected: list[str] = []
+    collecting = False
+    for raw in constraints:
+        item = raw.strip().lstrip("-• \t").strip()
+        if not item:
+            continue
+        if item.startswith(metadata_prefixes):
+            selected.append(item)
+            continue
+        if item.startswith(finding_prefixes):
+            selected.append(item)
+            collecting = True
+            continue
+        if not collecting:
+            continue
+
+        if (
+            _explicit_task_paths(item)
+            or any(term in item.casefold() for term in diagnostic_phrases)
+            or item.casefold().startswith(diagnostic_prefixes)
+        ):
+            selected.append(item)
+            continue
+        collecting = False
+
+    return tuple(selected)
+
+
 def _is_explicit_task_path(
     relative_path: str,
     explicit_paths: frozenset[str],
@@ -1681,22 +1742,11 @@ def _build_pack(
     exclusions: list[ContextExclusion],
     brain_index: ProjectBrainIndex | None = None,
 ) -> ContextPack:
-    # Recovery plans carry sanitized Verification evidence in one explicitly
-    # marked constraint.  Include that evidence in local scoring so a
-    # corrective writer receives the exact failing file (for example a CSS
-    # asset reference) instead of repeating the original ticket's narrower
-    # context.  Ordinary user constraints stay out of task scoring to keep
-    # first-pass prompts small and deterministic.
-    recovery_context = tuple(
-        item
-        for item in task.constraints
-        if item.startswith(
-            (
-                "Recovery owner:",
-                "Previous Empy verification findings:",
-            )
-        )
-    )
+    # Recovery plans carry sanitized Verification evidence in multiline
+    # constraints.  Keep the exact diagnostic file in local scoring so a
+    # corrective writer receives the failing asset instead of repeating the
+    # original ticket's narrower context.
+    recovery_context = _recovery_context_lines(task.constraints)
     task_text = " ".join(
         (
             task.title,
