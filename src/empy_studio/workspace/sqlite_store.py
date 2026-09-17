@@ -508,7 +508,10 @@ class SQLiteWorkspaceStore:
         project_id = self._failure_identifier(project_id, "project_id", 256)
         if task_id is not None:
             task_id = self._failure_identifier(task_id, "task_id", 256)
-        safe_kind = sanitize_failure_text(kind, max_chars=80)
+        # A malformed diagnostic classifier must never disable the ledger.
+        # Keep the category useful while preserving the strict non-empty
+        # invariant enforced by FailureMemoryRecord.
+        safe_kind = sanitize_failure_text(kind, max_chars=80).strip() or "unknown"
         safe_summary = sanitize_failure_text(summary, max_chars=800)
         safe_action = sanitize_failure_text(action, max_chars=800)
         safe_paths = normalize_affected_paths(affected_paths)

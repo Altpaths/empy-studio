@@ -110,6 +110,21 @@ def test_record_round_trip_deduplicates_across_tasks_and_reopens_after_resolutio
     assert reopened.resolution_evidence == ()
 
 
+def test_empty_kind_falls_back_to_unknown_without_disabling_memory(
+    tmp_path: Path,
+) -> None:
+    store = SQLiteWorkspaceStore(tmp_path / "workspace.sqlite3")
+
+    record = store.record_failure(
+        project_id="project-a",
+        kind="",
+        summary="A failure with no classifier",
+    )
+
+    assert record.kind == "unknown"
+    assert store.get_failure(record.memory_id).kind == "unknown"
+
+
 def test_project_isolation_and_relevant_path_matching(tmp_path: Path) -> None:
     store = SQLiteWorkspaceStore(tmp_path / "workspace.sqlite3")
     a = store.record_failure(

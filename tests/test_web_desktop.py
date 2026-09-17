@@ -1694,6 +1694,86 @@ def test_failure_memory_allows_changed_snapshot_and_calls_provider_once(
     assert calls == ["inspect"]
 
 
+def test_failure_memory_does_not_add_unrelated_project_hint_to_new_ticket(
+    tmp_path: Path,
+) -> None:
+    state = _memory_ready_state(tmp_path)
+    _record_memory_failure(state)
+
+    state.new_ticket()
+    state.create_plan("Update tests/test_smoke.py")
+
+    assert state.failure_memory_blocked is False
+    assert state.failure_memory_hint == ""
+    assert state.task is not None
+    assert "Known project failure memory" not in "\n".join(state.task.constraints)
+
+
+def test_failure_memory_blocks_repeated_timeout_before_provider_inspection(
+    tmp_path: Path,
+) -> None:
+    state = _memory_ready_state(tmp_path)
+    state.error = "Verification timed out while checking the project."
+    state._capture_failure_context()
+    state.new_ticket()
+    state.create_plan("Update the README")
+    calls: list[str] = []
+
+    class DriverStub:
+        def inspect(self, *, refresh: bool = False) -> CodexInstallation:
+            del refresh
+            calls.append("inspect")
+            raise AssertionError("a repeated timeout must be stopped locally")
+
+    state.driver = DriverStub()  # type: ignore[assignment]
+    with pytest.raises(RuntimeError, match="همان علت شکست|same confirmed failure"):
+        state.start_run()
+    assert calls == []
+
+
+def test_failure_memory_keeps_multiple_verified_findings_separate(
+    tmp_path: Path,
+) -> None:
+    state = _memory_ready_state(tmp_path)
+    checks = tuple(
+        VerificationCheck(
+            check_id=f"check-{index}",
+            label=f"Check {index}",
+            category="tests",
+            command=("pytest", "-q"),
+        )
+        for index in (1, 2)
+    )
+    state.verification = VerificationReport(
+        schema_version=1,
+        verification_id="verification-two-findings",
+        project_root=str(state.detection.descriptor.root),
+        project_type="python",
+        status="fail",
+        started_at="now",
+        finished_at="now",
+        results=tuple(
+            VerificationResult(
+                check=check,
+                status="fail",
+                returncode=1,
+                stdout="",
+                stderr=f"failure-{index}",
+                started_at="now",
+                finished_at="now",
+            )
+            for index, check in enumerate(checks, start=1)
+        ),
+        evidence_path="evidence/two-findings",
+    )
+
+    state._capture_failure_context()
+    records = state.store.list_failures(state.active_project_id, include_resolved=False)
+
+    assert len(records) == 2
+    assert {record.summary for record in records} == {"failure-1", "failure-2"}
+
+
 def test_failure_memory_resolves_only_after_final_verification(
     tmp_path: Path,
 ) -> None:

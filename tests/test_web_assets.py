@@ -106,6 +106,7 @@ def test_failure_memory_ui_is_bounded_localized_and_redacted() -> None:
     assert "function sanitizeFailureMemoryText" in app_js
     assert "function normaliseFailureMemory" in app_js
     assert "function renderFailureMemory" in app_js
+    assert "Array.isArray(value.records)" in app_js
     assert "failureMemoryBlocked" in app_js
     assert "این علت برای همین پروژه قبلاً ثبت شده است" in app_js
     assert "This cause was already recorded for this project" in app_js

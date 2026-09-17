@@ -7,6 +7,7 @@ import mimetypes
 import os
 import secrets
 import shutil
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -53,6 +54,7 @@ from empy_studio.core.failure_memory import (
 )
 from empy_studio.core.path_policy import (
     is_agent_denied_relative_path,
+    is_directory_scope,
     normalize_relative_path,
     project_path,
 )
@@ -519,6 +521,11 @@ class GuidedState:
     failure_memory_open_count: int = field(default=0, init=False)
     failure_memory_blocked: bool = field(default=False, init=False)
     failure_memory_block_reason: str | None = field(default=None, init=False)
+    failure_memory_file_cache: dict[tuple[str, str], tuple[int, int, int, str]] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
     repair_attempts: int = 0
     recovery: RecoveryState = field(default_factory=RecoveryState)
     recovery_deadline: threading.Timer | None = field(default=None, repr=False)
@@ -825,6 +832,8 @@ class GuidedState:
         if selected_graph is not None:
             for node in selected_graph.nodes:
                 for raw_path in node.owned_files:
+                    if is_directory_scope(raw_path):
+                        continue
                     try:
                         values.add(normalize_memory_relative_path(raw_path))
                     except (TypeError, ValueError):
@@ -877,6 +886,8 @@ class GuidedState:
             for node in sorted(selected_graph.nodes, key=lambda item: item.node_id):
                 owned: list[str] = []
                 for raw_path in node.owned_files:
+                    if is_directory_scope(raw_path):
+                        continue
                     try:
                         owned.append(normalize_memory_relative_path(raw_path))
                     except (TypeError, ValueError):
@@ -896,17 +907,50 @@ class GuidedState:
         )
         snapshot_entries: list[tuple[str, str]] = []
         root = self.detection.descriptor.root if self.detection is not None else None
+        root_key = str(root.resolve()) if root is not None else ""
+        brain_records = {}
+        if self.brain_index is not None:
+            try:
+                if root is not None and Path(self.brain_index.project_root).resolve() == root.resolve():
+                    brain_records = {
+                        record.relative_path: record for record in self.brain_index.records
+                    }
+            except (OSError, RuntimeError, TypeError, ValueError):
+                brain_records = {}
         for relative_path in snapshot_paths:
             digest = "missing"
             if root is not None:
                 try:
                     candidate = project_path(root, relative_path, allow_directory=False)
                     if candidate.is_file() and not candidate.is_symlink():
-                        hasher = hashlib.sha256()
-                        with candidate.open("rb") as source:
-                            for chunk in iter(lambda: source.read(1024 * 1024), b""):
-                                hasher.update(chunk)
-                        digest = hasher.hexdigest()
+                        stat = candidate.stat()
+                        cache_key = (root_key, relative_path)
+                        cached = self.failure_memory_file_cache.get(cache_key)
+                        if cached is not None and cached[:3] == (
+                            stat.st_size,
+                            stat.st_mtime_ns,
+                            stat.st_ctime_ns,
+                        ):
+                            digest = cached[3]
+                        else:
+                            brain_record = brain_records.get(relative_path)
+                            if brain_record is not None and (
+                                brain_record.size == stat.st_size
+                                and brain_record.mtime_ns == stat.st_mtime_ns
+                            ):
+                                digest = brain_record.sha256
+                            else:
+                                hasher = hashlib.sha256()
+                                with candidate.open("rb") as source:
+                                    for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                                        hasher.update(chunk)
+                                digest = hasher.hexdigest()
+                            self.failure_memory_file_cache[cache_key] = (
+                                stat.st_size,
+                                stat.st_mtime_ns,
+                                stat.st_ctime_ns,
+                                digest,
+                            )
                     elif candidate.exists():
                         digest = "non_file"
                 except (OSError, RuntimeError, TypeError, ValueError):
@@ -968,12 +1012,11 @@ class GuidedState:
 
     @staticmethod
     def _failure_memory_is_external(record: FailureMemoryRecord) -> bool:
-        if record.kind in {
-            "missing_dependency",
-            "permission",
-            "dirty_worktree",
-            "timeout",
-        }:
+        # Credentials and provider/environment availability can change
+        # without a project-file edit.  Let the cheap local driver inspection
+        # re-check those prerequisites; all project/workflow failures remain
+        # hard duplicate guards until a corrective pass changes the scope.
+        if record.kind in {"permission", "missing_dependency"}:
             return True
         normalized = record.summary.casefold()
         return any(
@@ -996,24 +1039,23 @@ class GuidedState:
             return None
         failures = context.get("failures")
         diagnostics = context.get("diagnostics")
-        first_failure = (
-            next(
-                (
-                    item
-                    for item in failures
-                    if isinstance(item, dict) and str(item.get("detail", "")).strip()
-                ),
-                None,
-            )
-            if isinstance(failures, list)
-            else None
-        )
-        if first_failure is not None:
-            summary = str(first_failure.get("detail", "")).strip()
-            kind = str(first_failure.get("kind", "")).strip() or str(
-                context.get("kind", "check_failed")
-            )
-        else:
+        candidates: list[tuple[str, str]] = []
+        seen_candidates: set[tuple[str, str]] = set()
+        if isinstance(failures, list):
+            for item in failures[:8]:
+                if not isinstance(item, dict):
+                    continue
+                summary = str(item.get("detail", "")).strip()
+                if not summary:
+                    continue
+                kind = str(item.get("kind", "")).strip() or str(
+                    context.get("kind", "check_failed")
+                )
+                marker = (summary, kind)
+                if marker not in seen_candidates:
+                    seen_candidates.add(marker)
+                    candidates.append(marker)
+        if not candidates:
             summary = (
                 next(
                     (str(item).strip() for item in diagnostics if str(item).strip()),
@@ -1022,41 +1064,45 @@ class GuidedState:
                 if isinstance(diagnostics, list)
                 else "The Empy workflow stopped without a diagnostic."
             )
-            kind = str(context.get("kind", "check_failed"))
-        action = self._failure_memory_action(kind)
+            candidates.append((summary, str(context.get("kind", "check_failed"))))
         scope = self._failure_memory_scope()
-        evidence: list[str] = [*scope.evidence]
+        shared_evidence: list[str] = [*scope.evidence]
         if isinstance(diagnostics, list):
-            evidence.extend(str(item) for item in diagnostics[:3] if str(item).strip())
-        if isinstance(failures, list):
-            evidence.extend(
-                str(item.get("detail", ""))
-                for item in failures[:3]
-                if isinstance(item, dict) and str(item.get("detail", "")).strip()
+            shared_evidence.extend(
+                str(item) for item in diagnostics[:3] if str(item).strip()
             )
-        fingerprint = self._failure_memory_fingerprint(
-            summary,
-            kind=kind,
-            action=action,
-            scope=scope,
-        )
-        try:
-            return self.store.record_failure(
-                project_id=self.active_project_id,
-                task_id=self.active_task_id,
-                fingerprint=fingerprint,
+        records: list[FailureMemoryRecord] = []
+        for summary, kind in candidates:
+            action = self._failure_memory_action(kind)
+            evidence = [*shared_evidence, summary]
+            fingerprint = self._failure_memory_fingerprint(
+                summary,
                 kind=kind,
-                summary=summary,
                 action=action,
-                affected_paths=scope.target_paths or scope.snapshot_paths,
-                evidence=evidence,
+                scope=scope,
             )
-        except (OSError, RuntimeError, TypeError, ValueError):
+            try:
+                records.append(
+                    self.store.record_failure(
+                        project_id=self.active_project_id,
+                        task_id=self.active_task_id,
+                        fingerprint=fingerprint,
+                        kind=kind,
+                        summary=summary,
+                        action=action,
+                        affected_paths=scope.target_paths or scope.snapshot_paths,
+                        evidence=evidence,
+                    )
+                )
+            except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+                continue
+        if not records:
             # Failure memory is an optimization and a durable hint.  A
             # malformed row or unavailable workspace must never turn a real
             # project failure into a second application failure.
             self.add_log("Failure memory could not persist this diagnostic; continuing safely.", "warning")
             return None
+        return records[0]
 
     def _refresh_failure_memory_view(
         self,
@@ -1075,6 +1121,8 @@ class GuidedState:
             self.failure_memory_blocked = False
             self.failure_memory_block_reason = None
             return
+        previous_blocked = self.failure_memory_blocked
+        previous_match_ids = tuple(record.memory_id for record in self.failure_memory_matches)
         scope = self._failure_memory_scope(task=task, graph=graph, context=context)
         try:
             records = self.store.list_failures(
@@ -1082,7 +1130,7 @@ class GuidedState:
                 include_resolved=False,
                 limit=32,
             )
-        except (OSError, RuntimeError, TypeError, ValueError):
+        except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
             self.failure_memory_matches = ()
             self.failure_memory_open_count = 0
             self.failure_memory_hint = ""
@@ -1090,7 +1138,6 @@ class GuidedState:
             self.failure_memory_block_reason = None
             return
         exact: list[FailureMemoryRecord] = []
-        related: list[FailureMemoryRecord] = []
         for record in records:
             metadata = self._failure_memory_record_scope(record)
             expected = self._failure_memory_fingerprint(
@@ -1105,23 +1152,29 @@ class GuidedState:
                 and record.fingerprint == expected
             ):
                 exact.append(record)
-            if (
-                not record.affected_paths
-                or not scope.snapshot_paths
-                or set(record.affected_paths).intersection(scope.snapshot_paths)
-            ):
-                related.append(record)
         self.failure_memory_matches = tuple(exact[:8])
         self.failure_memory_open_count = len(records)
         try:
-            hint = self.store.failure_context_hint(
-                project_id,
-                affected_paths=scope.snapshot_paths,
-                limit=4,
-            )
-            if not hint and any(not record.affected_paths for record in related):
-                hint = self.store.failure_context_hint(project_id, limit=4)
-        except (OSError, RuntimeError, TypeError, ValueError):
+            if scope.snapshot_paths:
+                # Only carry failures that share a concrete project-relative
+                # file with this plan.  A generic project-wide hint would add
+                # prompt tokens for unrelated tickets.
+                hint = self.store.failure_context_hint(
+                    project_id,
+                    affected_paths=scope.snapshot_paths,
+                    limit=4,
+                )
+            elif exact:
+                # A plan with no concrete file can still explain an exact
+                # repeat, but it must not receive every old project incident.
+                hint = self.store.failure_context_hint(
+                    project_id,
+                    fingerprint=exact[0].fingerprint,
+                    limit=1,
+                )
+            else:
+                hint = ""
+        except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
             hint = ""
         self.failure_memory_hint = hint[:2400]
         hard_block = [
@@ -1149,13 +1202,13 @@ class GuidedState:
                     "این اجرای Provider متوقف شد چون همان علت شکستِ تأییدشده برای هدف و فایل‌های "
                     "بدون تغییر در حافظه ثبت شده است. ابتدا علت یا هدف را اصلاح کنید و سپس دوباره اجرا کنید."
                 )
-            self.add_log(
-                f"Duplicate provider run blocked by failure memory ({first.kind}).",
-                "warning",
-            )
-        # ``related`` is deliberately not sent wholesale to the provider; the
-        # store renders only summary/action/relative paths and enforces the
-        # final character bound.  Keep the view project-scoped and bounded.
+            if not previous_blocked or previous_match_ids != tuple(
+                record.memory_id for record in hard_block
+            ):
+                self.add_log(
+                    f"Duplicate provider run blocked by failure memory ({first.kind}).",
+                    "warning",
+                )
 
     def _resolve_failure_memory_after_verification(
         self,
@@ -1176,7 +1229,7 @@ class GuidedState:
                 include_resolved=False,
                 limit=64,
             )
-        except (OSError, RuntimeError, TypeError, ValueError):
+        except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
             return
         evidence = {
             "status": "pass",
@@ -1196,7 +1249,7 @@ class GuidedState:
                     evidence,
                     verification_id=verification.verification_id,
                 )
-            except (KeyError, OSError, RuntimeError, TypeError, ValueError):
+            except (KeyError, OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                 # One malformed or concurrently deleted row must not prevent
                 # the verified result from reaching Review/ZIP generation.
                 continue

@@ -365,7 +365,11 @@ function normaliseFailureMemory(value) {
       : typeof rawMatched === "string"
         ? [rawMatched]
         : [];
-  const summaries = Array.isArray(value.summaries) ? value.summaries : [];
+  const summaries = Array.isArray(value.summaries)
+    ? value.summaries
+    : Array.isArray(value.records)
+      ? value.records
+      : [];
   const entries = [];
   const seen = new Set();
   [...matched.slice(0, 4), ...summaries.slice(0, 4)].forEach(item => {
@@ -378,7 +382,11 @@ function normaliseFailureMemory(value) {
   });
   const numericCount = Number(value.open_count);
   const openCount = Number.isFinite(numericCount) && numericCount > 0 ? Math.min(256, Math.floor(numericCount)) : 0;
-  const blocked = value.blocked === true || value.repeat_blocked === true || value.same_failure === true || rawMatched === true || matched.length > 0 || value.status === "blocked";
+  const blocked = value.blocked === true
+    || value.repeat_blocked === true
+    || value.same_failure === true
+    || rawMatched === true
+    || value.status === "blocked";
   const hint = sanitizeFailureMemoryText(value.hint, 360);
   if (!blocked && !openCount && !entries.length && !hint) return null;
   return {blocked, openCount, entries: entries.slice(0, 4), hint};
@@ -390,9 +398,8 @@ function renderFailureMemory(memory) {
     ? `<small class="evidence">${normalized.openCount.toLocaleString()} ${text().failureMemoryOpenCount}</small>`
     : "";
   const entries = normalized.entries.map(entry => `<article class="failure-item"><p class="failure-finding"><strong>${text().failureMemoryRecorded}:</strong> ${escapeHtml(entry.summary || text().failureMemoryKnown)}</p>${entry.action ? `<p class="failure-action"><strong>${text().requiredAction}:</strong> ${escapeHtml(entry.action)}</p>` : ""}</article>`).join("");
-  const hint = normalized.hint ? `<p class="failure-next-step">${escapeHtml(normalized.hint)}</p>` : "";
   const body = normalized.blocked ? text().failureMemoryBlocked : text().failureMemoryKnown;
-  return `<section class="failure-context compact failure-memory" role="${normalized.blocked ? "alert" : "status"}" data-memory-state="${normalized.blocked ? "blocked" : "known"}"><h2>${text().failureMemory}</h2><p>${body}</p>${count}${hint}${entries ? `<div class="failure-list">${entries}</div>` : ""}${normalized.blocked ? `<p class="failure-next-step"><strong>${text().nextStep}:</strong> ${text().failureMemoryAction}</p>` : ""}</section>`;
+  return `<section class="failure-context compact failure-memory" role="${normalized.blocked ? "alert" : "status"}" data-memory-state="${normalized.blocked ? "blocked" : "known"}"><h2>${text().failureMemory}</h2><p>${body}</p>${count}${entries ? `<div class="failure-list">${entries}</div>` : ""}${normalized.blocked ? `<p class="failure-next-step"><strong>${text().nextStep}:</strong> ${text().failureMemoryAction}</p>` : ""}</section>`;
 }
 function renderRecoveryActions(context) {
   if (!context) return "";
