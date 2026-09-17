@@ -17,6 +17,7 @@ from empy_studio.verification_pipeline import (
     VerificationRuntime,
     finalize_verification,
     map_project_verification,
+    repair_recoverable_static_references,
     static_web_diagnostics,
     verification_contract_signature,
     verification_preflight,
@@ -466,3 +467,36 @@ def test_static_web_diagnostics_rejects_placeholder_links(tmp_path: Path) -> Non
     errors = static_web_diagnostics(tmp_path)
 
     assert any("placeholder" in item for item in errors)
+
+
+def test_repair_recoverable_static_references_fixes_only_existing_duplicate_css_asset(
+    tmp_path: Path,
+) -> None:
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    stylesheet = assets / "site.css"
+    stylesheet.write_text(
+        ".hero { background: url('assets/hero.png?v=2#top'); }\n",
+        encoding="utf-8",
+    )
+    (assets / "hero.png").write_bytes(b"image")
+
+    changed = repair_recoverable_static_references(tmp_path)
+
+    assert changed == ("assets/site.css",)
+    assert "url('hero.png?v=2#top')" in stylesheet.read_text(encoding="utf-8")
+    assert static_web_diagnostics(tmp_path) == ()
+
+
+def test_repair_recoverable_static_references_leaves_ambiguous_or_missing_targets(
+    tmp_path: Path,
+) -> None:
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    stylesheet = assets / "site.css"
+    original = ".one { background: url('assets/missing.png'); }\n"
+    stylesheet.write_text(original, encoding="utf-8")
+
+    assert repair_recoverable_static_references(tmp_path) == ()
+    assert stylesheet.read_text(encoding="utf-8") == original
+    assert any("missing.png" in item for item in static_web_diagnostics(tmp_path))

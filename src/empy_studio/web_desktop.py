@@ -112,6 +112,7 @@ from empy_studio.verification_pipeline import (
     VerificationRuntime,
     VerificationTimedOut,
     finalize_verification,
+    repair_recoverable_static_references,
     verification_contract_signature,
     verification_preflight,
     verification_staleness_reason,
@@ -2775,6 +2776,26 @@ class GuidedState:
             self.detection,
             static_scope=static_scope or None,
         )
+        # Repair the one deterministic import mistake that can be proven
+        # locally: a stylesheet inside ``assets/`` points at ``assets/foo``
+        # while the existing ``assets/foo`` file is present.  This touches
+        # only the isolated copy, creates no files, and leaves every ambiguous
+        # or genuinely missing reference for the normal Agent/Verification
+        # failure path.  Running it before provider inspection avoids spending
+        # tokens on a defect that static evidence can resolve with certainty.
+        repaired_static_files = repair_recoverable_static_references(
+            self.detection.descriptor.root,
+        )
+        if repaired_static_files:
+            self.add_log(
+                "Deterministically repaired confirmed CSS asset path(s) in the isolated copy: "
+                + ", ".join(repaired_static_files),
+                "warning",
+            )
+            preflight = verification_preflight(
+                self.detection,
+                static_scope=static_scope or None,
+            )
         # A project can legitimately need both Composer and Node.  Prepare at
         # most one bounded, lockfile-backed dependency set per pass, then
         # re-read the contract before allowing the provider inspection.  Any

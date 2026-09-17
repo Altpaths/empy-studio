@@ -38,6 +38,8 @@ MAX_VERIFICATION_CHECKS = 64
 MAX_VERIFICATION_COMMAND_PARTS = 32
 MAX_VERIFICATION_COMMAND_PART_BYTES = 4096
 MAX_STATIC_WEB_FILE_BYTES = 4 * 1024 * 1024
+MAX_STATIC_REPAIR_FILES = 32
+MAX_STATIC_REPAIR_REPLACEMENTS = 128
 _VERIFICATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _AUTO_LINT_IGNORED_DIRECTORIES = frozenset(
     {
@@ -484,6 +486,104 @@ def static_web_diagnostics(
                     f"{relative_name}: local {kind} target {raw_reference!r} was not found"
                 )
     return tuple(errors)
+
+
+def repair_recoverable_static_references(
+    project_root: str | Path,
+    *,
+    relative_files: tuple[str, ...] | None = None,
+) -> tuple[str, ...]:
+    """Repair only unambiguous duplicate-directory CSS asset references.
+
+    A common import defect is a stylesheet under ``assets/`` referring to
+    ``assets/logo.svg``.  The browser resolves that as ``assets/assets/logo``
+    even though the actual asset is next to the stylesheet.  This helper fixes
+    that narrow, deterministic case in Empy's isolated copy before a provider
+    run.  It never creates files, follows symlinks, changes non-CSS files, or
+    guesses between multiple targets; unresolved references remain visible to
+    Verification as a real failure.
+
+    The return value contains project-relative stylesheet paths that changed.
+    """
+
+    root = Path(project_root).expanduser().resolve()
+    scope = None
+    if relative_files is not None:
+        scope = {
+            PurePosixPath(item.replace("\\", "/")).as_posix()
+            for item in relative_files
+            if item
+        }
+    changed: list[str] = []
+    replacements = 0
+    for source, relative_name in _web_files(root):
+        if source.suffix.casefold() not in _CSS_SUFFIXES:
+            continue
+        if scope is not None and relative_name not in scope:
+            continue
+        if len(changed) >= MAX_STATIC_REPAIR_FILES or replacements >= MAX_STATIC_REPAIR_REPLACEMENTS:
+            break
+        if source.is_symlink() or not source.is_file():
+            continue
+        content = _read_static_file(source)
+        if content is None:
+            continue
+        source_relative = PurePosixPath(relative_name)
+        parent_name = source_relative.parent.name
+        if not parent_name:
+            continue
+        file_changed = False
+
+        def rewrite(
+            match: re.Match[str],
+            *,
+            source_relative: PurePosixPath = source_relative,
+            parent_name: str = parent_name,
+        ) -> str:
+            nonlocal file_changed, replacements
+            raw_reference = match.group(1).strip()
+            parsed = urlsplit(raw_reference)
+            if parsed.scheme or parsed.netloc or parsed.path.startswith("/"):
+                return match.group(0)
+            raw_path = unquote(parsed.path).replace("\\", "/")
+            path_parts = list(PurePosixPath(raw_path).parts)
+            if path_parts and path_parts[0] == ".":
+                path_parts = path_parts[1:]
+            if not path_parts or path_parts[0] != parent_name:
+                return match.group(0)
+            candidate_relative = (source_relative.parent / PurePosixPath(*path_parts[1:])).as_posix()
+            candidate = root / candidate_relative
+            if (
+                not candidate.is_file()
+                or candidate.is_symlink()
+                or not candidate.resolve().is_relative_to(root)
+            ):
+                return match.group(0)
+            replacement_path = "/".join(path_parts[1:])
+            if raw_path.startswith("./"):
+                replacement_path = f"./{replacement_path}"
+            replacement = replacement_path
+            if parsed.query:
+                replacement += f"?{parsed.query}"
+            if parsed.fragment:
+                replacement += f"#{parsed.fragment}"
+            if replacement == raw_reference:
+                return match.group(0)
+            file_changed = True
+            replacements += 1
+            return match.group(0).replace(raw_reference, replacement, 1)
+
+        rewritten = _CSS_REFERENCE_RE.sub(rewrite, content)
+        if not file_changed or rewritten == content:
+            continue
+        try:
+            source.write_text(rewritten, encoding="utf-8")
+        except OSError:
+            # Leave the original diagnostic in place if the isolated copy is
+            # not writable; callers will surface the actual failure.
+            continue
+        changed.append(relative_name)
+    return tuple(changed)
 
 
 def _static_web_check_command() -> tuple[str, ...]:
