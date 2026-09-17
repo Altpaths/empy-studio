@@ -1,3 +1,22 @@
+# Empy Studio 0.1.68 — stop redundant Discovery token spend
+
+This patch fixes the reproduced failure where a Persian implementation request
+for a selectable asset chart was classified as a read-only audit. Empy now
+routes that imperative directly to the bounded frontend/backend graph, so the
+provider does not spend a full Discovery turn before any writer can run.
+
+Automatic recovery also preserves the failed implementation owner and carries
+the existing Project Brain/failure handoff forward without replaying
+read-only Discovery. Token-budget retries use a smaller, explicit context cap
+so a retry cannot become more expensive than the failed attempt.
+
+The full regression suite, strict Ruff lint, mypy, Python compile checks, and
+provider-free context/token benchmarks are run for this release candidate.
+Live provider billing, DirectAdmin extraction, and Apple notarization remain
+external checks.
+
+## Previous release context
+
 # Empy Studio 0.1.67 — isolate project-level Verification failures
 
 Empy now compares a failed whole-project Verification result with the exact

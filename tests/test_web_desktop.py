@@ -1298,6 +1298,27 @@ def test_token_budget_run_has_clear_guidance_and_no_false_verification_failure(t
     assert "fresh-token limit" in "\n".join(state.task.constraints)
 
 
+def test_token_budget_retry_uses_a_smaller_context_policy(tmp_path: Path) -> None:
+    """A compact retry must never send a larger pack than the first pass."""
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("project notes\n" * 5000, encoding="utf-8")
+    (source / "architecture.md").write_text("architecture\n" * 5000, encoding="utf-8")
+    (source / "legacy.txt").write_text("legacy\n" * 5000, encoding="utf-8")
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+    state.create_plan("Review the project and report its structure")
+
+    assert state.task is not None
+    state.compact_retry = True
+    _plan, compact_context, _budget, _graph = state._materialize_workflow(state.task)
+
+    assert all(len(pack.files) <= 3 for pack in compact_context.packs)
+    assert all(pack.total_bytes <= 12_288 for pack in compact_context.packs)
+    assert all(item.included_bytes <= 4_096 for pack in compact_context.packs for item in pack.files)
+
+
 def test_budget_limited_scoped_change_is_kept_for_local_verification(
     tmp_path: Path,
 ) -> None:
@@ -1594,6 +1615,86 @@ def test_auto_repair_creates_real_follow_up_plan_once(tmp_path: Path) -> None:
     assert [step.suggested_agent for step in state.plan.steps] == ["frontend"]
     with pytest.raises(RuntimeError, match="already active"):
         state.auto_repair()
+
+
+def test_recovery_skips_failed_discovery_and_assigns_writer_owner(
+    tmp_path: Path,
+) -> None:
+    """A failed read-only Discovery node must not consume another cycle."""
+
+    source = tmp_path / "source"
+    (source / "public_html").mkdir(parents=True)
+    (source / "public_html" / "composer.json").write_text(
+        '{"name":"demo/site"}\n',
+        encoding="utf-8",
+    )
+    (source / "public_html" / "index.php").write_text(
+        "<?php echo 'ok';\n",
+        encoding="utf-8",
+    )
+    (source / "public_html" / "assets").mkdir()
+    (source / "public_html" / "assets" / "app.js").write_text(
+        "document.body.dataset.chart = 'ready';\n",
+        encoding="utf-8",
+    )
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+    state.create_plan("بررسی کن نمودار")
+
+    assert state.graph is not None
+    assert state.task is not None
+    assert state.detection is not None
+    discovery = next(node for node in state.graph.nodes if node.agent_role == "discovery")
+    failed = CodexNodeExecution(
+        node_id=discovery.node_id,
+        task_id=f"{state.task.task_id}:{discovery.step_id}",
+        status="failed",
+        started_at="now",
+        finished_at="now",
+        return_code=1,
+        thread_id="discovery-failed",
+        summary="Discovery could not identify the implementation scope. EMPY_NODE_RESULT: FAIL",
+        changed_files=(),
+        event_count=1,
+        events_path="events.jsonl",
+        stderr_path="stderr.log",
+        final_message_path="final.md",
+        command_path="command.json",
+        error_code="objective_not_met",
+        error_message="Discovery did not identify the implementation scope.",
+    )
+    state.run = CodexGraphExecution(
+        schema_version=1,
+        run_id="discovery-failed-run",
+        graph_id=state.graph.graph_id,
+        task_id=state.task.task_id,
+        project_root=str(state.detection.descriptor.root),
+        provider="codex",
+        status="failed",
+        started_at="now",
+        finished_at="now",
+        installation=CodexInstallation(
+            availability="available",
+            executable="codex",
+            version="test",
+            authenticated=True,
+            message="ready",
+        ),
+        node_results=(failed,),
+        events=(),
+        usage=None,
+        schedule=(),
+        error_code="objective_not_met",
+        error_message="Discovery did not identify the implementation scope.",
+    )
+    state.start_run = lambda: None  # type: ignore[method-assign]
+
+    state.auto_repair()
+
+    assert state.recovery.history[-1]["owner"] == "frontend"
+    assert state.plan is not None
+    assert all(step.suggested_agent != "discovery" for step in state.plan.steps)
+    assert state.plan.steps[0].suggested_agent == "frontend"
 
 
 def test_diagnostic_only_failure_has_required_action(tmp_path: Path) -> None:

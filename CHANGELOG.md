@@ -1,3 +1,17 @@
+## [0.1.68] - 2026-09-17
+
+- Route Persian imperative implementation requests such as «… را قابل انتخاب
+  کن» directly to their approved writer specialists instead of paying for a
+  redundant provider Discovery pass.
+- Keep recovery on the failed implementation owner and never replay a
+  read-only Discovery node when the local Project Brain already has the
+  bounded scope and failure handoff.
+- Make token-budget retries genuinely compact: read-only packs are limited to
+  three files, 4 KiB per file, and 12 KiB total, with regression coverage for
+  the previous larger retry policy.
+- Add regression coverage for the reproduced selectable-asset-chart route,
+  discovery-only recovery loops, and compact retry context.
+
 ## [0.1.67] - 2026-09-17
 
 - Classify deterministic Verification failures against the files changed by the

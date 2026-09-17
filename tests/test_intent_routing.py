@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -164,6 +165,60 @@ def test_read_only_domain_nouns_do_not_claim_implementation() -> None:
     assert not requests_implementation("Audit accessibility and review the chart")
     assert not requests_implementation("بررسی دسترسی‌پذیری و نمودار")
     assert requests_implementation("Improve accessibility and update the chart")
+
+
+def test_persian_selectable_chart_imperative_skips_redundant_discovery(
+    tmp_path: Path,
+) -> None:
+    """A trailing Persian ``کن`` must still route a real implementation.
+
+    This is the exact shape that previously created a provider Discovery node
+    before the frontend/backend writers.  The local Project Brain already
+    supplies the bounded scope, so the approved graph must start at the
+    implementation specialists.
+    """
+
+    project = _php_project(tmp_path)
+    text = "نمودار بخش ارزیابی دارایی را قابل انتخاب برای هر دارایی کن نه اینکه برای هر دارایی یکی"
+    task = _task(tmp_path, text)
+
+    assert requests_implementation(text)
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+
+    assert [step.suggested_agent for step in plan.steps] == [
+        "frontend",
+        "backend",
+    ]
+    assert all(step.step_id != "discovery" for step in plan.steps)
+
+
+def test_recovery_context_never_reintroduces_provider_discovery(
+    tmp_path: Path,
+) -> None:
+    project = _php_project(tmp_path)
+    text = "نمودار بخش ارزیابی دارایی را قابل انتخاب کن"
+    task = _task(
+        tmp_path,
+        text,
+    )
+    task = replace(
+        task,
+        constraints=(
+            *task.constraints,
+            "Recovery owner: frontend. Fix only the confirmed failure.",
+            "Previous Empy execution failed and the next attempt must resolve its confirmed root cause before release:",
+        ),
+    )
+
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+
+    assert all(step.suggested_agent != "discovery" for step in plan.steps)
 
 
 @pytest.mark.parametrize(

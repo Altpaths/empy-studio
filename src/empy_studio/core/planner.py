@@ -2337,7 +2337,30 @@ def classify_intent(text: str) -> IntentProfile:
 def requests_implementation(text: str) -> bool:
     """Return whether bilingual ticket text clearly requests a real change."""
 
-    return _contains_any_term(text, IMPLEMENTATION_ACTION_TERMS)
+    if _contains_any_term(text, IMPLEMENTATION_ACTION_TERMS):
+        return True
+
+    # Persian tickets often put the action at the end of a sentence instead
+    # of using one of the explicit verbs above, for example ``... را قابل
+    # انتخاب کن`` (make ... selectable).  The old classifier treated the
+    # trailing ``کن`` as ordinary prose, so a real implementation was routed
+    # through the provider Discovery node first.  That extra node repeated
+    # the same local Project Brain scan and could exhaust its fresh-token
+    # allocation before a writer ever started.  Require an object marker (the
+    # Persian ``را``/``رو`` or ``قابل`` construction) so an audit such as
+    # ``بررسی کن`` remains read-only.
+    normalized = _normalise_intent_text(text)
+    if re.search(
+        r"(?:^|\s)(?:[^\n؛.!؟]{0,120}\s)?(?:را|رو)\s+[^\n؛.!؟]{0,120}\b(?:کن|کنید|بکن|بکنید)\b",
+        normalized,
+    ):
+        return True
+    return bool(
+        re.search(
+            r"\bقابل\s+[^\n؛.!؟]{1,80}\b(?:کن|کنید|بکن|بکنید)\b",
+            normalized,
+        )
+    )
 
 
 def _has_explicit_file_scope(text: str) -> bool:
@@ -2374,11 +2397,30 @@ def _should_skip_discovery(
         task.kind in {"bug_fix", "feature", "ui_improvement"}
         or requests_implementation(text)
     )
+    recovery_context = any(
+        item.strip().startswith(
+            (
+                "Recovery owner:",
+                "Previous Empy execution failed",
+                "Previous Empy verification findings",
+                "علت قطعی شکست قبلی / Exact failing checks:",
+            )
+        )
+        for item in task.constraints
+    )
     # Project Brain and the bounded context selector already perform local,
     # deterministic discovery.  A provider discovery turn before every
     # implementation repeats the same scan, spends tokens, and cannot expand
     # the writer's approved ownership anyway.
     if implementation_requested and likely_paths:
+        return True
+    # A corrective task already carries a bounded, durable failure handoff
+    # and the local Project Brain has the indexed scope.  Running a fresh
+    # provider Discovery node here is both redundant and unsafe: if it burns
+    # its allocation, the actual writer never receives a chance to repair the
+    # confirmed file.  Recovery remains disabled for explicit audit tasks,
+    # which have no writer contract to execute.
+    if recovery_context and task.kind != "audit" and likely_paths:
         return True
     return (
         risk == "low"

@@ -1590,11 +1590,18 @@ class GuidedState:
         self._refresh_brain_index()
         context_policy = (
             ContextPolicy(
-                max_files_per_pack=4,
-                max_bytes_per_file=8_192,
-                max_total_bytes_per_pack=32_768,
-                max_candidate_file_bytes=1_048_576,
-                max_candidates=2_500,
+                # A token-budget recovery must actually reduce provider
+                # input.  The previous retry policy allowed a 32 KiB pack,
+                # larger than the normal 24 KiB policy, so an audit task could
+                # become more expensive after the very failure it was meant
+                # to recover from.  Writer packs are capped further by the
+                # context selector; these limits also keep read-only/audit
+                # retries bounded.
+                max_files_per_pack=3,
+                max_bytes_per_file=4_096,
+                max_total_bytes_per_pack=12_288,
+                max_candidate_file_bytes=262_144,
+                max_candidates=1_000,
             )
             if self.compact_retry
             else None
@@ -2518,6 +2525,52 @@ class GuidedState:
                     digest.update(hashlib.sha256(target.read_bytes()).digest())
         return digest.hexdigest()
 
+    def _recovery_owner(self) -> str:
+        """Choose the next implementation owner from the failed graph.
+
+        Recovery used to select the first non-quality node unconditionally.
+        On a graph beginning with Discovery, every failed run therefore
+        replayed Discovery even after its report had already identified the
+        real implementation files.  That behavior paid the largest prompt
+        cost repeatedly and could exhaust the node before a writer ran.  Use
+        the terminal node result when it is an implementation node, skip a
+        failed Discovery node, then choose the first pending writer.  The
+        method returns a role only; planning still rebuilds and validates the
+        complete ownership graph before execution.
+        """
+
+        if self.graph is None:
+            return "quality"
+        writing_roles = {"frontend", "backend", "coordinator", "release"}
+        results = {
+            item.node_id: item
+            for item in (self.run.node_results if self.run is not None else ())
+        }
+        # Preserve the causal owner when an implementation node itself
+        # failed.  A subsequent plan can then carry the same bounded handoff
+        # to that specialist without rediscovering the project.
+        for node in self.graph.nodes:
+            result = results.get(node.node_id)
+            if (
+                node.agent_role in writing_roles
+                and result is not None
+                and result.status in {"failed", "timed_out", "cancelled", "unavailable"}
+            ):
+                return node.agent_role
+        # Discovery is read-only and never a valid corrective owner.  Prefer
+        # the first writer that was skipped because Discovery (or another
+        # upstream node) stopped the graph.
+        for node in self.graph.nodes:
+            if node.agent_role not in writing_roles:
+                continue
+            result = results.get(node.node_id)
+            if result is None or result.status == "skipped":
+                return node.agent_role
+        for node in self.graph.nodes:
+            if node.agent_role in writing_roles:
+                return node.agent_role
+        return "quality"
+
     def auto_repair(self, *, automatic: bool = False) -> None:
         """Run a bounded correction using durable evidence and the original scope."""
         if self.detection is None or self.active_project_id is None:
@@ -2562,7 +2615,7 @@ class GuidedState:
             self.recovery.original_request = saved.request_text if saved else (self.task.objective if self.task else "Complete the requested project work.")
         original_request = self.recovery.original_request
         self.recovery.task_id = self.active_task_id
-        owner = next((node.agent_role for node in self.graph.nodes if node.agent_role != "quality"), "quality") if self.graph else "quality"
+        owner = self._recovery_owner()
         # Record each terminal outcome once, including explicit retries of a stopped workflow.
         if not self.recovery.history or self.recovery.history[-1]["cycle"] != self.recovery.attempts:
             no_progress = self.recovery.record_failure(context, self._recovery_checkpoint(), owner)
