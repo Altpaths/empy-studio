@@ -1,4 +1,29 @@
-# Empy Studio 0.1.64 — actionable failure diagnostics and PHP target routing
+# Empy Studio 0.1.65 — durable failure memory and duplicate-run prevention
+
+Empy now keeps a bounded, project-scoped failure ledger in the local workspace.
+It stores normalized causes, relative targets, and limited evidence rather than
+provider transcripts, credentials, or absolute host paths. Repeated observations
+are coalesced across tickets and application restarts.
+
+Before inspecting or invoking a provider, Empy compares the current graph target
+and isolated project snapshot with confirmed open failures. An unchanged repeat
+is stopped locally with a clear bilingual explanation, so the provider does not
+spend tokens on the same known failure. A real change to the isolated target or
+snapshot is allowed to proceed. Credentials, permissions, and dependencies stay
+re-checkable because their external state can change.
+
+Failure memory records every independent Verification finding, feeds only a
+bounded relevant handoff into later planning, and closes only after final
+Verification passes with explicit evidence. The UI exposes the cause and next
+action while keeping technical evidence optional. Normal workspace launches
+retain project memory; `--clean` launches intentionally start empty.
+
+The full regression suite (1003 tests), strict type/lint/compile checks,
+packaged arm64 app build, normal acceptance (6/6), recovery acceptance (8/8),
+and deterministic memory audit passed locally. Live provider billing and Apple
+notarization were not claimed.
+
+## Previous release context
 
 Empy now maps PHP frontend tickets to the real entry point and existing asset
 files. A virtual `index.html` target is created only when the request is

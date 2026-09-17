@@ -1,3 +1,18 @@
+## [0.1.65] - 2026-09-17
+
+- Add a bounded, project-scoped failure memory ledger that survives tickets and
+  application restarts without storing provider transcripts, secrets, or
+  absolute host paths.
+- Fingerprint failures with the owned target and local content snapshot, stop
+  unchanged duplicate provider runs before inspection, and allow a corrective
+  run only after the isolated target or snapshot changes.
+- Record multiple independent findings, keep external credential/dependency
+  blockers re-checkable, and resolve memory only after final Verification
+  passes with explicit evidence.
+- Reuse Project Brain/file hashes to avoid rereading unchanged files, expose a
+  bounded bilingual memory panel, and cover persistence, concurrency,
+  malformed rows, recovery, project isolation, packaged app, and ZIP paths.
+
 ## [0.1.64] - 2026-09-17
 
 - Map PHP frontend tickets to the real `index.php` entry point and existing
