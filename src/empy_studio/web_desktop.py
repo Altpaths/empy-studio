@@ -1893,6 +1893,7 @@ class GuidedState:
         failures: list[dict[str, Any]] = []
         evidence = ""
         kind = "check_failed"
+        verification_scope = "none"
         if self.verification is not None:
             evidence = self._workspace_reference(self.verification.evidence_path)
             diagnostics = [
@@ -1932,6 +1933,7 @@ class GuidedState:
                 )
             if diagnostics or failures or self.verification.status != "pass":
                 kind = "verification_failed"
+                verification_scope = self._verification_failure_scope()
         if self.run is not None and self.run.status != "completed":
             message = _safe_verification_detail(
                 self.run.error_message or "The Agent run ended without a complete result.",
@@ -2025,6 +2027,7 @@ class GuidedState:
             unique_failures.append(failure)
         return {
             "kind": kind,
+            "scope": verification_scope if kind == "verification_failed" else "task",
             "diagnostics": unique_diagnostics,
             "failures": unique_failures[:8],
             "evidence": evidence,
@@ -2074,6 +2077,7 @@ class GuidedState:
         failures = raw.get("failures", [])
         diagnostics = raw.get("diagnostics", [])
         first_kind = str(failures[0].get("kind", "")) if failures else ""
+        project_scoped = str(raw.get("scope", "")) == "project"
         if self.language == "en":
             title = "Why the previous run stopped"
             summary = (
@@ -2219,6 +2223,25 @@ class GuidedState:
                 next_step = (
                     "روی «پاک‌سازی امن و ادامه» بزنید؛ Empy تلاش قبلی را داخل workspace نگه می‌دارد، فقط کپی ایزوله را به آخرین مبنای تأییدشده برمی‌گرداند و تیکت را دوباره اجرا می‌کند."
                 )
+        if project_scoped:
+            if self.language == "en":
+                title = "The ticket change completed; an unrelated project check is still failing"
+                summary = (
+                    "The requested files were changed, but whole-project Verification found a pre-existing "
+                    "failure outside those files. Empy will not spend another Agent run on that unrelated check."
+                )
+                next_step = (
+                    "Create a separate ticket for the project verification contract, or review the recorded finding manually."
+                )
+            else:
+                title = "تغییر تیکت انجام شد؛ یک خطای مستقل در بررسی کل پروژه باقی است"
+                summary = (
+                    "فایل‌های مربوط به همین تیکت تغییر کرده‌اند، اما Verification کل پروژه یک خطای قدیمی و خارج از محدودهٔ "
+                    "آن فایل‌ها پیدا کرده است؛ برای جلوگیری از مصرف تکراری، Agent دوباره اجرا نمی‌شود."
+                )
+                next_step = (
+                    "برای اصلاح قرارداد بررسی پروژه یک تیکت جدا بسازید یا همین یافتهٔ ثبت‌شده را دستی بررسی کنید."
+                )
         findings = list(dict.fromkeys(str(item) for item in diagnostics if str(item).strip()))
         rendered_failures: list[dict[str, Any]] = []
         ticket_lines = [suggested_prefix]
@@ -2257,15 +2280,20 @@ class GuidedState:
                 if first_kind == "token_budget"
                 else raw.get("kind", "check_failed")
             ),
+            "scope": raw.get("scope", "task"),
             "title": (
-                "صفحهٔ اول ساخته نشد؛ نام فایل با تست یکی نیست"
+                title
+                if project_scoped
+                else "صفحهٔ اول ساخته نشد؛ نام فایل با تست یکی نیست"
                 if self.language == "fa" and first_kind == "verification_contract_mismatch"
                 else "The home page was not delivered because the file name does not match the check"
                 if self.language == "en" and first_kind == "verification_contract_mismatch"
                 else title
             ),
             "summary": (
-                _plain_failure_finding(
+                summary
+                if project_scoped
+                else _plain_failure_finding(
                     first_kind,
                     str(failures[0].get("detail", "")),
                     language=self.language,
@@ -2278,7 +2306,11 @@ class GuidedState:
             "failures": rendered_failures,
             "evidence": raw.get("evidence", ""),
             "suggested_ticket": "\n".join(ticket_lines)[:4000],
-            "repair_available": self.repair_attempts < self.recovery.policy.max_attempts and self.recovery.status != "running",
+            "repair_available": (
+                not project_scoped
+                and self.repair_attempts < self.recovery.policy.max_attempts
+                and self.recovery.status != "running"
+            ),
             "repair_attempts": self.repair_attempts,
         }
 
@@ -2329,6 +2361,83 @@ class GuidedState:
                 f"- {_safe_verification_detail(message, roots)}"
             )[:4000]
         return "Previous Empy execution did not produce a complete result. Re-check the requested work and the project verification path before release."
+
+    def _verification_failure_scope(self) -> str:
+        """Classify a failed Verification result against the files this run changed.
+
+        Verification intentionally checks the whole project before release, but a
+        project-wide check can expose an older, unrelated defect.  Feeding that
+        defect into automatic Recovery makes the next Agent rediscover the wrong
+        ticket and spends tokens without a causal path to the failing check.
+        Only classify a finding as project-scoped when a concrete review exists
+        and none of the failed diagnostics mention a changed project path.  A
+        missing review remains ``unknown`` so older/fixture states keep their
+        conservative repair behavior.
+        """
+
+        verification = self.verification
+        review = self.review
+        if verification is None or verification.status == "pass":
+            return "none"
+        if review is None or not review.files:
+            return "unknown"
+
+        changed_paths = {
+            item.relative_path.replace("\\", "/").strip("/")
+            for item in review.files
+            if item.relative_path.strip()
+        }
+        if not changed_paths:
+            return "unknown"
+        roots = (
+            self.detection.descriptor.root
+            if self.detection is not None
+            else self.workspace_root,
+            self.workspace_root,
+        )
+        failed_details: list[str] = []
+        for result in verification.results:
+            if result.status != "fail":
+                continue
+            detail = _safe_verification_detail(
+                result.stderr.strip() or result.stdout.strip(),
+                roots,
+            ).replace("\\", "/")
+            if detail:
+                failed_details.append(detail)
+        failed_details.extend(
+            str(item).replace("\\", "/")
+            for item in verification.diagnostics
+            if str(item).strip()
+        )
+        if not failed_details:
+            return "unknown"
+
+        combined_details = "\n".join(failed_details).casefold()
+        # A review alone is not proof that a failure is unrelated.  Keep
+        # generic assertions retryable unless the diagnostic contains a
+        # concrete project/contract marker that can be compared with the
+        # changed paths below.
+        concrete_markers = (
+            "public_html/",
+            "src/",
+            "tests/",
+            "assets/",
+            "vendor/",
+            "composer",
+            "site-audit",
+            "entry point",
+            "verification contract",
+            "index.html",
+            "index.php",
+        )
+        if not any(marker in combined_details for marker in concrete_markers):
+            return "unknown"
+
+        for detail in failed_details:
+            if any(path in detail for path in changed_paths):
+                return "task"
+        return "project"
 
     def resume_ticket(self) -> None:
         if self.detection is None or self.active_project_id is None:
@@ -2419,6 +2528,17 @@ class GuidedState:
             return
         if self.verification is not None and self.verification.finalize_allowed:
             raise RuntimeError("Verification already passed; review the result.")
+        if self._verification_failure_scope() == "project":
+            message = (
+                "Verification found an unrelated project-level failure outside the changed ticket files; "
+                "automatic repair is blocked until that verification contract is handled as a separate ticket."
+            )
+            if automatic:
+                self.recovery.status = "ready"
+                self._save_recovery()
+                self.add_log(message, "warning")
+                return
+            raise RuntimeError(message)
         if self.run is not None and self.run.status == "cancelled" and automatic:
             self._stop_recovery("cancelled: The user stopped this workflow.")
             return
@@ -2478,6 +2598,14 @@ class GuidedState:
         if self.active_project_id is None or self.detection is None:
             return
         if self.recovery.stop_reason is not None:
+            return
+        if self._verification_failure_scope() == "project":
+            self.recovery.status = "ready"
+            self._save_recovery()
+            self.add_log(
+                "Automatic repair skipped: Verification failure is outside the changed ticket files.",
+                "warning",
+            )
             return
         self.recovery.status = "ready"
         self.add_log(f"{reason}; evaluating bounded recovery.", "warning")
@@ -3945,6 +4073,37 @@ class GuidedState:
                     "نتیجه‌ی جدید را مرور کنید؛ ZIP فقط بعد از موفق شدن Verification فعال می‌شود.",
                 ],
                 "action": "resume-ticket",
+            }
+
+        if self._verification_failure_scope() == "project":
+            if self.language == "en":
+                return {
+                    "kind": "verification_project",
+                    "title": "The ticket change completed; a separate project check is failing",
+                    "summary": (
+                        "The changed ticket files are outside the failed Verification finding. "
+                        "Empy stopped automatic repair so the same unrelated check is not rerun or charged again."
+                    ),
+                    "steps": [
+                        "Create a separate ticket for the failing verification contract, or review the archived finding manually.",
+                        "The current ticket cannot produce a ZIP until the project-level check is resolved and Verification passes.",
+                    ],
+                    "action": "resume-ticket",
+                    "repair_available": False,
+                }
+            return {
+                "kind": "verification_project",
+                "title": "تغییر تیکت انجام شد؛ یک بررسی مستقل پروژه شکست خورده است",
+                "summary": (
+                    "فایل‌های تغییرکردهٔ این تیکت خارج از محدودهٔ خطای Verification هستند. "
+                    "برای جلوگیری از اجرای تکراری و مصرف دوباره، اصلاح خودکار متوقف شد."
+                ),
+                "steps": [
+                    "برای قرارداد بررسیِ شکست‌خورده یک تیکت جدا بسازید یا یافتهٔ آرشیوشده را دستی بررسی کنید.",
+                    "تا رفع بررسی مستقل و موفق شدن Verification، این تیکت ZIP قابل‌تحویل ندارد.",
+                ],
+                "action": "resume-ticket",
+                "repair_available": False,
             }
 
         run_error = (

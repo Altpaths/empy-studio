@@ -1,3 +1,13 @@
+## [0.1.67] - 2026-09-17
+
+- Classify deterministic Verification failures against the files changed by the
+  active ticket before starting automatic Recovery.
+- Stop the expensive retry loop when a whole-project contract failure is outside
+  the ticket's changed files; keep the finding in failure memory and show a
+  separate-ticket action instead of blaming the requested feature.
+- Add regression coverage for a chart stylesheet change with an unrelated
+  `index.html`/`index.php` site-audit mismatch, including the no-retry guard.
+
 ## [0.1.65] - 2026-09-17
 
 - Add a bounded, project-scoped failure memory ledger that survives tickets and

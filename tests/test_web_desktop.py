@@ -1445,6 +1445,104 @@ def test_failure_context_identifies_entrypoint_contract_mismatch(tmp_path: Path)
     assert "قرارداد Verification" in context["failures"][0]["action"]
 
 
+def test_unrelated_verification_failure_does_not_retry_changed_ticket(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "public_html" / "assets").mkdir(parents=True)
+    (source / "public_html" / "composer.json").write_text(
+        '{"name":"demo/site","scripts":{"test":"php tests/site-audit.php"}}\n',
+        encoding="utf-8",
+    )
+    (source / "public_html" / "index.php").write_text(
+        "<?php echo 'ok';\n",
+        encoding="utf-8",
+    )
+    (source / "public_html" / "assets" / "home-v1.19.css").write_text(
+        ".chart { display: block; }\n",
+        encoding="utf-8",
+    )
+
+    state = GuidedState(tmp_path / "workspace")
+    state.import_path(str(source))
+    state.create_plan("Turn the bank pie chart into a 3D chart")
+    assert state.detection is not None
+    root = state.detection.descriptor.root
+    (root / "public_html" / "assets" / "home-v1.19.css").write_text(
+        ".chart { transform: perspective(800px) rotateX(12deg); }\n",
+        encoding="utf-8",
+    )
+    state.review = state.review_store.create(root)
+    assert state.review.files
+
+    state.verification = VerificationReport(
+        schema_version=1,
+        verification_id="verification-unrelated-contract",
+        project_root=str(root),
+        project_type="php",
+        status="fail",
+        started_at="now",
+        finished_at="now",
+        results=(
+            VerificationResult(
+                check=VerificationCheck(
+                    check_id="site-audit",
+                    label="Site audit",
+                    category="tests",
+                    command=("composer", "run-script", "test"),
+                ),
+                status="fail",
+                returncode=1,
+                stdout="missing public_html/index.html\n",
+                stderr="",
+                started_at="now",
+                finished_at="now",
+            ),
+        ),
+        evidence_path=str(tmp_path / "evidence"),
+        diagnostics=("The project entry page is missing.",),
+    )
+    assert state.graph is not None
+    state.run = CodexGraphExecution(
+        schema_version=1,
+        run_id="run-unrelated-contract",
+        graph_id=state.graph.graph_id,
+        task_id=state.task.task_id,
+        project_root=str(root),
+        provider="codex",
+        status="completed",
+        started_at="now",
+        finished_at="now",
+        installation=CodexInstallation(
+            availability="available",
+            executable="codex",
+            version="test",
+            authenticated=True,
+            message="ready",
+        ),
+        node_results=(),
+        events=(),
+        usage=None,
+        schedule=(),
+        error_code=None,
+        error_message=None,
+    )
+    state._capture_failure_context()
+
+    public = state.public()
+    context = public["failure_context"]
+    assert context is not None
+    assert context["scope"] == "project"
+    assert "مستقل" in context["title"]
+    assert context["repair_available"] is False
+    assert public["run_report"]["guidance"]["kind"] == "verification_project"
+    assert public["run_report"]["guidance"]["repair_available"] is False
+
+    calls: list[str] = []
+    state.auto_repair = lambda **_: calls.append("auto-repair")  # type: ignore[method-assign]
+    state._maybe_start_automatic_repair(reason="Verification found a real issue")
+    assert calls == []
+    assert state.recovery.status == "ready"
+
+
 def test_auto_repair_creates_real_follow_up_plan_once(tmp_path: Path) -> None:
     source = tmp_path / "source"
     (source / "public_html").mkdir(parents=True)

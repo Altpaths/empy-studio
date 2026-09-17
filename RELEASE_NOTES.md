@@ -1,3 +1,20 @@
+# Empy Studio 0.1.67 — isolate project-level Verification failures
+
+Empy now compares a failed whole-project Verification result with the exact
+files changed by the active ticket. A chart or asset ticket is no longer sent
+through repeated Agent discovery when an older site-audit contract fails on an
+unrelated entry point such as `index.html` versus `index.php`.
+
+The finding remains in the durable failure archive, the UI explains that it is
+a separate project-level blocker, automatic repair is disabled for that
+finding, and the current ticket cannot produce a ZIP until the project check is
+resolved and Verification passes. Generic diagnostics without a concrete
+project marker remain retryable so this guard does not hide a real ticket bug.
+
+The full regression suite (1007 tests) and Python compile checks pass locally.
+Provider billing, DirectAdmin extraction, and Apple notarization still require
+their respective external environments.
+
 # Empy Studio 0.1.66 — root-cause recovery routing and deterministic static repair
 
 Empy now carries multiline Verification and execution diagnostics into the
