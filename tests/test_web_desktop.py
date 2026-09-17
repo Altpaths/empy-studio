@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import shutil
+import sqlite3
 import subprocess
 import threading
 import urllib.error
@@ -1591,3 +1593,207 @@ def test_verified_export_has_authenticated_download_endpoint(tmp_path: Path) -> 
         server.shutdown()
         thread.join(timeout=2)
         server.server_close()
+
+
+def _memory_ready_state(tmp_path: Path) -> GuidedState:
+    source = tmp_path / "memory-source"
+    source.mkdir()
+    (source / "pyproject.toml").write_text(
+        "[project]\nname = 'memory-demo'\n",
+        encoding="utf-8",
+    )
+    (source / "README.md").write_text("before\n", encoding="utf-8")
+    (source / "tests").mkdir()
+    (source / "tests" / "test_smoke.py").write_text(
+        "def test_smoke():\n    assert True\n",
+        encoding="utf-8",
+    )
+    state = GuidedState(tmp_path / "memory-workspace")
+    state.import_path(str(source))
+    state.create_plan("Update the README")
+    return state
+
+
+def _record_memory_failure(state: GuidedState) -> None:
+    state.error = (
+        "The Agent produced no project change and did not provide a PASS attestation."
+    )
+    state._capture_failure_context()
+
+
+def test_failure_memory_blocks_exact_unchanged_provider_run_and_survives_restart(
+    tmp_path: Path,
+) -> None:
+    state = _memory_ready_state(tmp_path)
+    _record_memory_failure(state)
+    records = state.store.list_failures(state.active_project_id, include_resolved=False)
+    assert len(records) == 1
+    assert records[0].kind == "no_change"
+    assert records[0].affected_paths == ("README.md",)
+    assert records[0].evidence[0].startswith("scope_target:")
+
+    restarted = GuidedState(tmp_path / "memory-workspace")
+    restarted.new_ticket()
+    restarted.create_plan("Update the README")
+    calls: list[str] = []
+
+    class DriverStub:
+        def inspect(self, *, refresh: bool = False) -> CodexInstallation:
+            del refresh
+            calls.append("inspect")
+            raise AssertionError("an unchanged failure must stop before provider inspection")
+
+    restarted.driver = DriverStub()  # type: ignore[assignment]
+    with pytest.raises(RuntimeError, match="همان علت شکست|same confirmed failure"):
+        restarted.start_run()
+
+    assert calls == []
+    memory = {
+        "blocked": restarted.failure_memory_blocked,
+        "open_count": restarted.failure_memory_open_count,
+        "records": [record.compact_summary() for record in restarted.failure_memory_matches],
+    }
+    assert memory["blocked"] is True
+    assert memory["open_count"] == 1
+    assert memory["records"][0]["kind"] == "no_change"
+    assert "scope_snapshot" not in json.dumps(memory, ensure_ascii=False)
+
+
+def test_failure_memory_allows_changed_snapshot_and_calls_provider_once(
+    tmp_path: Path,
+) -> None:
+    state = _memory_ready_state(tmp_path)
+    _record_memory_failure(state)
+    assert state.detection is not None
+    (state.detection.descriptor.root / "README.md").write_text(
+        "corrective change\n",
+        encoding="utf-8",
+    )
+    state._refresh_failure_memory_view()
+    assert state.failure_memory_blocked is False
+
+    calls: list[str] = []
+
+    class DriverStub:
+        def inspect(self, *, refresh: bool = False) -> CodexInstallation:
+            del refresh
+            calls.append("inspect")
+            return CodexInstallation(
+                availability="available",
+                executable="codex",
+                version="test",
+                authenticated=True,
+                message="ready",
+            )
+
+    state.driver = DriverStub()  # type: ignore[assignment]
+    state._run_worker = lambda workspace_run_id: None  # type: ignore[method-assign]
+    state.start_run()
+    state._cancel_recovery_deadline()
+    state.running = False
+    assert calls == ["inspect"]
+
+
+def test_failure_memory_resolves_only_after_final_verification(
+    tmp_path: Path,
+) -> None:
+    state = _memory_ready_state(tmp_path)
+    _record_memory_failure(state)
+    record = state.store.list_failures(state.active_project_id, include_resolved=False)[0]
+    check = VerificationCheck(
+        check_id="smoke",
+        label="Smoke test",
+        category="tests",
+        command=("pytest", "-q"),
+    )
+    verification = VerificationReport(
+        schema_version=1,
+        verification_id="verification-memory-pass",
+        project_root=str(state.detection.descriptor.root),
+        project_type="python",
+        status="pass",
+        started_at="now",
+        finished_at="now",
+        results=(
+            VerificationResult(
+                check=check,
+                status="pass",
+                returncode=0,
+                stdout="1 passed",
+                stderr="",
+                started_at="now",
+                finished_at="now",
+            ),
+        ),
+        evidence_path="evidence/verification-memory-pass",
+    )
+    assert verification.finalize_allowed is True
+
+    state._resolve_failure_memory_after_verification(verification)
+    assert state.store.get_failure(record.memory_id).status == "resolved"
+    assert state.store.list_failures(state.active_project_id, include_resolved=False) == ()
+
+
+def test_failure_memory_is_project_scoped_and_malformed_rows_fail_closed(
+    tmp_path: Path,
+) -> None:
+    state = _memory_ready_state(tmp_path)
+    _record_memory_failure(state)
+    first_project_id = state.active_project_id
+    assert first_project_id is not None
+
+    second_source = tmp_path / "second-source"
+    second_source.mkdir()
+    (second_source / "pyproject.toml").write_text(
+        "[project]\nname = 'other-demo'\n",
+        encoding="utf-8",
+    )
+    (second_source / "README.md").write_text("other\n", encoding="utf-8")
+    (second_source / "tests").mkdir()
+    (second_source / "tests" / "test_smoke.py").write_text(
+        "def test_smoke():\n    assert True\n",
+        encoding="utf-8",
+    )
+    state.import_path(str(second_source))
+    assert state.active_project_id != first_project_id
+    assert state.public()["failure_memory"]["open_count"] == 0
+
+    connection = sqlite3.connect(state.store.database_path)
+    try:
+        connection.execute(
+            """
+            INSERT INTO failure_memory(
+                memory_id, project_id, task_id, fingerprint, kind, summary,
+                action, affected_paths_json, evidence_json, status,
+                occurrence_count, task_ids_json, first_seen_at, last_seen_at,
+                resolved_at, resolution_evidence_json, superseded_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "malformed-memory-row",
+                state.active_project_id,
+                None,
+                "a" * 64,
+                "check_failed",
+                "malformed row",
+                "inspect",
+                "[]",
+                "not-json",
+                "open",
+                1,
+                "[]",
+                "now",
+                "now",
+                None,
+                "[]",
+                None,
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    state._refresh_failure_memory_view()
+    assert state.failure_memory_blocked is False
+    assert state.failure_memory_open_count == 0
+    assert state.public()["failure_memory"]["records"] == []

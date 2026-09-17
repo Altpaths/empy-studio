@@ -42,6 +42,15 @@ from empy_studio.core import (
     lock_token_budget,
     mark_ready_for_planning,
 )
+from empy_studio.core.failure_memory import (
+    FailureMemoryRecord,
+)
+from empy_studio.core.failure_memory import (
+    failure_fingerprint as failure_memory_fingerprint,
+)
+from empy_studio.core.failure_memory import (
+    normalize_relative_path as normalize_memory_relative_path,
+)
 from empy_studio.core.path_policy import (
     is_agent_denied_relative_path,
     normalize_relative_path,
@@ -122,6 +131,34 @@ DEFAULT_DEFINITION_OF_DONE = (
     "Relevant tests, build, and lint checks pass when available.\n"
     "A readable review and a verified change-only deployment archive are produced."
 )
+
+
+@dataclass(frozen=True)
+class _FailureMemoryScope:
+    """Stable local identity for one planned provider target.
+
+    Failure memory intentionally stores only these digests and relative paths.
+    The digests let the runtime distinguish an unchanged redundant retry from
+    a real corrective attempt without placing project contents in SQLite or a
+    provider prompt.
+    """
+
+    target_digest: str
+    snapshot_digest: str
+    target_paths: tuple[str, ...]
+    snapshot_paths: tuple[str, ...]
+
+    @property
+    def evidence(self) -> tuple[str, ...]:
+        return (
+            f"scope_target:{self.target_digest}",
+            f"scope_snapshot:{self.snapshot_digest}",
+        )
+
+
+def _scope_digest(value: object) -> str:
+    payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def clean_workspace_root() -> Path:
@@ -473,6 +510,15 @@ class GuidedState:
     error: str | None = None
     continuation_context: str | None = None
     failure_context: dict[str, Any] | None = None
+    failure_memory_hint: str = field(default="", init=False)
+    failure_memory_matches: tuple[FailureMemoryRecord, ...] = field(
+        default_factory=tuple,
+        init=False,
+        repr=False,
+    )
+    failure_memory_open_count: int = field(default=0, init=False)
+    failure_memory_blocked: bool = field(default=False, init=False)
+    failure_memory_block_reason: str | None = field(default=None, init=False)
     repair_attempts: int = 0
     recovery: RecoveryState = field(default_factory=RecoveryState)
     recovery_deadline: threading.Timer | None = field(default=None, repr=False)
@@ -759,6 +805,403 @@ class GuidedState:
             "created_at": str(value.get("created_at", "")),
         }
 
+    def _failure_memory_target_paths(
+        self,
+        *,
+        graph: AgentRunGraph | None = None,
+        context: ContextSelection | None = None,
+    ) -> tuple[str, ...]:
+        """Return exact file targets used by the current graph.
+
+        Directory scopes and unsafe provider output are deliberately ignored.
+        Context files are a fallback for read-only plans and are also included
+        in the snapshot below because a changed dependency/configuration file
+        must make a later attempt eligible for a fresh run.
+        """
+
+        values: set[str] = set()
+        selected_graph = self.graph if graph is None else graph
+        selected_context = self.context if context is None else context
+        if selected_graph is not None:
+            for node in selected_graph.nodes:
+                for raw_path in node.owned_files:
+                    try:
+                        values.add(normalize_memory_relative_path(raw_path))
+                    except (TypeError, ValueError):
+                        continue
+        if not values and selected_context is not None:
+            for pack in selected_context.packs:
+                for item in pack.files:
+                    try:
+                        values.add(normalize_memory_relative_path(item.relative_path))
+                    except (TypeError, ValueError):
+                        continue
+        return tuple(sorted(values))
+
+    def _failure_memory_snapshot_paths(
+        self,
+        *,
+        graph: AgentRunGraph | None = None,
+        context: ContextSelection | None = None,
+    ) -> tuple[str, ...]:
+        values = set(self._failure_memory_target_paths(graph=graph, context=context))
+        selected_context = self.context if context is None else context
+        if selected_context is not None:
+            for pack in selected_context.packs:
+                for item in pack.files:
+                    try:
+                        values.add(normalize_memory_relative_path(item.relative_path))
+                    except (TypeError, ValueError):
+                        continue
+        return tuple(sorted(values))
+
+    def _failure_memory_scope(
+        self,
+        *,
+        task: ProductTask | None = None,
+        graph: AgentRunGraph | None = None,
+        context: ContextSelection | None = None,
+    ) -> _FailureMemoryScope:
+        """Hash only local target metadata and relevant file contents.
+
+        This is a content identity, not a prompt context.  It is therefore
+        cheap to compute, contains no source text, and makes the duplicate-run
+        guard sensitive to a real target or source change.
+        """
+
+        selected_graph = self.graph if graph is None else graph
+        target_paths = self._failure_memory_target_paths(graph=graph, context=context)
+        snapshot_paths = self._failure_memory_snapshot_paths(graph=graph, context=context)
+        owner_map: list[tuple[str, tuple[str, ...]]] = []
+        if selected_graph is not None:
+            for node in sorted(selected_graph.nodes, key=lambda item: item.node_id):
+                owned: list[str] = []
+                for raw_path in node.owned_files:
+                    try:
+                        owned.append(normalize_memory_relative_path(raw_path))
+                    except (TypeError, ValueError):
+                        continue
+                owner_map.append((str(node.agent_role), tuple(sorted(set(owned)))))
+        if not owner_map:
+            request_identity = failure_memory_fingerprint(
+                self._failure_memory_request_text(task=task),
+                kind="request",
+            )
+            owner_map.append(("request", (request_identity,)))
+        target_digest = _scope_digest(
+            {
+                "owners": owner_map,
+                "target_paths": target_paths,
+            }
+        )
+        snapshot_entries: list[tuple[str, str]] = []
+        root = self.detection.descriptor.root if self.detection is not None else None
+        for relative_path in snapshot_paths:
+            digest = "missing"
+            if root is not None:
+                try:
+                    candidate = project_path(root, relative_path, allow_directory=False)
+                    if candidate.is_file() and not candidate.is_symlink():
+                        hasher = hashlib.sha256()
+                        with candidate.open("rb") as source:
+                            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                                hasher.update(chunk)
+                        digest = hasher.hexdigest()
+                    elif candidate.exists():
+                        digest = "non_file"
+                except (OSError, RuntimeError, TypeError, ValueError):
+                    digest = "unreadable"
+            snapshot_entries.append((relative_path, digest))
+        snapshot_digest = _scope_digest(snapshot_entries)
+        return _FailureMemoryScope(
+            target_digest=target_digest,
+            snapshot_digest=snapshot_digest,
+            target_paths=target_paths,
+            snapshot_paths=snapshot_paths,
+        )
+
+    def _failure_memory_request_text(self, *, task: ProductTask | None = None) -> str:
+        selected_task = self.task if task is None else task
+        if selected_task is not None and selected_task.objective.strip():
+            return selected_task.objective
+        if self.recovery.original_request.strip():
+            return self.recovery.original_request
+        if self.active_task_id is not None:
+            try:
+                return self.store.get_task(self.active_task_id).request_text
+            except (KeyError, OSError, TypeError, ValueError):
+                pass
+        return "unknown request"
+
+    @staticmethod
+    def _failure_memory_record_scope(record: FailureMemoryRecord) -> dict[str, str]:
+        values: dict[str, str] = {}
+        for item in record.evidence:
+            for key in ("scope_target", "scope_snapshot"):
+                prefix = f"{key}:"
+                if item.startswith(prefix):
+                    value = item[len(prefix) :]
+                    if len(value) == 64 and all(char in "0123456789abcdef" for char in value):
+                        values[key] = value
+        return values
+
+    @staticmethod
+    def _failure_memory_fingerprint(
+        summary: str,
+        *,
+        kind: str,
+        action: str,
+        scope: _FailureMemoryScope,
+    ) -> str:
+        root = failure_memory_fingerprint(summary, kind=kind, action=action)
+        return hashlib.sha256(
+            f"{root}|target={scope.target_digest}|snapshot={scope.snapshot_digest}".encode()
+        ).hexdigest()
+
+    @staticmethod
+    def _failure_memory_action(kind: str) -> str:
+        safe_kind = kind.strip() or "check_failed"
+        return (
+            f"Resolve the confirmed {safe_kind} failure in the isolated project, "
+            "then rerun deterministic Verification."
+        )[:800]
+
+    @staticmethod
+    def _failure_memory_is_external(record: FailureMemoryRecord) -> bool:
+        if record.kind in {
+            "missing_dependency",
+            "permission",
+            "dirty_worktree",
+            "timeout",
+        }:
+            return True
+        normalized = record.summary.casefold()
+        return any(
+            marker in normalized
+            for marker in (
+                "credential",
+                "api key",
+                "authentication",
+                "authenticated",
+                "provider unavailable",
+                "choose and save a connection",
+            )
+        )
+
+    def _failure_memory_record_from_context(
+        self,
+        context: dict[str, Any],
+    ) -> FailureMemoryRecord | None:
+        if self.active_project_id is None:
+            return None
+        failures = context.get("failures")
+        diagnostics = context.get("diagnostics")
+        first_failure = (
+            next(
+                (
+                    item
+                    for item in failures
+                    if isinstance(item, dict) and str(item.get("detail", "")).strip()
+                ),
+                None,
+            )
+            if isinstance(failures, list)
+            else None
+        )
+        if first_failure is not None:
+            summary = str(first_failure.get("detail", "")).strip()
+            kind = str(first_failure.get("kind", "")).strip() or str(
+                context.get("kind", "check_failed")
+            )
+        else:
+            summary = (
+                next(
+                    (str(item).strip() for item in diagnostics if str(item).strip()),
+                    "The Empy workflow stopped without a diagnostic.",
+                )
+                if isinstance(diagnostics, list)
+                else "The Empy workflow stopped without a diagnostic."
+            )
+            kind = str(context.get("kind", "check_failed"))
+        action = self._failure_memory_action(kind)
+        scope = self._failure_memory_scope()
+        evidence: list[str] = [*scope.evidence]
+        if isinstance(diagnostics, list):
+            evidence.extend(str(item) for item in diagnostics[:3] if str(item).strip())
+        if isinstance(failures, list):
+            evidence.extend(
+                str(item.get("detail", ""))
+                for item in failures[:3]
+                if isinstance(item, dict) and str(item.get("detail", "")).strip()
+            )
+        fingerprint = self._failure_memory_fingerprint(
+            summary,
+            kind=kind,
+            action=action,
+            scope=scope,
+        )
+        try:
+            return self.store.record_failure(
+                project_id=self.active_project_id,
+                task_id=self.active_task_id,
+                fingerprint=fingerprint,
+                kind=kind,
+                summary=summary,
+                action=action,
+                affected_paths=scope.target_paths or scope.snapshot_paths,
+                evidence=evidence,
+            )
+        except (OSError, RuntimeError, TypeError, ValueError):
+            # Failure memory is an optimization and a durable hint.  A
+            # malformed row or unavailable workspace must never turn a real
+            # project failure into a second application failure.
+            self.add_log("Failure memory could not persist this diagnostic; continuing safely.", "warning")
+            return None
+
+    def _refresh_failure_memory_view(
+        self,
+        *,
+        task: ProductTask | None = None,
+        graph: AgentRunGraph | None = None,
+        context: ContextSelection | None = None,
+    ) -> None:
+        """Refresh bounded project-local memory state for API/UI consumers."""
+
+        project_id = self.active_project_id
+        if project_id is None:
+            self.failure_memory_matches = ()
+            self.failure_memory_open_count = 0
+            self.failure_memory_hint = ""
+            self.failure_memory_blocked = False
+            self.failure_memory_block_reason = None
+            return
+        scope = self._failure_memory_scope(task=task, graph=graph, context=context)
+        try:
+            records = self.store.list_failures(
+                project_id,
+                include_resolved=False,
+                limit=32,
+            )
+        except (OSError, RuntimeError, TypeError, ValueError):
+            self.failure_memory_matches = ()
+            self.failure_memory_open_count = 0
+            self.failure_memory_hint = ""
+            self.failure_memory_blocked = False
+            self.failure_memory_block_reason = None
+            return
+        exact: list[FailureMemoryRecord] = []
+        related: list[FailureMemoryRecord] = []
+        for record in records:
+            metadata = self._failure_memory_record_scope(record)
+            expected = self._failure_memory_fingerprint(
+                record.summary,
+                kind=record.kind,
+                action=record.action,
+                scope=scope,
+            )
+            if (
+                metadata.get("scope_target") == scope.target_digest
+                and metadata.get("scope_snapshot") == scope.snapshot_digest
+                and record.fingerprint == expected
+            ):
+                exact.append(record)
+            if (
+                not record.affected_paths
+                or not scope.snapshot_paths
+                or set(record.affected_paths).intersection(scope.snapshot_paths)
+            ):
+                related.append(record)
+        self.failure_memory_matches = tuple(exact[:8])
+        self.failure_memory_open_count = len(records)
+        try:
+            hint = self.store.failure_context_hint(
+                project_id,
+                affected_paths=scope.snapshot_paths,
+                limit=4,
+            )
+            if not hint and any(not record.affected_paths for record in related):
+                hint = self.store.failure_context_hint(project_id, limit=4)
+        except (OSError, RuntimeError, TypeError, ValueError):
+            hint = ""
+        self.failure_memory_hint = hint[:2400]
+        hard_block = [
+            record
+            for record in exact
+            if not self._failure_memory_is_external(record)
+        ]
+        # Automatic repair has already changed the recovery cycle and is an
+        # intentional corrective pass.  It must be allowed to call the
+        # provider; RecoveryState remains the independent attempt/token guard.
+        if self.recovery.attempts > 0:
+            hard_block = []
+        self.failure_memory_blocked = bool(hard_block)
+        self.failure_memory_block_reason = None
+        if hard_block:
+            first = hard_block[0]
+            if self.language == "en":
+                self.failure_memory_block_reason = (
+                    "This provider run was stopped because the same confirmed failure "
+                    "is already recorded for the unchanged target and project files. "
+                    "Change the target or fix the cause first, then run again."
+                )
+            else:
+                self.failure_memory_block_reason = (
+                    "این اجرای Provider متوقف شد چون همان علت شکستِ تأییدشده برای هدف و فایل‌های "
+                    "بدون تغییر در حافظه ثبت شده است. ابتدا علت یا هدف را اصلاح کنید و سپس دوباره اجرا کنید."
+                )
+            self.add_log(
+                f"Duplicate provider run blocked by failure memory ({first.kind}).",
+                "warning",
+            )
+        # ``related`` is deliberately not sent wholesale to the provider; the
+        # store renders only summary/action/relative paths and enforces the
+        # final character bound.  Keep the view project-scoped and bounded.
+
+    def _resolve_failure_memory_after_verification(
+        self,
+        verification: VerificationReport,
+    ) -> None:
+        """Close only incidents covered by a real final verification pass."""
+
+        if (
+            self.active_project_id is None
+            or not verification.finalize_allowed
+            or verification.status != "pass"
+        ):
+            return
+        scope = self._failure_memory_scope()
+        try:
+            records = self.store.list_failures(
+                self.active_project_id,
+                include_resolved=False,
+                limit=64,
+            )
+        except (OSError, RuntimeError, TypeError, ValueError):
+            return
+        evidence = {
+            "status": "pass",
+            "verified": True,
+            "result": "All deterministic Verification checks passed.",
+            "verification_id": verification.verification_id,
+        }
+        for record in records:
+            metadata = self._failure_memory_record_scope(record)
+            same_task = self.active_task_id is not None and self.active_task_id in record.task_ids
+            same_target = metadata.get("scope_target") == scope.target_digest
+            if not (same_task or same_target):
+                continue
+            try:
+                self.store.resolve_failure(
+                    record.memory_id,
+                    evidence,
+                    verification_id=verification.verification_id,
+                )
+            except (KeyError, OSError, RuntimeError, TypeError, ValueError):
+                # One malformed or concurrently deleted row must not prevent
+                # the verified result from reaching Review/ZIP generation.
+                continue
+        self._refresh_failure_memory_view()
+
     def _refresh_brain_index(self) -> ProjectBrainIndex:
         if self.active_project_id is None or self.detection is None:
             raise RuntimeError("Choose a project first.")
@@ -876,6 +1319,7 @@ class GuidedState:
         if not restore:
             self.store.set_setting("active_task_id", None)
         self._refresh_brain_index()
+        self._refresh_failure_memory_view()
 
     def _register_import(self, imported: ImportedProject) -> None:
         detection = self.project_service.detect(imported.project_root)
@@ -1377,7 +1821,10 @@ class GuidedState:
                 if stale_reason is not None
                 else "نتیجهٔ تیکت بازیابی شد."
             )
-        self._capture_failure_context()
+        if restored_verification is not None and restored_verification.finalize_allowed:
+            self._resolve_failure_memory_after_verification(restored_verification)
+        else:
+            self._capture_failure_context()
 
     def _failure_context_from_state(self) -> dict[str, Any] | None:
         """Build a bounded, redacted incident record from the current run."""
@@ -1539,6 +1986,9 @@ class GuidedState:
             project_id = self.active_project_id
         if project_id is not None:
             self.store.set_setting(self._failure_context_setting_key(project_id), context)
+        if context is not None:
+            self._failure_memory_record_from_context(context)
+        self._refresh_failure_memory_view()
 
     def _clear_failure_context(self) -> None:
         with self.lock:
@@ -1548,6 +1998,7 @@ class GuidedState:
         if project_id is not None:
             self.store.set_setting(self._failure_context_setting_key(project_id), None)
             self.store.set_setting(self._repair_attempts_setting_key(project_id), 0)
+        self._refresh_failure_memory_view()
 
     def _localized_failure_context(self) -> dict[str, Any] | None:
         raw = self.failure_context
@@ -2028,6 +2479,18 @@ class GuidedState:
         except (OSError, RuntimeError, TypeError, ValueError) as exc:
             self._record_planning_failure(exc, task=ready)
             raise
+        # The ledger is consulted after the new graph is materialized so the
+        # target/snapshot identity reflects this ticket rather than a stale
+        # previous plan.  A related old incident becomes a compact handoff;
+        # an exact unchanged incident is enforced at the provider gate below.
+        self._refresh_failure_memory_view(task=ready, graph=graph, context=context)
+        if self.failure_memory_hint and not self.failure_memory_blocked:
+            ready = replace(
+                ready,
+                constraints=tuple(
+                    dict.fromkeys((*ready.constraints, self.failure_memory_hint))
+                ),
+            )
         contract = {
             "task": asdict(ready),
             "plan": plan.to_dict(),
@@ -2079,6 +2542,7 @@ class GuidedState:
         self.store.set_setting("active_task_id", ready.task_id)
         if self.active_project_id is not None:
             self.store.set_setting(self._failure_context_setting_key(self.active_project_id), None)
+        self._refresh_failure_memory_view()
 
     def run_benchmark(self) -> BenchmarkResult:
         if self.task is None or self.detection is None or self.plan is None:
@@ -2305,10 +2769,27 @@ class GuidedState:
                 self.message = message
             self._capture_failure_context()
             raise RuntimeError(message)
+        # Do this local, durable check immediately before provider inspection.
+        # A matching open incident with the same target and content snapshot
+        # is a redundant expensive run; a changed target/snapshot naturally
+        # produces a different scope identity and remains eligible.
+        self._refresh_failure_memory_view()
+        if self.failure_memory_blocked and self.failure_memory_block_reason:
+            with self.lock:
+                self.error = self.failure_memory_block_reason
+                self.message = self.failure_memory_block_reason
+                self.message_level = "warning"
+            raise RuntimeError(self.failure_memory_block_reason)
         installation = self.driver.inspect(refresh=True)
         if installation.availability != "available" or not installation.authenticated:
-            self._stop_recovery("credentials: " + (installation.remediation or installation.message))
-            raise RuntimeError(installation.remediation or installation.message)
+            detail = installation.remediation or installation.message
+            self._stop_recovery("credentials: " + detail)
+            with self.lock:
+                self.error = detail
+                self.message = detail
+                self.message_level = "warning"
+            self._capture_failure_context()
+            raise RuntimeError(detail)
         if self.active_project_id is None or self.active_task_id is None:
             raise RuntimeError("Project and task identity are missing.")
         self._prepare_clean_worktree_for_run()
@@ -2657,6 +3138,7 @@ class GuidedState:
                 self.message_level = "success" if verification.finalize_allowed else "warning"
                 self.error = None
             if verification.finalize_allowed:
+                self._resolve_failure_memory_after_verification(verification)
                 self._clear_failure_context()
             else:
                 self._capture_failure_context()
@@ -2834,6 +3316,8 @@ class GuidedState:
                 verification = finalize_verification(verification)
             self.verification = verification
             self.verification_store.save(verification)
+            if verification.finalize_allowed:
+                self._resolve_failure_memory_after_verification(verification)
             if self.active_task_id and self.run:
                 runs = self.store.list_task_runs(self.active_task_id)
                 if runs:
@@ -3139,6 +3623,7 @@ class GuidedState:
         self.phase = "task"
         self.store.set_setting("active_task_id", None)
         self._save_recovery()
+        self._refresh_failure_memory_view()
 
     def reset(self) -> None:
         with self.lock:
@@ -3173,8 +3658,10 @@ class GuidedState:
             self.logs.clear()
         self.store.set_setting("active_project_id", None)
         self.store.set_setting("active_task_id", None)
+        self._refresh_failure_memory_view()
 
     def public(self) -> dict[str, Any]:
+        self._refresh_failure_memory_view()
         with self.lock:
             inspection = self.driver.inspect(refresh=False)
             project = self._active_project()
@@ -3256,6 +3743,17 @@ class GuidedState:
                     "export": self._public_export(),
                     "dependency_bootstrap": self._public_dependency_bootstrap(),
                     "failure_context": self._localized_failure_context(),
+                    "failure_memory": {
+                        "open_count": self.failure_memory_open_count,
+                        "matched_count": len(self.failure_memory_matches),
+                        "blocked": self.failure_memory_blocked,
+                        "block_reason": self.failure_memory_block_reason,
+                        "hint": self.failure_memory_hint,
+                        "records": [
+                            record.compact_summary()
+                            for record in self.failure_memory_matches[:8]
+                        ],
+                    },
                     "recovery": self.recovery.to_dict(),
                     "import_report": self.import_report,
                     "release_gate": self._release_gate(),
