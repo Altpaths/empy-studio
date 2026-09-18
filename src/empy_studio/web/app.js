@@ -618,10 +618,12 @@ function render() {
   enhanceReportUi();
   enhanceImportUi();
   document.querySelector("#screen").setAttribute("aria-busy", "false");
-  // A repair may be queued between two provider runs. Keep observing that
-  // transition even when the just-finished run briefly reports running=false.
-  const workflowActive = state.running || state.recovery?.status === "running" ||
-    (state.phase === "run" && state.recovery?.status === "ready" && !state.recovery?.stop_reason);
+  // Poll only while work is actually active.  A failed run can leave recovery
+  // in the durable `ready` state when automatic repair is intentionally
+  // skipped (for example, an unrelated project-level Verification finding).
+  // Treating that state as active leaves the UI on the "Running" screen
+  // forever and hides the actionable failure context.
+  const workflowActive = state.running || state.recovery?.status === "running";
   if (workflowActive && !poller) poller = setInterval(refresh, 900);
   if (!workflowActive && poller) { clearInterval(poller); poller = null; }
 }

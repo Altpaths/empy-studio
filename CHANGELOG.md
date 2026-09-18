@@ -1081,3 +1081,12 @@ The core is operational and tested. Public interfaces may change before v1.0.
 - added GitHub Release distribution synchronization
 - added direct download link maps preserving GitHub asset counters
 - added Distribution CLI and end-to-end tests
+## [0.1.70] - 2026-09-18
+
+- Classify Persian visual imperatives such as «نمودار دایره‌ای ... سه بعدی کن»
+  as implementation requests, so they go directly to the bounded frontend
+  writer instead of paying for redundant Discovery and provider Quality nodes.
+- Stop the web UI polling loop when recovery is merely ready after a terminal
+  failure; the exact failure and next action are now shown instead of leaving
+  the screen on «در حال اجرا» forever.
+- Add regression coverage for the Persian chart route and terminal recovery UI.

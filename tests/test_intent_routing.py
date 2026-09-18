@@ -195,6 +195,22 @@ def test_persian_selectable_chart_imperative_skips_redundant_discovery(
     assert all(step.step_id != "discovery" for step in plan.steps)
 
 
+def test_persian_three_dimensional_chart_imperative_skips_quality_provider(
+    tmp_path: Path,
+) -> None:
+    project = _php_project(tmp_path)
+    text = "نمودار دایره ای بخش بانک هارو سه بعدی کن"
+    task = _task(tmp_path, text)
+
+    assert requests_implementation(text)
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+
+    assert [step.suggested_agent for step in plan.steps] == ["frontend"]
+
+
 def test_recovery_context_never_reintroduces_provider_discovery(
     tmp_path: Path,
 ) -> None:

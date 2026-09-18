@@ -225,3 +225,17 @@ Run `scripts/benchmark_token_efficiency.py` to measure deterministic planning
 overhead without calling a provider.
 The accompanying acceptance report distinguishes mocked tests from real free
 provider failures; no real cost reduction or successful free coding is claimed.
+# Empy Studio 0.1.70 — bounded Persian chart routing and terminal UI state
+
+This patch fixes the exact run reproduced from a local project URL. A Persian
+request such as «نمودار دایره ای بخش بانک هارو سه بعدی کن» is now classified as
+an implementation request. When deterministic Verification is available, the
+graph contains only the bounded frontend writer; redundant provider Discovery
+and Quality passes are removed, reducing repeated context and token spend.
+
+The web client also stops polling when a run has ended and recovery is only
+ready for a user-visible next step. It no longer presents a failed run as
+«در حال اجرا» indefinitely.
+
+Validation for this patch includes the full regression suite, strict Ruff,
+mypy, JavaScript syntax checking, and the existing macOS acceptance workflow.

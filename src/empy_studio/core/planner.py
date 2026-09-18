@@ -2355,12 +2355,33 @@ def requests_implementation(text: str) -> bool:
         normalized,
     ):
         return True
-    return bool(
-        re.search(
-            r"\bقابل\s+[^\n؛.!؟]{1,80}\b(?:کن|کنید|بکن|بکنید)\b",
-            normalized,
-        )
-    )
+    if re.search(
+        r"\bقابل\s+[^\n؛.!؟]{1,80}\b(?:کن|کنید|بکن|بکنید)\b",
+        normalized,
+    ):
+        return True
+    # Visual tickets also commonly use a noun plus a trailing imperative,
+    # without the explicit ``را قابل`` construction: ``نمودار ... سه بعدی
+    # کن`` or ``بخش بانک را سه‌بعدی کن``. These are implementation requests,
+    # not read-only reviews. Keep the noun allow-list narrow so a plain
+    # ``بررسی کن`` does not become a writer request.
+    return _contains_any_term(
+        normalized,
+        (
+            "نمودار",
+            "گراف",
+            "چارت",
+            "داشبورد",
+            "دایره",
+            "pie",
+            "donut",
+            "3d",
+            "سه بعدی",
+        ),
+    ) and re.search(
+        r"(?:^|\s)(?:کن|کنید|بکن|بکنید)\s*[.!؟]?$",
+        normalized,
+    ) is not None
 
 
 def _has_explicit_file_scope(text: str) -> bool:

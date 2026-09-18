@@ -36,6 +36,8 @@ def test_brand_asset_and_event_delegation_are_wired() -> None:
     assert "releaseGateLabel" in app_js
     assert "awaiting_review" in app_js
     assert "reviewPendingAction" in app_js
+    assert "const workflowActive = state.running || state.recovery?.status === \"running\";" in app_js
+    assert "state.phase === \"run\" && state.recovery?.status === \"ready\"" not in app_js
     assert "/api/export/manifest" in app_js
     assert "/api/export/checksum" in app_js
     assert "sha256" in app_js
