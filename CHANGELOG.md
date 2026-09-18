@@ -1,3 +1,17 @@
+## [0.1.69] - 2026-09-18
+
+- Route visual chart tickets to the real rendering page/template plus one
+  bounded style asset and one behavior asset; PHP finance, bank, account, and
+  dashboard pages can now be frontend-owned when the ticket requires them.
+- Add Persian semantic scope terms for bank/account, pie/donut, percentage, and
+  3D requests so a chart change cannot become an unreachable CSS/JS-only patch.
+- Detect stale PHP verification checks that reference a missing root
+  `index.html` while the application entry point is `index.php` before provider
+  inspection. Repair only the unambiguous root references in the isolated copy;
+  never create a placeholder page or rewrite subpage links.
+- Add end-to-end regression coverage for bounded chart context, ownership, and
+  verification-contract repair.
+
 ## [0.1.68] - 2026-09-17
 
 - Route Persian imperative implementation requests such as «… را قابل انتخاب

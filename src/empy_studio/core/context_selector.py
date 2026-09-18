@@ -394,6 +394,58 @@ MARKET_TASK_TOKENS: Final[frozenset[str]] = frozenset(
     }
 )
 
+_VISUAL_CHART_TOKENS: Final[frozenset[str]] = frozenset(
+    {
+        "chart",
+        "charts",
+        "graph",
+        "graphs",
+        "plot",
+        "plots",
+        "pie",
+        "donut",
+        "diagram",
+        "charting",
+        "نمودار",
+        "گراف",
+        "دایره",
+        "درصد",
+        "dashboard",
+    }
+)
+_VISUAL_PAGE_HINTS: Final[frozenset[str]] = frozenset(
+    {
+        "account",
+        "accounts",
+        "bank",
+        "chart",
+        "dashboard",
+        "finance",
+        "financial",
+        "graph",
+        "index",
+        "portfolio",
+        "report",
+        "wallet",
+        "دارایی",
+        "بانک",
+        "حساب",
+    }
+)
+_VISUAL_PRIMARY_PAGE_HINTS: Final[frozenset[str]] = frozenset(
+    {
+        "bank",
+        "chart",
+        "dashboard",
+        "finance",
+        "financial",
+        "graph",
+        "portfolio",
+        "report",
+        "wallet",
+    }
+)
+
 MARKET_MODULE_TOKENS: Final[frozenset[str]] = frozenset(
     {
         "asset",
@@ -639,7 +691,11 @@ def _expanded_task_tokens(value: str) -> frozenset[str]:
         "مقابسه": ("compare", "comparison"),
         "پایش": ("patrol", "monitor", "monitoring", "journey"),
         "دارایی": ("asset", "assets", "finance", "portfolio"),
+        "بانک": ("bank", "finance", "account", "accounts", "wallet"),
+        "حساب": ("account", "accounts", "finance", "wallet"),
         "نمودار": ("chart", "graph", "plot", "sparkline"),
+        "دایره": ("pie", "donut", "chart"),
+        "درصد": ("percent", "percentage", "legend", "chart"),
         "قیمت": ("price", "prices", "quote", "market"),
         "لحظه": ("live", "realtime", "real-time", "quote"),
         "واقعی": ("real", "live", "market"),
@@ -686,6 +742,8 @@ def _expanded_task_tokens(value: str) -> frozenset[str]:
     }
     for token in tuple(expanded):
         expanded.update(aliases.get(token, ()))
+    if any(phrase in normalized for phrase in ("سه بعدی", "سه‌بعدی", "3d")):
+        expanded.update(("3d", "three", "dimension", "perspective"))
     if any(
         phrase in normalized
         for phrase in ("ای پی آی", "ای پی ا ی", "ای‌پی‌آی", "api")
@@ -707,6 +765,118 @@ def _task_requests_frontend_assets(task_text: str) -> bool:
     """Return whether the ticket explicitly calls for styling/assets too."""
 
     return classify_intent(task_text).frontend_assets
+
+
+def _task_requests_visual_chart(task_text: str) -> bool:
+    """Return whether the ticket needs a real chart-bearing page context.
+
+    A chart change is a cross-file UI contract: the writer needs the page or
+    template that renders the chart as well as the CSS/JS that presents it.
+    Treat this as a scope signal only; it never turns a read-only audit into
+    an implementation request.
+    """
+
+    return bool(_expanded_task_tokens(task_text) & _VISUAL_CHART_TOKENS)
+
+
+def _is_visual_page_candidate(
+    candidate: _Candidate,
+    *,
+    project: ProjectDetection,
+    task_text: str,
+) -> bool:
+    """Identify an existing page/template that can actually render a chart."""
+
+    if not _task_requests_visual_chart(task_text):
+        return False
+    relative = candidate.relative_path
+    path_parts = {part.casefold() for part in Path(relative).parts[:-1]}
+    suffix = candidate.path.suffix.casefold()
+    name = candidate.path.name.casefold()
+    stem = candidate.path.stem.casefold()
+    if path_parts & TEST_PATH_PARTS or _is_sensitive(relative):
+        return False
+    if any(
+        marker in stem
+        for marker in (
+            "service",
+            "controller",
+            "repository",
+            "handler",
+            "middleware",
+            "model",
+            "route",
+            "api",
+        )
+    ):
+        return False
+    if name.endswith(".blade.php"):
+        return True
+    if suffix in {
+        ".html",
+        ".htm",
+        ".jsx",
+        ".tsx",
+        ".vue",
+        ".svelte",
+        ".astro",
+    }:
+        return True
+    if project.descriptor.project_type not in {"php", "laravel"} or suffix != ".php":
+        return False
+    path_tokens = _tokens(
+        re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", relative)
+        .replace("/", " ")
+        .replace(".", " ")
+    )
+    task_tokens = _expanded_task_tokens(task_text)
+    page_task_tokens = task_tokens & {
+        "account",
+        "accounts",
+        "bank",
+        "chart",
+        "dashboard",
+        "finance",
+        "financial",
+        "graph",
+        "pie",
+        "donut",
+        "portfolio",
+        "report",
+        "wallet",
+    }
+    return bool(
+        path_tokens & (_VISUAL_PAGE_HINTS | page_task_tokens)
+        or name in {"index.php", "home.php", "homepage.php"}
+        or path_parts & {"public", "pages", "page", "views", "view", "templates", "template"}
+    )
+
+
+def _is_visual_asset_candidate(candidate: _Candidate) -> bool:
+    """Return whether a candidate is a presentation asset for a visual ticket."""
+
+    suffix = candidate.path.suffix.casefold()
+    path_parts = {part.casefold() for part in Path(candidate.relative_path).parts[:-1]}
+    return suffix in {".css", ".scss", ".sass", ".less", ".js", ".mjs", ".cjs", ".ts"} and bool(
+        path_parts & {"assets", "css", "js", "frontend", "public", "scripts"}
+    )
+
+
+def _visual_page_priority(candidate: _Candidate) -> int:
+    """Prefer the page that owns the requested domain over account forms."""
+
+    path_tokens = _tokens(
+        re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", candidate.relative_path)
+        .replace("/", " ")
+        .replace(".", " ")
+    )
+    return 0 if path_tokens & _VISUAL_PRIMARY_PAGE_HINTS else 1
+
+
+def _visual_asset_priority(candidate: _Candidate) -> int:
+    """Keep one style and one behavior asset in a bounded chart pack."""
+
+    return 0 if candidate.path.suffix.casefold() in {".css", ".scss", ".sass", ".less"} else 1
 
 
 def _task_requests_test_changes(task_text: str) -> bool:
@@ -1175,6 +1345,14 @@ def _score_candidate(
         score += 24
         reasons.append(f"{role} path signal")
 
+    if role == "frontend" and _task_requests_visual_chart(task_text):
+        if _is_visual_page_candidate(candidate, project=project, task_text=task_text):
+            score += 78
+            reasons.append("chart ticket requires page or template context")
+        elif _is_visual_asset_candidate(candidate):
+            score += 42
+            reasons.append("chart ticket requires presentation asset context")
+
     if role == "frontend" and task_tokens & MARKET_TASK_TOKENS:
         filename = candidate.path.name.casefold()
         if filename in {"app.js", "app.ts", "chart.js", "chart.ts", "dashboard.js"}:
@@ -1371,6 +1549,8 @@ def _is_writable_candidate_for_role(
         return False
     if role == "frontend":
         if suffix in _FRONTEND_SUFFIXES:
+            return True
+        if _is_visual_page_candidate(candidate, project=project, task_text=task_text):
             return True
         if project.descriptor.project_type in {"php", "laravel"} and (
             name.endswith(".blade.php")
@@ -1864,6 +2044,18 @@ def _build_pack(
         )
         for candidate in candidates
     ) if step.suggested_agent in WRITING_ROLES else False
+    has_visual_page_target = (
+        any(
+            _is_visual_page_candidate(
+                candidate,
+                project=project,
+                task_text=task_text,
+            )
+            for candidate in candidates
+        )
+        if step.suggested_agent == "frontend"
+        else True
+    )
     frontend_homepage_target = (
         step.suggested_agent == "frontend"
         and (
@@ -1882,6 +2074,11 @@ def _build_pack(
             bool(explicit_paths)
             or (
                 frontend_homepage_target
+                or (
+                    step.suggested_agent == "frontend"
+                    and _task_requests_visual_chart(task_text)
+                    and not has_visual_page_target
+                )
                 or (
                     step.suggested_agent != "frontend"
                     and not has_existing_writer_target
@@ -2012,6 +2209,51 @@ def _build_pack(
             -item[0], item[1],
         ))
 
+    # A chart writer must receive the rendering page/template before generic
+    # assets.  Without this deterministic ordering a PHP page such as
+    # ``finance.php`` was filtered out as a backend file and the provider
+    # could produce a polished but unreachable CSS/JS patch.
+    if step.suggested_agent == "frontend" and _task_requests_visual_chart(task_text):
+        page_items = sorted(
+            (
+                item
+                for item in scored
+                if _is_visual_page_candidate(
+                    item[3], project=project, task_text=task_text
+                )
+            ),
+            key=lambda item: (_visual_page_priority(item[3]), -item[0], item[1]),
+        )
+        style_items = sorted(
+            (
+                item
+                for item in scored
+                if _is_visual_asset_candidate(item[3])
+                and _visual_asset_priority(item[3]) == 0
+            ),
+            key=lambda item: (-item[0], item[1]),
+        )
+        behavior_items = sorted(
+            (
+                item
+                for item in scored
+                if _is_visual_asset_candidate(item[3])
+                and _visual_asset_priority(item[3]) == 1
+            ),
+            key=lambda item: (-item[0], item[1]),
+        )
+        semantic_items = [
+            *page_items[:1],
+            *style_items[:1],
+            *behavior_items[:1],
+        ]
+        selected_semantic_paths = {item[1] for item in semantic_items}
+        remainder = [
+            item for item in scored if item[1] not in selected_semantic_paths
+        ]
+        remainder.sort(key=lambda item: (-item[0], item[1]))
+        scored = [*semantic_items, *remainder]
+
     virtual_targets: list[ContextFile] = (
         [virtual_target] if virtual_target is not None else []
     )
@@ -2060,6 +2302,9 @@ def _build_pack(
     max_total_bytes = (
         min(policy.max_total_bytes_per_pack, 6_144)
         if homepage_writer
+        else min(policy.max_total_bytes_per_pack, 12_288)
+        if step.suggested_agent == "frontend"
+        and _task_requests_visual_chart(task_text)
         else min(policy.max_total_bytes_per_pack, 8_192)
         if writer_pack
         else policy.max_total_bytes_per_pack

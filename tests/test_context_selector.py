@@ -446,6 +446,61 @@ def test_persian_market_chart_ticket_selects_existing_finance_modules(
     assert "public_html/assets/app.js" in frontend_node.owned_files
 
 
+def test_persian_bank_pie_chart_keeps_rendering_page_and_assets_in_scope(
+    tmp_path: Path,
+) -> None:
+    """A PHP chart ticket must not degrade into an unreachable asset-only patch."""
+
+    public_html = tmp_path / "public_html"
+    (public_html / "assets").mkdir(parents=True)
+    (public_html / "tests").mkdir()
+    (public_html / "composer.json").write_text(
+        '{"name":"demo/bank-site"}\n', encoding="utf-8"
+    )
+    (public_html / "finance.php").write_text(
+        "<?php echo '<div data-bank-chart></div>';\n",
+        encoding="utf-8",
+    )
+    (public_html / "assets" / "app.css").write_text(
+        ".bank-chart { display: grid; }\n", encoding="utf-8"
+    )
+    (public_html / "assets" / "app.js").write_text(
+        "document.querySelector('[data-bank-chart]');\n", encoding="utf-8"
+    )
+    project = DefaultProjectService().detect(tmp_path)
+    text = "نمودار دایره ای بخش بانک با نمایش درصد سه بعدی کن"
+    task = ProductTask(
+        task_id="persian-bank-pie-chart",
+        project_root=str(tmp_path.resolve()),
+        kind="ui_improvement",
+        title=text,
+        objective=text,
+        requirements=("صفحهٔ مالی موجود حفظ شود",),
+        constraints=("Do not change unrelated files",),
+        definition_of_done=("The chart verification passes",),
+        status="ready_for_planning",
+    )
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+    selection = build_context_selection(task=task, project=project, plan=plan)
+    frontend_pack = next(
+        pack for pack in selection.packs if pack.agent_role == "frontend"
+    )
+    paths = {item.relative_path for item in frontend_pack.files}
+    assert "public_html/finance.php" in paths
+    assert "public_html/assets/app.css" in paths
+    assert "public_html/assets/app.js" in paths
+
+    budget = lock_token_budget(build_token_budget(plan=plan, selection=selection))
+    graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+    frontend_node = next(node for node in graph.nodes if node.agent_role == "frontend")
+    assert "public_html/finance.php" in frontend_node.owned_files
+    assert "public_html/assets/app.css" in frontend_node.owned_files
+    assert "public_html/assets/app.js" in frontend_node.owned_files
+
+
 def test_recovery_evidence_promotes_failing_css_to_frontend_owner(
     tmp_path: Path,
 ) -> None:

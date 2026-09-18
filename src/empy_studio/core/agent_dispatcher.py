@@ -227,6 +227,18 @@ def default_agent_registry() -> AgentRegistry:
                     "**/*.html",
                     "*.htm",
                     "**/*.htm",
+                    # Plain PHP sites often use a page controller as the
+                    # presentation surface.  Keep chart/account pages
+                    # frontend-owned when their bounded context selector has
+                    # already identified them as the rendering target.
+                    "**/*account.php",
+                    "**/*bank.php",
+                    "**/*chart.php",
+                    "**/*dashboard.php",
+                    "**/*finance.php",
+                    "**/*portfolio.php",
+                    "**/*report.php",
+                    "**/*wallet.php",
                 ),
             ),
             AgentDefinition(

@@ -40,6 +40,8 @@ MAX_VERIFICATION_COMMAND_PART_BYTES = 4096
 MAX_STATIC_WEB_FILE_BYTES = 4 * 1024 * 1024
 MAX_STATIC_REPAIR_FILES = 32
 MAX_STATIC_REPAIR_REPLACEMENTS = 128
+MAX_CONTRACT_SCAN_FILES = 128
+MAX_CONTRACT_SCAN_BYTES = 256 * 1024
 _VERIFICATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _AUTO_LINT_IGNORED_DIRECTORIES = frozenset(
     {
@@ -73,6 +75,19 @@ _JS_SUFFIXES = frozenset({".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx"})
 _WEB_IGNORED_DIRECTORIES = _AUTO_LINT_IGNORED_DIRECTORIES | frozenset(
     {".next", ".nuxt", ".parcel-cache", ".svelte-kit", ".turbo", ".tox", ".nox"}
 )
+_CONTRACT_SCAN_DIRECTORIES = frozenset({"test", "tests", "spec", "specs", "bin", "scripts"})
+_CONTRACT_SOURCE_SUFFIXES = frozenset(
+    {".php", ".py", ".js", ".mjs", ".cjs", ".ts", ".sh", ".zsh"}
+)
+_PHP_ENTRY_REFERENCE_RE = re.compile(r"(?<![A-Za-z0-9_.-])index\.php(?![A-Za-z0-9_.-])", re.IGNORECASE)
+_ROOT_HTML_REFERENCE_PATTERNS = (
+    re.compile(r"(\$root\s*\.\s*['\"])/index\.html", re.IGNORECASE),
+    re.compile(r"(__DIR__\s*\.\s*['\"]/\.\.)/index\.html", re.IGNORECASE),
+)
+
+
+def _has_root_html_reference(content: str) -> bool:
+    return any(pattern.search(content) for pattern in _ROOT_HTML_REFERENCE_PATTERNS)
 
 
 class VerificationCancelled(RuntimeError):
@@ -868,11 +883,142 @@ def map_project_verification(detection: ProjectDetection) -> tuple[VerificationC
     return tuple(checks)
 
 
+def _entrypoint_contract_diagnostics(detection: ProjectDetection) -> tuple[str, ...]:
+    """Find a stale test/script reference to a missing PHP entry point.
+
+    Imported PHP sites frequently keep a hand-written ``tests/site-audit.php``
+    or ``bin/release-check.php``.  If the application is actually served by
+    ``index.php`` while that check still opens ``index.html``, the old flow
+    spent provider tokens before discovering the mismatch in Verification.
+    Scan only bounded verification-support directories and report the exact
+    contract files before any Agent starts.  This is diagnostic-only: Empy
+    never mutates a project's tests or creates a placeholder entry point.
+    """
+
+    if detection.descriptor.project_type not in {"php", "laravel"}:
+        return ()
+    root = detection.effective_verification_root
+    html_entry = root / "index.html"
+    php_entry = root / "index.php"
+    if html_entry.is_file() or not php_entry.is_file():
+        return ()
+
+    references: list[str] = []
+    scanned = 0
+    for directory_name in sorted(_CONTRACT_SCAN_DIRECTORIES):
+        base = root / directory_name
+        if not base.is_dir() or base.is_symlink():
+            continue
+        for current, directories, filenames in os.walk(base, followlinks=False):
+            directories[:] = [
+                directory
+                for directory in directories
+                if directory not in _WEB_IGNORED_DIRECTORIES
+                and not (Path(current) / directory).is_symlink()
+            ]
+            for filename in sorted(filenames):
+                if scanned >= MAX_CONTRACT_SCAN_FILES:
+                    break
+                source = Path(current) / filename
+                if source.is_symlink() or source.suffix.casefold() not in _CONTRACT_SOURCE_SUFFIXES:
+                    continue
+                try:
+                    if source.stat().st_size > MAX_CONTRACT_SCAN_BYTES:
+                        continue
+                    content = source.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                scanned += 1
+                if _has_root_html_reference(content) and not _PHP_ENTRY_REFERENCE_RE.search(content):
+                    references.append(source.relative_to(root).as_posix())
+            if scanned >= MAX_CONTRACT_SCAN_FILES:
+                break
+        if scanned >= MAX_CONTRACT_SCAN_FILES:
+            break
+
+    if not references:
+        return ()
+    shown = ", ".join(references[:8])
+    extra = f" و {len(references) - 8} فایل دیگر" if len(references) > 8 else ""
+    return (
+        (
+            "Verification contract mismatch: "
+            f"{shown}{extra} references index.html, but the detected application entry point is index.php. "
+            "Repair the check to use the detected entry point before spending provider tokens; Empy will not create a fake index.html."
+        ),
+    )
+
+
+def repair_recoverable_entrypoint_contract(
+    detection: ProjectDetection,
+) -> tuple[str, ...]:
+    """Repair an unambiguous stale PHP entry-point reference in isolated work.
+
+    This is intentionally narrower than a general source rewrite.  It runs
+    only when ``index.php`` is the real detected entry point, ``index.html``
+    does not exist, and a bounded test/support file mentions only the stale
+    HTML entry.  The replacement changes the existing contract in place; it
+    never creates a page, touches application code, follows symlinks, or
+    guesses between multiple entry points.
+    """
+
+    if detection.descriptor.project_type not in {"php", "laravel"}:
+        return ()
+    root = detection.effective_verification_root
+    if (root / "index.html").is_file() or not (root / "index.php").is_file():
+        return ()
+
+    changed: list[str] = []
+    scanned = 0
+    for directory_name in sorted(_CONTRACT_SCAN_DIRECTORIES):
+        base = root / directory_name
+        if not base.is_dir() or base.is_symlink():
+            continue
+        for current, directories, filenames in os.walk(base, followlinks=False):
+            directories[:] = [
+                directory
+                for directory in directories
+                if directory not in _WEB_IGNORED_DIRECTORIES
+                and not (Path(current) / directory).is_symlink()
+            ]
+            for filename in sorted(filenames):
+                if scanned >= MAX_CONTRACT_SCAN_FILES:
+                    break
+                source = Path(current) / filename
+                if source.is_symlink() or source.suffix.casefold() not in _CONTRACT_SOURCE_SUFFIXES:
+                    continue
+                try:
+                    if source.stat().st_size > MAX_CONTRACT_SCAN_BYTES:
+                        continue
+                    content = source.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                scanned += 1
+                if not _has_root_html_reference(content) or _PHP_ENTRY_REFERENCE_RE.search(content):
+                    continue
+                rewritten = content
+                for pattern in _ROOT_HTML_REFERENCE_PATTERNS:
+                    rewritten = pattern.sub(r"\1/index.php", rewritten)
+                if rewritten == content:
+                    continue
+                try:
+                    source.write_text(rewritten, encoding="utf-8")
+                except OSError:
+                    continue
+                changed.append(source.relative_to(root).as_posix())
+            if scanned >= MAX_CONTRACT_SCAN_FILES:
+                break
+        if scanned >= MAX_CONTRACT_SCAN_FILES:
+            break
+    return tuple(changed)
+
+
 def _verification_diagnostics(detection: ProjectDetection) -> tuple[str, ...]:
     """Report required checks that could not be mapped safely."""
 
     root = detection.effective_verification_root
     diagnostics: list[str] = []
+    diagnostics.extend(_entrypoint_contract_diagnostics(detection))
     if (
         detection.descriptor.project_type in {"php", "laravel"}
         and (root / "composer.json").is_file()

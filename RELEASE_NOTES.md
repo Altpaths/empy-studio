@@ -1,3 +1,24 @@
+# Empy Studio 0.1.69 — semantic chart scope and preflight contract repair
+
+This release closes the failure mode where a PHP chart ticket selected only
+CSS/JavaScript assets and left the page that actually renders the chart outside
+the writer's ownership. Persian bank, account, pie/donut, percentage, and 3D
+terms now guide bounded selection. A chart pack is guaranteed to contain the
+most relevant page/template and, when present, one style and one behavior
+asset, with deterministic ownership for the selected PHP page.
+
+Verification now scans bounded project test/support directories before any
+provider inspection. When a PHP application has `index.php` but a hand-written
+check still references a missing root `index.html`, Empy repairs only proven
+root path expressions in the isolated copy and leaves subpage `index.html`
+references unchanged. Ambiguous contracts remain an explicit preflight error;
+Empy never creates a fake entry page.
+
+Validation for this release: 1015 tests, Ruff, and mypy pass locally. The
+provider is not required for these checks.
+
+## Previous release context
+
 # Empy Studio 0.1.68 — stop redundant Discovery token spend
 
 This patch fixes the reproduced failure where a Persian implementation request

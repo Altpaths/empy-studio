@@ -17,6 +17,7 @@ from empy_studio.verification_pipeline import (
     VerificationRuntime,
     finalize_verification,
     map_project_verification,
+    repair_recoverable_entrypoint_contract,
     repair_recoverable_static_references,
     static_web_diagnostics,
     verification_contract_signature,
@@ -89,6 +90,78 @@ def test_verification_preflight_surfaces_missing_composer_dependencies_before_ru
 
     assert preflight.ready is False
     assert preflight.checks
+
+
+def test_verification_preflight_catches_stale_php_entrypoint_contract_before_agent(
+    tmp_path: Path,
+) -> None:
+    public_html = tmp_path / "public_html"
+    (public_html / "tests").mkdir(parents=True)
+    (public_html / "composer.json").write_text(
+        '{"name":"demo/site","scripts":{"test":"php tests/site-audit.php"}}\n',
+        encoding="utf-8",
+    )
+    (public_html / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
+    (public_html / "tests" / "site-audit.php").write_text(
+        "<?php if (!is_file(__DIR__ . '/../index.html')) { exit(1); }\n",
+        encoding="utf-8",
+    )
+
+    preflight = verification_preflight(DefaultProjectService().detect(tmp_path))
+
+    assert preflight.ready is False
+    assert any("site-audit.php" in item for item in preflight.diagnostics)
+    assert any("detected application entry point is index.php" in item for item in preflight.diagnostics)
+    assert any("fake index.html" in item for item in preflight.diagnostics)
+
+
+def test_entrypoint_contract_check_allows_explicit_php_html_fallback(
+    tmp_path: Path,
+) -> None:
+    public_html = tmp_path / "public_html"
+    (public_html / "tests").mkdir(parents=True)
+    (public_html / "composer.json").write_text(
+        '{"name":"demo/site"}\n', encoding="utf-8"
+    )
+    (public_html / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
+    (public_html / "tests" / "site-audit.php").write_text(
+        "<?php $entry = is_file('../index.php') ? '../index.php' : '../index.html';\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = verification_pipeline._entrypoint_contract_diagnostics(
+        DefaultProjectService().detect(tmp_path)
+    )
+
+    assert diagnostics == ()
+
+
+def test_repair_recoverable_entrypoint_contract_changes_only_stale_support_file(
+    tmp_path: Path,
+) -> None:
+    public_html = tmp_path / "public_html"
+    (public_html / "tests").mkdir(parents=True)
+    (public_html / "composer.json").write_text(
+        '{"name":"demo/site","scripts":{"test":"php tests/site-audit.php"}}\n',
+        encoding="utf-8",
+    )
+    (public_html / "index.php").write_text("<?php echo 'ok';\n", encoding="utf-8")
+    audit = public_html / "tests" / "site-audit.php"
+    audit.write_text(
+        "<?php $pages = array_merge([$root.'/index.html'], glob($root.'/*/index.html') ?: []);\n"
+        "if (!is_file(__DIR__ . '/../index.html')) { exit(1); }\n",
+        encoding="utf-8",
+    )
+    detection = DefaultProjectService().detect(tmp_path)
+
+    changed = repair_recoverable_entrypoint_contract(detection)
+
+    assert changed == ("tests/site-audit.php",)
+    assert "index.php" in audit.read_text(encoding="utf-8")
+    repaired = audit.read_text(encoding="utf-8")
+    assert "glob($root.'/*/index.html')" in repaired
+    assert "__DIR__ . '/../index.php'" in repaired
+    assert verification_preflight(detection).diagnostics == ()
 
 
 def test_nested_composer_project_maps_real_test_script(tmp_path: Path) -> None:
