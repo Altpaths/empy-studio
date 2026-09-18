@@ -239,3 +239,12 @@ ready for a user-visible next step. It no longer presents a failed run as
 
 Validation for this patch includes the full regression suite, strict Ruff,
 mypy, JavaScript syntax checking, and the existing macOS acceptance workflow.
+# Empy Studio 0.1.71 — current Verification readiness in the UI
+
+This patch refreshes the durable import report after Empy repairs a confirmed
+static contract. The UI no longer repeats an old `index.html`/`index.php`
+finding after it has been corrected; if another issue remains, such as a
+genuinely missing asset, that current finding is shown directly.
+
+The regression suite now covers this state transition in addition to the
+bounded Persian chart route and terminal recovery screen.

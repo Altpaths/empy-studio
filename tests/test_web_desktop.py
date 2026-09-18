@@ -24,7 +24,12 @@ from empy_studio.drivers import (
 from empy_studio.project_delivery import ExportedProject
 from empy_studio.review_workspace import ReviewReport
 from empy_studio.token_usage import TokenUsage
-from empy_studio.verification_pipeline import VerificationCheck, VerificationReport, VerificationResult
+from empy_studio.verification_pipeline import (
+    VerificationCheck,
+    VerificationPreflight,
+    VerificationReport,
+    VerificationResult,
+)
 from empy_studio.web_desktop import GuidedState, RequestHandler, _failure_kind, create_server
 
 
@@ -102,6 +107,44 @@ def test_guided_state_persists_project_and_follow_up_ticket(tmp_path: Path) -> N
     assert restarted.export.verified is True
     assert restarted.export.changed_files == ("README.md",)
     assert restarted.public()["brain"]["source"] == "local_project_brain_index"
+
+
+def test_import_verification_banner_tracks_current_preflight(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "README.md").write_text("demo\n", encoding="utf-8")
+
+    state = GuidedState(tmp_path / "empy-workspace")
+    state.import_path(str(source))
+    assert state.active_project_id is not None
+    state.import_report = {
+        "status": "ready",
+        "copied_files": 1,
+        "skipped_files": 0,
+        "categories": {},
+        "verification_readiness": {
+            "status": "needs_attention",
+            "checks": [],
+            "diagnostics": ["old diagnostic"],
+        },
+    }
+    check = VerificationCheck(
+        check_id="smoke",
+        label="Smoke",
+        category="tests",
+        command=("python", "-c", "print('ok')"),
+    )
+
+    state._sync_import_verification_readiness(
+        VerificationPreflight(
+            checks=(check,),
+            diagnostics=("Static web validation failed: missing asset",),
+        )
+    )
+
+    readiness = state.public()["import_report"]["verification_readiness"]
+    assert readiness["diagnostics"] == ["Static web validation failed: missing asset"]
+    assert "old diagnostic" not in state.public()["message"]
 
 
 def test_guided_state_shows_only_five_newest_projects(tmp_path: Path) -> None:

@@ -1090,3 +1090,8 @@ The core is operational and tested. Public interfaces may change before v1.0.
   failure; the exact failure and next action are now shown instead of leaving
   the screen on «در حال اجرا» forever.
 - Add regression coverage for the Persian chart route and terminal recovery UI.
+## [0.1.71] - 2026-09-18
+
+- Refresh the persisted import Verification banner after deterministic repair,
+  so resolved contract findings disappear and only the current blocker remains.
+- Add regression coverage for stale readiness diagnostics in the web state.

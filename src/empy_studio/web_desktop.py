@@ -108,6 +108,7 @@ from empy_studio.vault import initialize_vault
 from empy_studio.verification_pipeline import (
     VerificationCancelled,
     VerificationEvent,
+    VerificationPreflight,
     VerificationReport,
     VerificationRuntime,
     VerificationTimedOut,
@@ -1447,6 +1448,42 @@ class GuidedState:
             import_report,
         )
         self.store.set_setting(self._repair_attempts_setting_key(saved.project_id), 0)
+
+    def _sync_import_verification_readiness(
+        self,
+        readiness: VerificationPreflight,
+    ) -> None:
+        """Persist the current static readiness instead of an import-time snapshot."""
+
+        if self.active_project_id is None or self.import_report is None:
+            return
+        report = {
+            **self.import_report,
+            "verification_readiness": readiness.to_dict(),
+        }
+        self.import_report = report
+        self.store.set_setting(
+            self._import_report_setting_key(self.active_project_id),
+            report,
+        )
+        diagnostics = readiness.diagnostics
+        if diagnostics:
+            detail = diagnostics[0]
+            with self.lock:
+                self.message_level = "warning"
+                self.message = (
+                    f"Import completed, but Verification needs attention: {detail}"
+                    if self.language == "en"
+                    else f"واردسازی انجام شد، اما Verification هنوز نیاز به توجه دارد: {detail}"
+                )
+        elif not report.get("skipped_files"):
+            with self.lock:
+                self.message_level = "success"
+                self.message = (
+                    "Verification prerequisites are ready in the isolated copy."
+                    if self.language == "en"
+                    else "پیش‌نیازهای Verification در کپی ایزوله آماده است."
+                )
 
     def import_path(self, path: str) -> None:
         selected = Path(path).expanduser().resolve()
@@ -2991,6 +3028,12 @@ class GuidedState:
                 self.detection,
                 static_scope=static_scope or None,
             )
+        # The import banner is durable UI state. Recompute it after every
+        # deterministic repair so a resolved contract is not shown as the
+        # current blocker and any remaining static finding is explicit.
+        self._sync_import_verification_readiness(
+            verification_preflight(self.detection),
+        )
         # A project can legitimately need both Composer and Node.  Prepare at
         # most one bounded, lockfile-backed dependency set per pass, then
         # re-read the contract before allowing the provider inspection.  Any
