@@ -706,6 +706,13 @@ def _expanded_task_tokens(value: str) -> frozenset[str]:
         "اتصال": ("api", "client", "service", "integration"),
         "سرویس": ("service", "client", "api"),
         "صفحه": ("page", "view", "index"),
+        "همکاری": ("cooperation", "careers", "team"),
+        "رزومه": ("portfolio", "resume"),
+        "تماس": ("contact",),
+        "درباره": ("about",),
+        "خدمات": ("services",),
+        "اعضا": ("team", "people"),
+        "شرکت": ("company",),
         "خانه": ("home", "index"),
         "سایت": ("site", "website", "web", "homepage"),
         "طراحی": ("design", "redesign", "layout", "ui", "frontend"),
@@ -755,6 +762,91 @@ def _expanded_task_tokens(value: str) -> frozenset[str]:
     ):
         expanded.update(("ai", "openai", "avalai", "analyze", "service", "client"))
     return frozenset(expanded)
+
+
+def _normalise_page_request(text: str) -> str:
+    """Normalise spelling variants used by the deterministic page scope."""
+
+    value = (
+        text.casefold()
+        .replace("\u200c", " ")
+        .replace("\u200d", " ")
+        .replace("\ufeff", " ")
+        .replace("ي", "ی")
+        .replace("ك", "ک")
+    )
+    value = re.sub(r"[\u064b-\u065f\u0670]", "", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _task_requests_new_page(task_text: str) -> bool:
+    """Return whether an implementation ticket explicitly creates a page.
+
+    A new page needs one exact creation target even when the imported project
+    has no matching file yet.  Keep this signal narrower than a general page
+    or UI request so ordinary homepage edits continue to use their existing
+    entrypoint.
+    """
+
+    normalized = _normalise_page_request(task_text)
+    if not requests_implementation(normalized):
+        return False
+    return any(
+        phrase in normalized
+        for phrase in (
+            "new page",
+            "new screen",
+            "صفحه جدید",
+            "صفحه تازه",
+            "صفحه نو",
+            "صفحه اضافه",
+            "صفحه ایجاد",
+            "صفحه بساز",
+        )
+    )
+
+
+def _new_page_slug(task_text: str) -> str:
+    """Choose a safe, deterministic filename stem for a requested new page."""
+
+    normalized = _normalise_page_request(task_text)
+    aliases: tuple[tuple[str, str], ...] = (
+        ("همکاری", "cooperation"),
+        ("رزومه", "portfolio"),
+        ("تماس", "contact"),
+        ("درباره", "about"),
+        ("خدمات", "services"),
+        ("اعضا", "team"),
+        ("شرکت", "company"),
+        ("careers", "careers"),
+        ("portfolio", "portfolio"),
+        ("contact", "contact"),
+        ("about", "about"),
+        ("services", "services"),
+        ("team", "team"),
+        ("company", "company"),
+    )
+    for marker, slug in aliases:
+        if marker in normalized:
+            return slug
+
+    ignored = {
+        "add",
+        "create",
+        "build",
+        "new",
+        "page",
+        "screen",
+        "called",
+        "named",
+        "the",
+        "a",
+        "an",
+    }
+    for token in re.findall(r"[a-z][a-z0-9_-]{2,}", normalized):
+        if token not in ignored:
+            return re.sub(r"[^a-z0-9]+", "-", token).strip("-") or "new-page"
+    return "new-page"
 
 
 def _task_requests_homepage(task_text: str) -> bool:
@@ -1812,7 +1904,11 @@ def _virtual_writer_target(
         return explicit_target
     if role == "frontend":
         if project_type == "laravel" and (root / "resources" / "views").is_dir():
-            filename = "resources/views/index.blade.php"
+            filename = (
+                f"resources/views/{_new_page_slug(task_text)}.blade.php"
+                if _task_requests_new_page(task_text)
+                else "resources/views/index.blade.php"
+            )
         elif project_type == "node" and (root / "src").is_dir():
             # Prefer the extension already used by a component tree.  A new
             # Node site without one gets a conventional React-compatible
@@ -1826,9 +1922,23 @@ def _virtual_writer_target(
                 ),
                 ".jsx",
             )
-            filename = f"src/App{extension}"
+            stem = _new_page_slug(task_text) if _task_requests_new_page(task_text) else "App"
+            pages_root = root / "src" / "pages"
+            filename = (
+                f"src/pages/{stem}{extension}"
+                if _task_requests_new_page(task_text) and pages_root.is_dir()
+                else f"src/{stem}{extension}"
+            )
         elif project_type == "python" and (root / "templates").is_dir():
-            filename = "templates/index.html"
+            filename = (
+                f"templates/{_new_page_slug(task_text)}.html"
+                if _task_requests_new_page(task_text)
+                else "templates/index.html"
+            )
+        elif project_type == "php" and _task_requests_new_page(task_text):
+            filename = f"{_new_page_slug(task_text)}.php"
+        elif _task_requests_new_page(task_text):
+            filename = f"{_new_page_slug(task_text)}.html"
         else:
             filename = "index.html"
     elif project_type in {"php", "laravel"}:
@@ -2078,6 +2188,10 @@ def _build_pack(
                     step.suggested_agent == "frontend"
                     and _task_requests_visual_chart(task_text)
                     and not has_visual_page_target
+                )
+                or (
+                    step.suggested_agent == "frontend"
+                    and _task_requests_new_page(task_text)
                 )
                 or (
                     step.suggested_agent != "frontend"

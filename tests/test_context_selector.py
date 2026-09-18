@@ -501,6 +501,67 @@ def test_persian_bank_pie_chart_keeps_rendering_page_and_assets_in_scope(
     assert "public_html/assets/app.js" in frontend_node.owned_files
 
 
+def test_php_new_page_ticket_gets_exact_creation_and_layout_scope(
+    tmp_path: Path,
+) -> None:
+    """A new PHP page must not fail graph construction for lack of ownership."""
+
+    public_html = tmp_path / "public_html"
+    public_html.mkdir()
+    (public_html / "composer.json").write_text(
+        '{"name":"demo/php-site"}\n', encoding="utf-8"
+    )
+    (public_html / "index.php").write_text(
+        "<?php require __DIR__ . '/footer.php';\n", encoding="utf-8"
+    )
+    (public_html / "footer.php").write_text(
+        "<footer>Demo</footer>\n", encoding="utf-8"
+    )
+    project = DefaultProjectService().detect(tmp_path)
+    text = (
+        "یک صفحه جدید اضافه کن به اسم همکاری با ما و یک جا برای اسم شرکت و "
+        "اشخاص به عنوان رزومه انلاین ایجاد کن"
+    )
+    task = ProductTask(
+        task_id="php-new-cooperation-page",
+        project_root=str(tmp_path.resolve()),
+        kind="custom",
+        title=text,
+        objective=text,
+        requirements=(text,),
+        constraints=("Do not change unrelated files",),
+        definition_of_done=("The new page is verified",),
+        status="ready_for_planning",
+    )
+    plan = approve_execution_plan(
+        generate_execution_plan(task=task, project=project),
+        current_task=task,
+    )
+    selection = build_context_selection(task=task, project=project, plan=plan)
+    frontend_pack = next(
+        pack for pack in selection.packs if pack.agent_role == "frontend"
+    )
+    paths = {item.relative_path for item in frontend_pack.files}
+    assert "public_html/cooperation.php" in paths
+    assert "public_html/index.php" in paths
+    assert "public_html/footer.php" in paths
+    new_page = next(
+        item for item in frontend_pack.files
+        if item.relative_path == "public_html/cooperation.php"
+    )
+    assert new_page.content == ""
+    assert "approved frontend target is currently missing" in new_page.reasons
+
+    budget = lock_token_budget(build_token_budget(plan=plan, selection=selection))
+    graph = build_agent_run_graph(plan=plan, selection=selection, budget=budget)
+    frontend_node = next(node for node in graph.nodes if node.agent_role == "frontend")
+    assert set(frontend_node.owned_files) == {
+        "public_html/cooperation.php",
+        "public_html/footer.php",
+        "public_html/index.php",
+    }
+
+
 def test_recovery_evidence_promotes_failing_css_to_frontend_owner(
     tmp_path: Path,
 ) -> None:

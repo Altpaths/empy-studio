@@ -227,6 +227,28 @@ def default_agent_registry() -> AgentRegistry:
                     "**/*.html",
                     "*.htm",
                     "**/*.htm",
+                    # Plain PHP sites often keep presentation pages and
+                    # shared layout partials beside backend endpoints. Keep
+                    # this allow-list narrow: a generic ``**/*.php`` would
+                    # let a frontend writer claim services, migrations, or
+                    # payment handlers. New page targets are represented as
+                    # explicit virtual files by the context selector.
+                    "**/index.php",
+                    "**/home.php",
+                    "**/homepage.php",
+                    "**/about.php",
+                    "**/contact.php",
+                    "**/services.php",
+                    "**/portfolio.php",
+                    "**/team.php",
+                    "**/careers.php",
+                    "**/cooperation.php",
+                    "**/profile.php",
+                    "**/header.php",
+                    "**/footer.php",
+                    "**/navbar.php",
+                    "**/menu.php",
+                    "**/*.view.php",
                     # Plain PHP sites often use a page controller as the
                     # presentation surface.  Keep chart/account pages
                     # frontend-owned when their bounded context selector has

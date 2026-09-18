@@ -1,3 +1,25 @@
+# Empy Studio 0.1.72 — bounded PHP new-page scope
+
+This release fixes a real graph-construction failure reproduced with the
+Persian request «یک صفحه جدید اضافه کن به اسم همکاری با ما ...». The planner
+already routed the request to the frontend specialist, but the context pack
+contained existing PHP layout files that were not frontend-owned, so the
+approved graph stopped before any provider work and no ZIP could be produced.
+
+Empy now derives one safe creation target (`cooperation.php` for this request)
+under the detected PHP verification root. It also grants frontend ownership
+only for conventional presentation pages and shared layout partials, while
+keeping services, payments, migrations, and other backend PHP outside that
+allow-list. The writer receives the new target plus the minimum existing page
+context needed to wire it into the site.
+
+Validation for this release: 1018 tests, strict Ruff lint, mypy, Python compile
+checks, and deterministic reproduction against the imported `alfai.ir` project
+all pass. Live provider billing, DirectAdmin extraction, and Apple notarization
+remain external checks.
+
+## Previous release context
+
 # Empy Studio 0.1.69 — semantic chart scope and preflight contract repair
 
 This release closes the failure mode where a PHP chart ticket selected only

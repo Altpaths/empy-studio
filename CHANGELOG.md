@@ -1,3 +1,14 @@
+## [0.1.72] - 2026-09-19
+
+- Give new-page tickets an exact, deterministic creation target. PHP requests
+  such as «صفحهٔ جدید همکاری با ما» now receive a bounded `cooperation.php`
+  target instead of failing graph construction with an unowned writer node.
+- Keep conventional PHP presentation pages and layout partials (`index.php`,
+  `header.php`, `footer.php`, and related page names) frontend-owned through a
+  narrow allow-list; backend PHP handlers remain outside that ownership.
+- Add regression coverage for the reproduced Persian new-page request,
+  including graph ownership, context bounds, and the virtual file contract.
+
 ## [0.1.69] - 2026-09-18
 
 - Route visual chart tickets to the real rendering page/template plus one
