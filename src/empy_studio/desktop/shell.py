@@ -21,6 +21,7 @@ from empy_studio.core import (
     ProductTask,
     ProjectDescriptor,
     ProjectDetection,
+    ScopeContractError,
     TaskKind,
     TokenBudget,
     approve_execution_plan,
@@ -1687,6 +1688,8 @@ class EmpyDesktopShell:
             self.current_plan is None
             or self.current_context is None
             or self.current_budget is None
+            or self.current_project is None
+            or self.current_task is None
         ):
             return
         existing = self.dispatcher_store.get_for_budget(
@@ -1702,14 +1705,47 @@ class EmpyDesktopShell:
                 selection=self.current_context,
                 budget=self.current_budget,
             )
-            self.dispatcher_store.save_graph(graph)
-            self.current_run_graph = graph
+        except ScopeContractError:
+            # Repair the bounded context locally before surfacing an error.
+            # The retry is deterministic and happens before a provider call;
+            # it does not widen the node to a directory or spend model tokens.
+            try:
+                repaired = build_context_selection(
+                    task=self.current_task,
+                    project=self.current_project,
+                    plan=self.current_plan,
+                    force_scope_repair=True,
+                )
+                repaired_budget = lock_token_budget(
+                    build_token_budget(
+                        plan=self.current_plan,
+                        selection=repaired,
+                        policy=policy_for_preset("economy"),
+                    )
+                )
+                graph = build_agent_run_graph(
+                    plan=self.current_plan,
+                    selection=repaired,
+                    budget=repaired_budget,
+                )
+                self.context_store.save_selection(repaired)
+                self.budget_store.save_budget(repaired_budget)
+                self.current_context = repaired
+                self.current_budget = repaired_budget
+            except Exception as exc:  # noqa: BLE001
+                messagebox.showerror(
+                    "Unable to repair Agent Run Graph scope",
+                    str(exc),
+                )
+                return
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror(
                 "Unable to build Agent Run Graph",
                 str(exc),
             )
             return
+        self.dispatcher_store.save_graph(graph)
+        self.current_run_graph = graph
         self.show_page("agent-run-graph")
 
     def _render_agent_run_graph(self) -> None:

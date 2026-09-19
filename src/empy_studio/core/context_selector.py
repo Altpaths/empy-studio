@@ -541,6 +541,12 @@ class ContextFile:
     sha256: str
     truncated: bool
     content: str
+    # The context selector is the source of truth for the bounded edit
+    # contract.  ``AgentDispatcher`` still checks its registry patterns as a
+    # defence in depth, but a legitimate target must not be rejected merely
+    # because the two classifiers use different vocabulary.  Keep this field
+    # optional so selections written by older releases remain readable.
+    scope_role: AgentRole | None = None
 
     def validate(self) -> None:
         if not self.relative_path:
@@ -553,6 +559,8 @@ class ContextFile:
             raise ValueError("included bytes cannot exceed source size")
         if not self.sha256:
             raise ValueError("context file hash cannot be empty")
+        if self.scope_role is not None and self.scope_role not in WRITING_ROLES:
+            raise ValueError("context file scope role must be a writing role")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -1576,6 +1584,7 @@ def _read_context_file(
     score: int,
     reasons: tuple[str, ...],
     byte_limit: int,
+    scope_role: AgentRole | None = None,
 ) -> ContextFile:
     try:
         raw = candidate.path.read_bytes()
@@ -1603,6 +1612,7 @@ def _read_context_file(
         sha256=hashlib.sha256(raw).hexdigest(),
         truncated=len(raw) > len(included),
         content=content,
+        scope_role=scope_role,
     )
 
 
@@ -1888,7 +1898,7 @@ def _virtual_writer_target(
     imported project root.
     """
 
-    if role not in {"frontend", "backend", "coordinator"}:
+    if role not in {"frontend", "backend", "coordinator", "release"}:
         return None
     if not requests_implementation(task_text):
         return None
@@ -1941,6 +1951,11 @@ def _virtual_writer_target(
             filename = f"{_new_page_slug(task_text)}.html"
         else:
             filename = "index.html"
+    elif role == "release":
+        # Release work still needs one exact writable artifact when a project
+        # has no existing changelog/workflow.  A bounded notes file is safer
+        # than granting the release agent the repository root.
+        filename = "RELEASE_NOTES.md"
     elif project_type in {"php", "laravel"}:
         filename = "src/index.php" if (root / "src").is_dir() else "index.php"
     elif project_type == "python":
@@ -2031,6 +2046,7 @@ def _build_pack(
     policy: ContextPolicy,
     exclusions: list[ContextExclusion],
     brain_index: ProjectBrainIndex | None = None,
+    force_scope_repair: bool = False,
 ) -> ContextPack:
     # Recovery plans carry sanitized Verification evidence in multiline
     # constraints.  Keep the exact diagnostic file in local scoring so a
@@ -2197,6 +2213,7 @@ def _build_pack(
                     step.suggested_agent != "frontend"
                     and not has_existing_writer_target
                 )
+                or force_scope_repair
             )
         )
     )
@@ -2213,6 +2230,7 @@ def _build_pack(
             sha256=hashlib.sha256(b"").hexdigest(),
             truncated=False,
             content="",
+            scope_role=step.suggested_agent,
         )
 
     # Promote one real role-compatible file into the bounded pack.  The
@@ -2390,6 +2408,7 @@ def _build_pack(
                 sha256=hashlib.sha256(b"").hexdigest(),
                 truncated=False,
                 content="",
+                scope_role=step.suggested_agent,
             )
         )
 
@@ -2431,12 +2450,32 @@ def _build_pack(
         if remaining <= 0:
             break
         byte_limit = min(max_bytes_per_file, remaining)
+        scope_role: AgentRole | None = None
+        if (
+            writer_pack
+            and "direct indexed dependency context (read-only)" not in reasons
+            and (
+                # This is the canonical edit contract.  It is derived from
+                # the same role-aware filter that selected the bounded pack,
+                # so the dispatcher never has to guess from a second filename
+                # pattern table whether a real target is writable.
+                _relative in explicit_candidate_paths
+                or _is_writable_candidate_for_role(
+                    candidate,
+                    role=step.suggested_agent,
+                    project=project,
+                    task_text=task_text,
+                )
+            )
+        ):
+            scope_role = step.suggested_agent
         try:
             context_file = _read_context_file(
                 candidate,
                 score=score,
                 reasons=reasons,
                 byte_limit=byte_limit,
+                scope_role=scope_role,
             )
         except _SkipCandidate as exc:
             exclusions.append(
@@ -2454,7 +2493,13 @@ def _build_pack(
         {
         "plan_id": plan.plan_id,
         "step_id": step.step_id,
-        "files": [item.sha256 for item in files],
+        "files": [
+            {
+                "sha256": item.sha256,
+                "scope_role": item.scope_role,
+            }
+            for item in files
+        ],
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -2481,6 +2526,7 @@ def build_context_selection(
     plan: ExecutionPlan,
     policy: ContextPolicy | None = None,
     brain_index: ProjectBrainIndex | None = None,
+    force_scope_repair: bool = False,
 ) -> ContextSelection:
     task.validate()
     project.descriptor.validate()
@@ -2514,6 +2560,7 @@ def build_context_selection(
             policy=selected_policy,
             exclusions=exclusions,
             brain_index=brain_index,
+            force_scope_repair=force_scope_repair,
         )
         for step in plan.steps
     )

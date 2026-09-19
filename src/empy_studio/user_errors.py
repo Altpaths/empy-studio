@@ -81,6 +81,12 @@ def _known_actionable_message(message: str, *, language: str) -> str | None:
             if language == "fa"
             else "The local model gateway did not respond. Check that OmniRoute is running at the configured address, then refresh the connection status."
         )
+    if "scope contract missing" in lowered:
+        return (
+            "دامنهٔ امن این نقش برای هیچ فایل دقیقی ساخته نشد؛ Empy قبل از مصرف توکن اجرای Agent را متوقف کرد تا نقشهٔ پروژه را دوباره بسازد. فایل اصلی تغییر نکرده است."
+            if language == "fa"
+            else "No bounded exact target was produced for this writing role. Empy stopped before token use so it can rebuild the project scope; the original project was not changed."
+        )
     if any(
         marker in lowered
         for marker in (

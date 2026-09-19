@@ -9,7 +9,7 @@ from functools import cache
 from pathlib import Path
 from typing import Final, Literal
 
-from .context_selector import ContextPack, ContextSelection
+from .context_selector import ContextFile, ContextPack, ContextSelection
 from .path_policy import (
     is_agent_denied_relative_path,
     is_directory_scope,
@@ -79,6 +79,33 @@ ROLE_CAPABILITIES: Final[dict[AgentRole, tuple[AgentCapability, ...]]] = {
 WRITING_ROLES: Final[frozenset[AgentRole]] = frozenset(
     {"frontend", "backend", "coordinator", "release"}
 )
+
+
+class ScopeContractError(ValueError):
+    """Raised when a writing node has no bounded edit target.
+
+    The context selector owns the semantic decision about which files are
+    safe targets.  This error exists as a typed boundary so callers can
+    distinguish a missing scope contract from provider/runtime failures and
+    repair the plan without spending model tokens.
+    """
+
+    def __init__(
+        self,
+        *,
+        node_id: str,
+        role: AgentRole,
+        context_paths: tuple[str, ...],
+    ) -> None:
+        self.node_id = node_id
+        self.role = role
+        self.context_paths = context_paths
+        paths = ", ".join(context_paths) if context_paths else "none"
+        super().__init__(
+            f"scope contract missing for writing node {node_id} ({role}); "
+            f"bounded context paths: {paths}. Rebuild the context selection "
+            "before starting an Agent."
+        )
 
 
 @dataclass(frozen=True)
@@ -767,6 +794,35 @@ def _matches_ownership_pattern(agent: AgentDefinition, relative_path: str) -> bo
     )
 
 
+def _has_bounded_scope_contract(
+    context_file: ContextFile,
+    *,
+    role: AgentRole,
+) -> bool:
+    """Return whether context selection explicitly approved this edit.
+
+    Filename patterns remain a useful fallback for old persisted selections,
+    but they are not the ownership source of truth.  Keeping the contract on
+    the selected file prevents a drift between context ranking and dispatch
+    (for example a legitimate PHP presentation file rejected by a generic
+    frontend pattern table).
+    """
+
+    if context_file.scope_role == role:
+        return True
+    reasons = set(context_file.reasons)
+    if "guaranteed writer scope" in reasons:
+        return True
+    if "explicitly named in ticket" in reasons:
+        return True
+    return any(
+        reason.startswith(
+            (f"approved {role} target", "approved market endpoint target")
+        )
+        for reason in reasons
+    )
+
+
 def _is_data_model_path(relative_path: str) -> bool:
     path = Path(relative_path)
     parts = {part.casefold() for part in path.parts[:-1]}
@@ -814,6 +870,10 @@ def _build_ownership(
                 and "direct indexed dependency context (read-only)" not in context_file.reasons
                 and (
                     _matches_ownership_pattern(agent, context_file.relative_path)
+                    or _has_bounded_scope_contract(
+                        context_file,
+                        role=step.suggested_agent,
+                    )
                     or any(
                         reason.startswith("approved ")
                         and "target is currently missing" in reason
@@ -869,8 +929,9 @@ def _build_ownership(
                 owner_step_id=owner_step_id,
                 reader_agent_ids=tuple(sorted(reader_ids)),
                 reason=(
-                    f"single writer selected for {owner.role} scope by "
-                    "ownership pattern, context score, and plan order"
+                    f"single writer selected for {owner.role} scope by the "
+                    "context scope contract, ownership pattern, context "
+                    "score, and plan order"
                 ),
             )
         )
@@ -1042,9 +1103,11 @@ def build_agent_run_graph(
     )
     for node in writing_nodes:
         if not node.owned_files:
-            raise ValueError(
-                f"writing node {node.node_id} has no exact file or bounded creation "
-                "scope; refine the task scope or project index"
+            pack = packs[node.step_id]
+            raise ScopeContractError(
+                node_id=node.node_id,
+                role=node.agent_role,
+                context_paths=tuple(item.relative_path for item in pack.files),
             )
 
     node_waves = tuple(

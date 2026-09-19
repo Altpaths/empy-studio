@@ -10,6 +10,7 @@ from empy_studio.core import (
     AgentRegistry,
     DefaultProjectService,
     ProductTask,
+    ScopeContractError,
     approve_execution_plan,
     build_agent_run_graph,
     build_context_selection,
@@ -288,6 +289,82 @@ def test_writing_plan_without_existing_ui_file_gets_safe_creation_target(tmp_pat
     frontend = next(node for node in graph.nodes if node.agent_role == "frontend")
     assert frontend.owned_files == ("index.html",)
     assert (tmp_path / "index.html").exists() is False
+
+
+def test_context_scope_contract_survives_registry_pattern_drift(tmp_path: Path) -> None:
+    """The selected target, rather than a second pattern table, owns the edit."""
+
+    root = tmp_path / "project"
+    root.mkdir()
+    plan, selection, budget = _prepared_inputs(root, rich_task=True)
+    agents = tuple(
+        replace(
+            agent,
+            ownership_patterns=()
+            if agent.role == "frontend"
+            else agent.ownership_patterns,
+        )
+        for agent in default_agent_registry().agents
+    )
+    registry = AgentRegistry(agents=agents)
+
+    frontend_pack = next(pack for pack in selection.packs if pack.agent_role == "frontend")
+    assert any(item.scope_role == "frontend" for item in frontend_pack.files)
+
+    graph = build_agent_run_graph(
+        plan=plan,
+        selection=selection,
+        budget=budget,
+        registry=registry,
+    )
+
+    frontend = next(node for node in graph.nodes if node.agent_role == "frontend")
+    assert frontend.owned_files
+
+
+def test_missing_scope_contract_is_typed_before_provider_execution(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    plan, selection, budget = _prepared_inputs(root, rich_task=True)
+    frontend_pack = next(pack for pack in selection.packs if pack.agent_role == "frontend")
+    files = tuple(
+        replace(
+            item,
+            scope_role=None,
+            reasons=tuple(
+                reason
+                for reason in item.reasons
+                if reason != "guaranteed writer scope"
+                and not reason.startswith("approved frontend target")
+                and reason != "explicitly named in ticket"
+            ),
+        )
+        for item in frontend_pack.files
+    )
+    altered_pack = replace(frontend_pack, files=files)
+    altered_selection = replace(
+        selection,
+        packs=tuple(
+            altered_pack if pack.step_id == frontend_pack.step_id else pack
+            for pack in selection.packs
+        ),
+    )
+    registry = AgentRegistry(
+        agents=tuple(
+            replace(agent, ownership_patterns=())
+            if agent.role == "frontend"
+            else agent
+            for agent in default_agent_registry().agents
+        )
+    )
+
+    with pytest.raises(ScopeContractError, match="scope contract missing"):
+        build_agent_run_graph(
+            plan=plan,
+            selection=altered_selection,
+            budget=replace(budget, selection_id=altered_selection.selection_id),
+            registry=registry,
+        )
 
 
 def test_missing_php_homepage_gets_virtual_frontend_ownership(tmp_path: Path) -> None:

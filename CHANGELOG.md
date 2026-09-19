@@ -1,3 +1,16 @@
+## [0.1.73] - 2026-09-19
+
+- Make the context selector the single source of truth for bounded writer
+  ownership. Every selected edit target now carries its role contract into the
+  graph, so a second, drifting filename-pattern table cannot reject a valid
+  target before execution.
+- Add typed scope-contract preflight and a deterministic, token-free repair
+  pass in both the web workflow and desktop graph builder. A writer can never
+  start without an exact file or an explicitly bounded creation target.
+- Persist and restore the scope contract for old context selections, add a
+  safe release-notes creation target when a release ticket has no artifact,
+  and cover registry drift with regression tests.
+
 ## [0.1.72] - 2026-09-19
 
 - Give new-page tickets an exact, deterministic creation target. PHP requests

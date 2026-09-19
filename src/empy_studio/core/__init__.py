@@ -8,6 +8,7 @@ from .agent_dispatcher import (
     AgentRunNode,
     FileOwnership,
     GraphStatus,
+    ScopeContractError,
     build_agent_run_graph,
     default_agent_registry,
 )
@@ -182,6 +183,7 @@ __all__ = [
     "RouteKind",
     "RouteReport",
     "RoutingPolicy",
+    "ScopeContractError",
     "StepBudgetUsage",
     "SyncConflict",
     "SyncReport",

@@ -119,6 +119,11 @@ class ContextWorkspaceAdapter:
                         sha256=str(raw_file["sha256"]),
                         truncated=bool(raw_file["truncated"]),
                         content=str(raw_file["content"]),
+                        scope_role=(
+                            cast(AgentRole, str(raw_file["scope_role"]))
+                            if raw_file.get("scope_role") is not None
+                            else None
+                        ),
                     )
                 )
             packs.append(

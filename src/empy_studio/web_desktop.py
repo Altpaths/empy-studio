@@ -32,6 +32,7 @@ from empy_studio.core import (
     ProjectDetection,
     ProviderRoute,
     RoutingPolicy,
+    ScopeContractError,
     TaskKind,
     TokenBudget,
     approve_execution_plan,
@@ -235,6 +236,7 @@ def _failure_kind(detail: str) -> str:
             "not in the allowed file",
             "ownership mismatch",
             "ownership boundary",
+            "scope contract missing",
             "فایل مالکیت‌داده‌شده",
             "فهرست فایل‌های مجاز",
             "محدودهٔ مجاز",
@@ -1652,7 +1654,34 @@ class GuidedState:
             policy=context_policy,
         )
         budget = lock_token_budget(build_token_budget(plan=plan, selection=context, policy=policy_for_preset("economy")))
-        graph = build_agent_run_graph(plan=plan, selection=context, budget=budget)
+        try:
+            graph = build_agent_run_graph(plan=plan, selection=context, budget=budget)
+        except ScopeContractError as exc:
+            # This is a local deterministic repair.  It happens before any
+            # provider call and rebuilds only the affected bounded context;
+            # it never widens a node to a directory or asks a model to guess
+            # a target.  A second failure remains a real planning error and is
+            # surfaced with the typed diagnostic below.
+            self.add_log(
+                f"Scope contract preflight repaired before Agent execution: {exc}",
+                "warning",
+            )
+            context = build_context_selection(
+                task=task,
+                project=self.detection,
+                plan=plan,
+                brain_index=self.brain_index,
+                policy=context_policy,
+                force_scope_repair=True,
+            )
+            budget = lock_token_budget(
+                build_token_budget(
+                    plan=plan,
+                    selection=context,
+                    policy=policy_for_preset("economy"),
+                )
+            )
+            graph = build_agent_run_graph(plan=plan, selection=context, budget=budget)
         return plan, context, budget, graph
 
     def _record_planning_failure(

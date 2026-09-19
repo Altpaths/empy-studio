@@ -1,3 +1,27 @@
+# Empy Studio 0.1.73 — central writer scope contract
+
+This release fixes the architectural failure behind repeated “unowned writer”
+stops. Previously, context selection decided that a file was the right target,
+then Agent Dispatcher re-decided ownership with a separate filename-pattern
+table. A valid target could therefore become read-only at graph construction,
+causing a stop before the provider even started.
+
+The selected context file now carries the exact role contract used to build the
+graph. Registry patterns remain a safety fallback for older saved selections,
+but they can no longer contradict a freshly built bounded context. A typed
+scope-contract preflight reports the affected node and relative paths, and the
+web and desktop workflows perform one deterministic local repair pass before
+any provider call or token use. The repair can only create a conventional exact
+target; it never widens a node to a project directory. Release tickets also
+receive a bounded `RELEASE_NOTES.md` target when no release artifact exists.
+
+Validation: core graph/context, token-budget, intent-routing, website matrix,
+manifest, and runtime tests pass locally; Python compilation passes. Full
+provider execution, live API billing, DirectAdmin extraction, and Apple
+notarization remain environment-dependent checks.
+
+## Previous release context
+
 # Empy Studio 0.1.72 — bounded PHP new-page scope
 
 This release fixes a real graph-construction failure reproduced with the
