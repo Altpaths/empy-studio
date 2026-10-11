@@ -33,6 +33,9 @@ class ApplicationFlowTest extends TestCase
     public function test_ticket_plan_and_clear_provider_failure_are_visible_in_the_ui(): void
     {
         Storage::fake('local');
+        // This scenario intentionally verifies the no-provider boundary. The
+        // product default includes Codex when it is available on the host.
+        config()->set('empy.codex.enabled', false);
         $this->post('/projects', [
             'name' => 'Flow Site',
             'archive' => $this->uploadedZip(['index.html' => '<h1>Home</h1>']),

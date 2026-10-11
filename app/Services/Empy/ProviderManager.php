@@ -38,8 +38,17 @@ final class ProviderManager
 
         $code = $configured === [] ? 'provider_unavailable' : 'all_providers_failed';
         $message = $configured === []
-            ? 'هیچ Provider فعالی تنظیم نشده است. Ollama یا یک endpoint سازگار را تنظیم کنید.'
+            ? 'Provider آماده نیست: هیچ موتور مدلی فعال نیست. اتصال ChatGPT/Codex، Ollama یا یک endpoint سازگار را فعال کنید.'
             : 'همهٔ Providerهای تنظیم‌شده شکست خوردند؛ جزئیات تلاش‌ها ثبت شده است.';
         throw new EmpyProviderException($message, $code, $attempts);
+    }
+
+    /** @return list<string> */
+    public function configuredIds(): array
+    {
+        return array_values(array_map(
+            static fn (ProviderAdapter $provider): string => $provider->id(),
+            array_filter($this->providers, static fn (ProviderAdapter $provider): bool => $provider->configured()),
+        ));
     }
 }

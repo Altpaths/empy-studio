@@ -45,6 +45,10 @@ class ExecutionTest extends TestCase
         $this->assertSame(['index.html'], $ticket->fresh()->result['changed_files']);
         $this->assertSame('<main>Updated</main>', Storage::disk('local')->get($project->source_path.'/index.html'));
         $this->assertSame(1, $run->context_stats['unique_files']);
+        $this->assertSame(
+            Storage::disk('local')->path($project->source_path),
+            $provider->requests[0]['workspace_path'],
+        );
     }
 
     public function test_no_configured_provider_is_a_clear_failure_without_a_file_change(): void
@@ -123,6 +127,9 @@ class ExecutionTest extends TestCase
 
 final class FakeProvider implements ProviderAdapter
 {
+    /** @var list<array<string, mixed>> */
+    public array $requests = [];
+
     public function __construct(private readonly ProviderResponse $response) {}
 
     public function id(): string
@@ -137,6 +144,8 @@ final class FakeProvider implements ProviderAdapter
 
     public function execute(array $request): ProviderResponse
     {
+        $this->requests[] = $request;
+
         return $this->response;
     }
 }

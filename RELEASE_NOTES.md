@@ -7,7 +7,9 @@
 - Builds a compact manifest with hashes, framework hints, and entry points.
 - Creates a one-writer-per-file plan before any provider call.
 - Sends only planned file context and records provider attempts and usage.
-- Supports local Ollama and OpenAI-compatible endpoints with ordered fallback.
+- Supports a signed-in local Codex CLI, local Ollama, and OpenAI-compatible
+  endpoints with ordered fallback. Codex runs ephemeral and read-only; Empy
+  remains the only writer.
 - Applies structured full-file patches atomically and rolls them back on error.
 - Uses changed-graph recovery and refuses blind replay of the same failure.
 - Verifies a real project diff and PHP/JSON syntax where applicable.
@@ -23,8 +25,10 @@
 
 ## Configuration boundary
 
-The application does not contain a model. Configure Ollama or an
-OpenAI-compatible endpoint in `.env` for model-backed execution. If neither is
+The application does not contain model weights. On macOS, configure
+`EMPY_PROVIDER_ORDER=codex,ollama,openai_compatible` and sign in to the Codex
+CLI with ChatGPT to use the existing plan without an API key. Ollama and an
+OpenAI-compatible endpoint remain explicit alternatives. If none is
 configured, planning remains available and execution stops with a clear
 `provider_unavailable` message; paid services are never enabled silently.
 

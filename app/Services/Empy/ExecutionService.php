@@ -7,6 +7,7 @@ use App\Exceptions\EmpyProviderException;
 use App\Models\Run;
 use App\Models\Ticket;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 
 final class ExecutionService
 {
@@ -45,6 +46,7 @@ final class ExecutionService
             foreach ($plan['nodes'] as $node) {
                 $providerRun = $this->providers->execute([
                     'messages' => $this->messages($ticket, $node, $context['items']),
+                    'workspace_path' => Storage::disk($ticket->project->source_disk)->path($ticket->project->source_path),
                 ]);
                 $providers[] = $providerRun->provider;
                 $run->events()->create([

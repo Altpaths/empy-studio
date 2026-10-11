@@ -6,9 +6,15 @@ return [
     'max_file_bytes' => (int) env('EMPY_MAX_FILE_BYTES', 25 * 1024 * 1024),
     'provider_order' => array_values(array_filter(array_map(
         static fn (string $provider): string => trim($provider),
-        explode(',', (string) env('EMPY_PROVIDER_ORDER', 'ollama,openai_compatible')),
+        explode(',', (string) env('EMPY_PROVIDER_ORDER', 'codex,ollama,openai_compatible')),
     ))),
     'provider_timeout' => (int) env('EMPY_PROVIDER_TIMEOUT', 120),
+    'codex' => [
+        'enabled' => filter_var(env('EMPY_CODEX_ENABLED', true), FILTER_VALIDATE_BOOL),
+        'binary' => (string) env('EMPY_CODEX_BIN', 'codex'),
+        'model' => (string) env('EMPY_CODEX_MODEL', ''),
+        'timeout' => (int) env('EMPY_CODEX_TIMEOUT', 300),
+    ],
     'ollama' => [
         'base_url' => rtrim((string) env('EMPY_OLLAMA_BASE_URL', 'http://127.0.0.1:11434'), '/'),
         'model' => (string) env('EMPY_OLLAMA_MODEL', ''),

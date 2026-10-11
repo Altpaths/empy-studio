@@ -7,8 +7,11 @@
         <div><div class="muted">stack</div><strong>{{ implode('، ', $project->detected_stack['frameworks'] ?? []) ?: 'ناشناخته' }}</strong></div>
         <div><div class="muted">entry point</div><strong><code>{{ implode(', ', $project->detected_stack['entry_points'] ?? []) ?: 'پیدا نشد' }}</code></strong></div>
     </div>
-    @if(!config('empy.ollama.model') && !config('empy.openai_compatible.model'))
-        <div class="flash error" style="margin-top:16px">Provider مدل تنظیم نشده است. Import و Planner محلی کار می‌کند، اما برای اجرای تغییر باید Ollama یا endpoint سازگار را در <code>.env</code> فعال کنید.</div>
+    @php($configuredProviders = app(\App\Services\Empy\ProviderManager::class)->configuredIds())
+    @if($configuredProviders === [])
+        <div class="flash error" style="margin-top:16px">هیچ موتور مدلی فعال نیست. برای اجرای تغییر باید اتصال ChatGPT/Codex، Ollama یا endpoint سازگار را فعال کنید.</div>
+    @else
+        <div class="flash success" style="margin-top:16px">موتورهای آماده: <code>{{ implode('، ', $configuredProviders) }}</code>. Empy فقط بعد از پاسخ ساختاریافته و Verification فایل خروجی می‌سازد.</div>
     @endif
 </div>
 <div class="card">

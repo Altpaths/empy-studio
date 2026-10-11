@@ -26,6 +26,13 @@ php artisan serve
 
 The same steps can be run with `composer run setup` when Node/npm is available.
 
-The default local mode can build a project index without a model provider. To
-execute model-backed changes, configure a local Ollama model or an
-OpenAI-compatible endpoint in `.env`. Paid services are never enabled silently.
+The default local mode can build a project index without a model provider. For
+the lowest-friction macOS setup, install/sign in to the Codex CLI with your
+ChatGPT account and leave `EMPY_PROVIDER_ORDER=codex,ollama,openai_compatible`.
+Empy invokes Codex in an ephemeral, read-only workspace and remains the only
+writer. Ollama and OpenAI-compatible endpoints are explicit fallback options;
+paid services are never enabled silently.
+
+The desktop packaging script builds an application bundle with the Laravel
+runtime and a first-run launcher. It does not copy credentials into the bundle;
+the user's existing ChatGPT/Codex sign-in remains in the OS profile.
