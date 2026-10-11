@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\EmpyExecutionException;
-use App\Exceptions\EmpyProviderException;
 use App\Exceptions\EmpyVerificationException;
 use App\Models\Artifact;
 use App\Models\Project;
@@ -30,6 +29,7 @@ class TicketController extends Controller
             $planner->plan($ticket->fresh('project'));
         } catch (\Throwable $exception) {
             $ticket->update(['status' => 'failed', 'failure_code' => $exception instanceof EmpyExecutionException ? $exception->errorCode : 'planning_failed', 'failure_detail' => $exception->getMessage()]);
+
             return back()->with('error', 'Ticket قابل برنامه‌ریزی نیست: '.$exception->getMessage());
         }
 
@@ -54,6 +54,7 @@ class TicketController extends Controller
         if ($recovered > 0) {
             $message = "بعد از {$recovered} recovery با graph متفاوت، تغییر واقعی ایجاد شد. حالا Verification را اجرا کنید.";
         }
+
         return back()->with('success', $message);
     }
 
@@ -63,9 +64,11 @@ class TicketController extends Controller
             $result = $verification->verify($ticket->fresh('project'));
         } catch (EmpyVerificationException $exception) {
             $ticket->update(['status' => 'failed', 'failure_code' => $exception->errorCode, 'failure_detail' => $exception->getMessage()]);
+
             return back()->with('error', 'Verification شکست خورد: '.$exception->getMessage());
         } catch (\Throwable $exception) {
             $ticket->update(['status' => 'failed', 'failure_code' => 'verification_error', 'failure_detail' => $exception->getMessage()]);
+
             return back()->with('error', 'Verification انجام نشد: '.$exception->getMessage());
         }
 
@@ -88,6 +91,7 @@ class TicketController extends Controller
     public function download(Artifact $artifact)
     {
         abort_unless(Storage::disk($artifact->disk)->exists($artifact->path), 404);
+
         return Storage::disk($artifact->disk)->download($artifact->path, basename($artifact->path));
     }
 

@@ -8,9 +8,7 @@ use Illuminate\Support\Str;
 
 final class TicketPlanner
 {
-    public function __construct(private readonly AgentPlanValidator $validator)
-    {
-    }
+    public function __construct(private readonly AgentPlanValidator $validator) {}
 
     /** @return array<string, mixed> */
     public function plan(Ticket $ticket): array
@@ -29,7 +27,7 @@ final class TicketPlanner
             }
         }
         $creationRequest = $this->isCreationRequest($lower);
-        if ($explicit !== [] && $targets === [] && !$creationRequest) {
+        if ($explicit !== [] && $targets === [] && ! $creationRequest) {
             throw new EmpyPlanningException(
                 'The requested file is not present in the project manifest.',
                 'target_not_found',
@@ -87,6 +85,7 @@ final class TicketPlanner
     private function explicitPaths(string $text): array
     {
         preg_match_all('/(?<![A-Za-z0-9_])([A-Za-z0-9_\.\/-]+\.(?:php|html?|css|scss|js|ts|vue|py|json|ya?ml|toml|md))(?![A-Za-z0-9_])/i', $text, $matches);
+
         return array_values(array_unique($matches[1] ?? []));
     }
 

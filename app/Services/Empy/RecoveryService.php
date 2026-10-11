@@ -7,17 +7,16 @@ use App\Models\Ticket;
 
 final class RecoveryService
 {
-    public function __construct(private readonly RecoveryPolicy $policy)
-    {
-    }
+    public function __construct(private readonly RecoveryPolicy $policy) {}
 
     public function prepareNextAttempt(Ticket $ticket, Run $run): bool
     {
         $decision = $this->policy->decide($ticket, $run);
-        if (!$decision['retry']) {
+        if (! $decision['retry']) {
             $ticket->update([
                 'failure_detail' => trim(($ticket->failure_detail ?? '').' Recovery متوقف شد: '.$decision['reason'].'.'),
             ]);
+
             return false;
         }
         $plan = $ticket->plan ?? [];

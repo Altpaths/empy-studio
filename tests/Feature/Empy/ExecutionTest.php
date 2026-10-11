@@ -3,18 +3,16 @@
 namespace Tests\Feature\Empy;
 
 use App\Models\Ticket;
-use App\Services\Empy\AgentPlanValidator;
 use App\Services\Empy\ContextLedger;
 use App\Services\Empy\ExecutionService;
 use App\Services\Empy\OllamaProvider;
 use App\Services\Empy\OpenAiCompatibleProvider;
 use App\Services\Empy\PatchApplier;
+use App\Services\Empy\ProjectImportService;
 use App\Services\Empy\ProviderAdapter;
 use App\Services\Empy\ProviderManager;
 use App\Services\Empy\ProviderResponse;
-use App\Services\Empy\ProjectImportService;
 use App\Services\Empy\TicketPlanner;
-use App\Support\Empy\PathGuard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -63,8 +61,8 @@ class ExecutionTest extends TestCase
         app(TicketPlanner::class)->plan($ticket);
 
         $run = $this->executor(new ProviderManager([
-            new OllamaProvider(),
-            new OpenAiCompatibleProvider(),
+            new OllamaProvider,
+            new OpenAiCompatibleProvider,
         ]))->execute($ticket->fresh());
 
         $this->assertSame('failed', $run->status);
@@ -112,7 +110,7 @@ class ExecutionTest extends TestCase
     private function archive(array $files): string
     {
         $path = tempnam(sys_get_temp_dir(), 'empy-execution-');
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         $this->assertTrue($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE));
         foreach ($files as $name => $contents) {
             $zip->addFromString($name, $contents);
@@ -125,9 +123,7 @@ class ExecutionTest extends TestCase
 
 final class FakeProvider implements ProviderAdapter
 {
-    public function __construct(private readonly ProviderResponse $response)
-    {
-    }
+    public function __construct(private readonly ProviderResponse $response) {}
 
     public function id(): string
     {

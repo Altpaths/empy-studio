@@ -8,7 +8,6 @@ use App\Services\Empy\AgentPlanValidator;
 use App\Services\Empy\ContextLedger;
 use App\Services\Empy\ProjectImportService;
 use App\Services\Empy\TicketPlanner;
-use App\Support\Empy\PathGuard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -107,7 +106,7 @@ class PlanningTest extends TestCase
     private function archive(array $files): string
     {
         $path = tempnam(sys_get_temp_dir(), 'empy-plan-');
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         $this->assertTrue($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE));
         foreach ($files as $name => $contents) {
             $zip->addFromString($name, $contents);

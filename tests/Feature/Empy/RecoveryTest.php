@@ -6,10 +6,10 @@ use App\Models\Ticket;
 use App\Services\Empy\ContextLedger;
 use App\Services\Empy\ExecutionService;
 use App\Services\Empy\PatchApplier;
+use App\Services\Empy\ProjectImportService;
 use App\Services\Empy\ProviderAdapter;
 use App\Services\Empy\ProviderManager;
 use App\Services\Empy\ProviderResponse;
-use App\Services\Empy\ProjectImportService;
 use App\Services\Empy\RecoveryService;
 use App\Services\Empy\TicketPlanner;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -56,7 +56,7 @@ class RecoveryTest extends TestCase
     private function archive(array $files): string
     {
         $path = tempnam(sys_get_temp_dir(), 'empy-recovery-');
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         $this->assertTrue($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE));
         foreach ($files as $name => $contents) {
             $zip->addFromString($name, $contents);
@@ -70,9 +70,7 @@ class RecoveryTest extends TestCase
 final class SequenceProvider implements ProviderAdapter
 {
     /** @param list<ProviderResponse> $responses */
-    public function __construct(private array $responses)
-    {
-    }
+    public function __construct(private array $responses) {}
 
     public function id(): string
     {

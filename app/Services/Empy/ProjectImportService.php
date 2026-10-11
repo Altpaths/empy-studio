@@ -6,7 +6,6 @@ use App\Models\Project;
 use App\Support\Empy\PathGuard;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use RuntimeException;
 use ZipArchive;
 
@@ -15,13 +14,12 @@ final class ProjectImportService
     public function __construct(
         private readonly PathGuard $paths,
         private readonly ProjectIndexer $indexer,
-    ) {
-    }
+    ) {}
 
     public function import(UploadedFile|string $archive, ?string $name = null): Project
     {
         $archivePath = $archive instanceof UploadedFile ? $archive->getRealPath() : $archive;
-        if (!is_string($archivePath) || !is_file($archivePath)) {
+        if (! is_string($archivePath) || ! is_file($archivePath)) {
             throw new RuntimeException('Project archive could not be read.');
         }
 
@@ -57,7 +55,7 @@ final class ProjectImportService
 
     private function extract(string $archivePath, string $destination): void
     {
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         $result = $zip->open($archivePath);
         if ($result !== true) {
             throw new RuntimeException('Project archive is not a readable ZIP.');
@@ -90,7 +88,7 @@ final class ProjectImportService
 
                 $target = $this->paths->join($destination, $relative);
                 $parent = dirname($target);
-                if (!is_dir($parent) && !mkdir($parent, 0750, true) && !is_dir($parent)) {
+                if (! is_dir($parent) && ! mkdir($parent, 0750, true) && ! is_dir($parent)) {
                     throw new RuntimeException('Project workspace could not be created.');
                 }
                 $stream = $zip->getStream($entryName);

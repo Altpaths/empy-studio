@@ -45,7 +45,7 @@ class ProjectImportTest extends TestCase
     private function archive(array $files): string
     {
         $path = tempnam(sys_get_temp_dir(), 'empy-zip-');
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         $this->assertTrue($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE));
         foreach ($files as $name => $contents) {
             $zip->addFromString($name, $contents);

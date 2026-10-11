@@ -14,12 +14,11 @@ final class ExecutionService
         private readonly ContextLedger $context,
         private readonly ProviderManager $providers,
         private readonly PatchApplier $patches,
-    ) {
-    }
+    ) {}
 
     public function execute(Ticket $ticket): Run
     {
-        if ($ticket->status !== 'planned' || !is_array($ticket->plan)) {
+        if ($ticket->status !== 'planned' || ! is_array($ticket->plan)) {
             throw new EmpyExecutionException('Ticket must have a validated plan before execution.', 'plan_required');
         }
         $plan = $ticket->plan;
@@ -89,6 +88,7 @@ final class ExecutionService
     {
         $context = collect($items)->map(fn (array $item): string => "FILE: {$item['path']}\n{$item['content']}")->implode("\n\n---\n\n");
         $recoveryHint = is_string($ticket->plan['recovery_hint'] ?? null) ? "\nRecovery instruction: {$ticket->plan['recovery_hint']}" : '';
+
         return [
             [
                 'role' => 'system',

@@ -11,9 +11,7 @@ use SplFileInfo;
 
 final class ProjectIndexer
 {
-    public function __construct(private readonly PathGuard $paths)
-    {
-    }
+    public function __construct(private readonly PathGuard $paths) {}
 
     /** @return array{files: list<array<string, mixed>>, total_files: int, total_bytes: int, frameworks: list<string>, entry_points: list<string>} */
     public function index(string $root): array
@@ -32,13 +30,14 @@ final class ProjectIndexer
             $directory,
             function (SplFileInfo $current) use ($root): bool {
                 $relative = ltrim(str_replace('\\', '/', substr($current->getPathname(), strlen($root))), '/');
-                return !$this->paths->isIgnored($relative);
+
+                return ! $this->paths->isIgnored($relative);
             },
         );
 
         foreach (new RecursiveIteratorIterator($filter) as $file) {
             /** @var SplFileInfo $file */
-            if (!$file->isFile() || $file->isLink()) {
+            if (! $file->isFile() || $file->isLink()) {
                 continue;
             }
 
@@ -120,7 +119,7 @@ final class ProjectIndexer
         if ($basename === 'cargo.toml') {
             $frameworks[] = 'rust';
         }
-        if ($basename === 'composer.json' && !in_array('laravel', $frameworks, true)) {
+        if ($basename === 'composer.json' && ! in_array('laravel', $frameworks, true)) {
             $frameworks[] = 'php';
         }
         if ($lower === 'public/index.html' || $lower === 'index.html') {

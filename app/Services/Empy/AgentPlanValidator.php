@@ -8,9 +8,7 @@ use App\Support\Empy\PathGuard;
 
 final class AgentPlanValidator
 {
-    public function __construct(private readonly PathGuard $paths)
-    {
-    }
+    public function __construct(private readonly PathGuard $paths) {}
 
     /** @param array<string, mixed> $plan */
     public function validate(Project $project, array $plan): array
@@ -33,7 +31,7 @@ final class AgentPlanValidator
                 throw new EmpyPlanningException("Two agents own {$writer}; one writer is required.", 'duplicate_writer');
             }
             $action = (string) ($node['action'] ?? 'modify');
-            if (!isset($known[$writer]) && $action !== 'create') {
+            if (! isset($known[$writer]) && $action !== 'create') {
                 throw new EmpyPlanningException(
                     "The planned target {$writer} is not in the project manifest.",
                     'unknown_target',
@@ -43,11 +41,11 @@ final class AgentPlanValidator
                 fn (mixed $file): string => $this->paths->normalize((string) $file),
                 is_array($node['files'] ?? null) ? $node['files'] : [$writer],
             )));
-            if (!in_array($writer, $files, true)) {
+            if (! in_array($writer, $files, true)) {
                 $files[] = $writer;
             }
             foreach ($files as $file) {
-                if (!isset($known[$file]) && $file !== $writer) {
+                if (! isset($known[$file]) && $file !== $writer) {
                     throw new EmpyPlanningException("Agent node {$nodeId} reads an unknown file {$file}.", 'unknown_context_file');
                 }
             }
@@ -64,6 +62,7 @@ final class AgentPlanValidator
 
         $plan['nodes'] = array_values($validated);
         $plan['writer_paths'] = array_keys($writers);
+
         return $plan;
     }
 }

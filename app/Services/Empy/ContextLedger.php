@@ -9,9 +9,7 @@ use RuntimeException;
 
 final class ContextLedger
 {
-    public function __construct(private readonly PathGuard $paths)
-    {
-    }
+    public function __construct(private readonly PathGuard $paths) {}
 
     /** @param array<string, mixed> $plan @return array{items: list<array<string, mixed>>, stats: array<string, int>} */
     public function build(Project $project, array $plan): array
@@ -23,7 +21,7 @@ final class ContextLedger
             $writer = $this->paths->normalize((string) ($node['writer'] ?? ''));
             foreach (($node['files'] ?? []) as $path) {
                 $path = $this->paths->normalize((string) $path);
-                if (!isset($manifest[$path])) {
+                if (! isset($manifest[$path])) {
                     if (($node['action'] ?? 'modify') === 'create' && $path === $writer) {
                         continue;
                     }
@@ -37,7 +35,7 @@ final class ContextLedger
         $totalChars = 0;
         foreach (array_keys($paths) as $path) {
             $absolute = $this->paths->join($root, $path);
-            if (!is_file($absolute) || is_link($absolute)) {
+            if (! is_file($absolute) || is_link($absolute)) {
                 throw new RuntimeException("Context file {$path} is not readable.");
             }
             $content = file_get_contents($absolute);

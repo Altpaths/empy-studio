@@ -20,7 +20,7 @@ final class OllamaProvider implements ProviderAdapter
     public function execute(array $request): ProviderResponse
     {
         $model = trim((string) config('empy.ollama.model'));
-        if (!$this->configured()) {
+        if (! $this->configured()) {
             throw new EmpyProviderException('Ollama model is not configured.', 'provider_not_configured');
         }
 
@@ -37,16 +37,16 @@ final class OllamaProvider implements ProviderAdapter
         } catch (\Throwable) {
             throw new EmpyProviderException('Ollama could not be reached.', 'provider_transport');
         }
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             throw new EmpyProviderException('Ollama returned HTTP '.$response->status().'.', 'provider_http');
         }
 
         $content = data_get($response->json(), 'message.content');
-        if (!is_string($content)) {
+        if (! is_string($content)) {
             throw new EmpyProviderException('Ollama returned no message content.', 'invalid_provider_output');
         }
         $payload = json_decode($this->stripFence($content), true);
-        if (!is_array($payload)) {
+        if (! is_array($payload)) {
             throw new EmpyProviderException('Ollama did not return valid JSON.', 'invalid_provider_output');
         }
 

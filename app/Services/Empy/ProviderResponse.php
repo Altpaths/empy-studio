@@ -12,15 +12,14 @@ final readonly class ProviderResponse
         public string $summary,
         public array $usage = [],
         public ?string $contextSummary = null,
-    ) {
-    }
+    ) {}
 
     /** @param array<string, mixed> $payload */
     public static function fromPayload(array $payload): self
     {
         $files = [];
         foreach (($payload['files'] ?? []) as $file) {
-            if (!is_array($file) || !is_string($file['path'] ?? null) || !is_string($file['content'] ?? null)) {
+            if (! is_array($file) || ! is_string($file['path'] ?? null) || ! is_string($file['content'] ?? null)) {
                 throw new EmpyProviderException('Provider returned an invalid file patch.', 'invalid_provider_output');
             }
             $files[] = ['path' => $file['path'], 'content' => $file['content']];

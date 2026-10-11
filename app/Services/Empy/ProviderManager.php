@@ -7,9 +7,7 @@ use App\Exceptions\EmpyProviderException;
 final class ProviderManager
 {
     /** @param list<ProviderAdapter> $providers */
-    public function __construct(private readonly array $providers)
-    {
-    }
+    public function __construct(private readonly array $providers) {}
 
     /** @param array<string, mixed> $request */
     public function execute(array $request): ProviderRun
@@ -17,14 +15,16 @@ final class ProviderManager
         $attempts = [];
         $configured = [];
         foreach ($this->providers as $provider) {
-            if (!$provider->configured()) {
+            if (! $provider->configured()) {
                 $attempts[] = ['provider' => $provider->id(), 'status' => 'skipped', 'reason' => 'not_configured'];
+
                 continue;
             }
             $configured[] = $provider;
             try {
                 $response = $provider->execute($request);
                 $attempts[] = ['provider' => $provider->id(), 'status' => 'succeeded', 'reason' => 'completed'];
+
                 return new ProviderRun($response, $provider->id(), $attempts);
             } catch (EmpyProviderException $exception) {
                 $attempts[] = [

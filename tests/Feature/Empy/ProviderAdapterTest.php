@@ -29,7 +29,7 @@ class ProviderAdapterTest extends TestCase
         ]);
         config()->set('empy.ollama.base_url', 'http://ollama.test');
 
-        $run = (new ProviderManager([new OllamaProvider()]))->execute(['messages' => []]);
+        $run = (new ProviderManager([new OllamaProvider]))->execute(['messages' => []]);
 
         $this->assertSame('ollama', $run->provider);
         $this->assertSame('index.html', $run->response->files[0]['path']);
@@ -49,7 +49,7 @@ class ProviderAdapterTest extends TestCase
             ], 200),
         ]);
 
-        $run = (new ProviderManager([new OpenAiCompatibleProvider(), new OllamaProvider()]))->execute(['messages' => []]);
+        $run = (new ProviderManager([new OpenAiCompatibleProvider, new OllamaProvider]))->execute(['messages' => []]);
 
         $this->assertSame('ollama', $run->provider);
         $this->assertSame('failed', $run->attempts[0]['status']);
@@ -60,7 +60,7 @@ class ProviderAdapterTest extends TestCase
     {
         Http::fake();
         try {
-            (new ProviderManager([new OllamaProvider(), new OpenAiCompatibleProvider()]))->execute(['messages' => []]);
+            (new ProviderManager([new OllamaProvider, new OpenAiCompatibleProvider]))->execute(['messages' => []]);
             $this->fail('Expected provider_unavailable.');
         } catch (EmpyProviderException $exception) {
             $this->assertSame('provider_unavailable', $exception->errorCode);

@@ -58,7 +58,7 @@ class ApplicationFlowTest extends TestCase
     private function uploadedZip(array $files): UploadedFile
     {
         $path = tempnam(sys_get_temp_dir(), 'empy-flow-');
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         $this->assertTrue($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE));
         foreach ($files as $name => $contents) {
             $zip->addFromString($name, $contents);

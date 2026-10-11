@@ -9,9 +9,7 @@ use Illuminate\Support\Facades\Storage;
 
 final class PatchApplier
 {
-    public function __construct(private readonly PathGuard $paths)
-    {
-    }
+    public function __construct(private readonly PathGuard $paths) {}
 
     /** @return list<array{path: string, existed: bool, before: ?string, after: string}> */
     public function apply(Project $project, array $node, ProviderResponse $response): array
@@ -40,7 +38,7 @@ final class PatchApplier
                 continue;
             }
             $parent = dirname($target);
-            if (!is_dir($parent) && !mkdir($parent, 0750, true) && !is_dir($parent)) {
+            if (! is_dir($parent) && ! mkdir($parent, 0750, true) && ! is_dir($parent)) {
                 throw new EmpyExecutionException("Could not create the parent directory for {$path}.", 'write_failed');
             }
             $temporary = tempnam($parent, '.empy-write-');
@@ -48,7 +46,7 @@ final class PatchApplier
                 throw new EmpyExecutionException("Could not write {$path}.", 'write_failed');
             }
             chmod($temporary, 0640);
-            if (!rename($temporary, $target)) {
+            if (! rename($temporary, $target)) {
                 @unlink($temporary);
                 throw new EmpyExecutionException("Could not commit {$path}.", 'write_failed');
             }
@@ -71,6 +69,7 @@ final class PatchApplier
             $target = $this->paths->join($root, $change['path']);
             if ($change['existed']) {
                 file_put_contents($target, (string) $change['before'], LOCK_EX);
+
                 continue;
             }
             if (is_file($target)) {

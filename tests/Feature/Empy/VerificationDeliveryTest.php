@@ -7,14 +7,13 @@ use App\Services\Empy\ContextLedger;
 use App\Services\Empy\DeliveryService;
 use App\Services\Empy\ExecutionService;
 use App\Services\Empy\PatchApplier;
+use App\Services\Empy\ProjectImportService;
 use App\Services\Empy\ProviderManager;
 use App\Services\Empy\ProviderResponse;
-use App\Services\Empy\ProjectImportService;
 use App\Services\Empy\TicketPlanner;
 use App\Services\Empy\VerificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
-use Tests\Feature\Empy\FakeProvider;
 use Tests\TestCase;
 use ZipArchive;
 
@@ -51,7 +50,7 @@ class VerificationDeliveryTest extends TestCase
 
         $this->assertSame('delivered', $ticket->fresh()->status);
         $this->assertFileExists(Storage::disk('local')->path($artifact->path));
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         $this->assertTrue($zip->open(Storage::disk('local')->path($artifact->path)));
         $names = [];
         for ($index = 0; $index < $zip->numFiles; $index++) {
@@ -69,7 +68,7 @@ class VerificationDeliveryTest extends TestCase
     private function archive(array $files): string
     {
         $path = tempnam(sys_get_temp_dir(), 'empy-delivery-');
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         $this->assertTrue($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE));
         foreach ($files as $name => $contents) {
             $zip->addFromString($name, $contents);

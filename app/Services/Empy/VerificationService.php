@@ -9,14 +9,12 @@ use Symfony\Component\Process\Process;
 
 final class VerificationService
 {
-    public function __construct(private readonly ProjectIndexer $indexer)
-    {
-    }
+    public function __construct(private readonly ProjectIndexer $indexer) {}
 
     /** @return array{changed_files: list<string>, checks: list<array<string, mixed>>, verified_at: string} */
     public function verify(Ticket $ticket): array
     {
-        if ($ticket->status !== 'executed' || !is_array($ticket->result)) {
+        if ($ticket->status !== 'executed' || ! is_array($ticket->result)) {
             throw new EmpyVerificationException('Ticket must finish execution before verification.', 'execution_required');
         }
         $project = $ticket->project;
@@ -30,12 +28,12 @@ final class VerificationService
         }
         $actual = [];
         foreach ($after as $path => $hash) {
-            if (!isset($before[$path]) || $before[$path] !== $hash) {
+            if (! isset($before[$path]) || $before[$path] !== $hash) {
                 $actual[] = $path;
             }
         }
         foreach ($before as $path => $hash) {
-            if (!isset($after[$path])) {
+            if (! isset($after[$path])) {
                 throw new EmpyVerificationException("File {$path} disappeared outside the approved patch.", 'unexpected_file_deletion');
             }
         }
@@ -58,14 +56,14 @@ final class VerificationService
         foreach ($actual as $path) {
             $absolute = Storage::disk($project->source_disk)->path($project->source_path.'/'.$path);
             $checks[] = ['path' => $path, 'check' => 'exists', 'passed' => is_file($absolute)];
-            if (!is_file($absolute)) {
+            if (! is_file($absolute)) {
                 throw new EmpyVerificationException("Verified file {$path} is missing.", 'verification_file_missing');
             }
             $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
             if ($extension === 'php') {
                 $process = Process::run(['php', '-l', $absolute]);
                 $checks[] = ['path' => $path, 'check' => 'php_syntax', 'passed' => $process->isSuccessful()];
-                if (!$process->isSuccessful()) {
+                if (! $process->isSuccessful()) {
                     throw new EmpyVerificationException("PHP syntax verification failed for {$path}.", 'syntax_failed');
                 }
             } elseif ($extension === 'json') {

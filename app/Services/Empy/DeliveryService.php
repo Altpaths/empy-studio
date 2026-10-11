@@ -6,18 +6,16 @@ use App\Exceptions\EmpyVerificationException;
 use App\Models\Artifact;
 use App\Models\Ticket;
 use App\Support\Empy\PathGuard;
+use FilesystemIterator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
-use FilesystemIterator;
 use ZipArchive;
 
 final class DeliveryService
 {
-    public function __construct(private readonly PathGuard $paths)
-    {
-    }
+    public function __construct(private readonly PathGuard $paths) {}
 
     public function deliver(Ticket $ticket): Artifact
     {
@@ -29,10 +27,10 @@ final class DeliveryService
         $deliveryPath = 'empy/deliveries/'.$ticket->id.'/'.Str::slug($project->name).'.zip';
         $absoluteZip = Storage::disk('local')->path($deliveryPath);
         $parent = dirname($absoluteZip);
-        if (!is_dir($parent) && !mkdir($parent, 0750, true) && !is_dir($parent)) {
+        if (! is_dir($parent) && ! mkdir($parent, 0750, true) && ! is_dir($parent)) {
             throw new EmpyVerificationException('Delivery directory could not be created.', 'delivery_failed');
         }
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         if ($zip->open($absoluteZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             throw new EmpyVerificationException('Delivery ZIP could not be opened.', 'delivery_failed');
         }
@@ -43,7 +41,7 @@ final class DeliveryService
                 new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
             );
             foreach ($iterator as $file) {
-                if (!$file->isFile() || $file->isLink()) {
+                if (! $file->isFile() || $file->isLink()) {
                     continue;
                 }
                 $relative = ltrim(str_replace('\\', '/', substr($file->getPathname(), strlen($root))), '/');
@@ -52,7 +50,7 @@ final class DeliveryService
                 }
                 $safe = $this->paths->normalize($relative);
                 $zipPath = $prefix.'/'.$safe;
-                if (!$zip->addFile($file->getPathname(), $zipPath)) {
+                if (! $zip->addFile($file->getPathname(), $zipPath)) {
                     throw new EmpyVerificationException("Could not add {$safe} to delivery ZIP.", 'delivery_failed');
                 }
                 $manifest[] = ['path' => $safe, 'sha256' => hash_file('sha256', $file->getPathname()), 'size' => $file->getSize()];
@@ -68,7 +66,7 @@ final class DeliveryService
             $zip->close();
         }
 
-        $check = new ZipArchive();
+        $check = new ZipArchive;
         if ($check->open($absoluteZip) !== true || $check->numFiles === 0) {
             throw new EmpyVerificationException('Delivery ZIP failed its archive smoke test.', 'delivery_invalid_zip');
         }
@@ -102,6 +100,7 @@ final class DeliveryService
             return true;
         }
         $basename = basename($normalized);
+
         return $basename === '.env' || str_starts_with($basename, '.env.')
             || str_starts_with($normalized, 'storage/logs/');
     }
