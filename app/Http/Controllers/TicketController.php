@@ -10,6 +10,7 @@ use App\Models\Project;
 use App\Models\Ticket;
 use App\Services\Empy\DeliveryService;
 use App\Services\Empy\ExecutionService;
+use App\Services\Empy\RecoveryService;
 use App\Services\Empy\TicketPlanner;
 use App\Services\Empy\VerificationService;
 use Illuminate\Http\RedirectResponse;
@@ -35,15 +36,25 @@ class TicketController extends Controller
         return back()->with('success', 'گراف کار ساخته شد؛ فایل مالک و مسیر اجرای آن مشخص است. حالا «اجرا» را بزنید.');
     }
 
-    public function execute(Ticket $ticket, ExecutionService $execution): RedirectResponse
+    public function execute(Ticket $ticket, ExecutionService $execution, RecoveryService $recovery): RedirectResponse
     {
         $run = $execution->execute($ticket->fresh('project'));
+        $recovered = 0;
+        while ($run->status !== 'succeeded' && $recovered < 3
+            && $recovery->prepareNextAttempt($ticket->fresh('project'), $run)) {
+            $recovered++;
+            $run = $execution->execute($ticket->fresh('project'));
+        }
         $ticket = $ticket->fresh();
         if ($run->status !== 'succeeded') {
             return back()->with('error', $this->executionError($ticket));
         }
 
-        return back()->with('success', 'تغییر واقعی در فایل‌های تعیین‌شده ایجاد شد. حالا Verification را اجرا کنید.');
+        $message = 'تغییر واقعی در فایل‌های تعیین‌شده ایجاد شد. حالا Verification را اجرا کنید.';
+        if ($recovered > 0) {
+            $message = "بعد از {$recovered} recovery با graph متفاوت، تغییر واقعی ایجاد شد. حالا Verification را اجرا کنید.";
+        }
+        return back()->with('success', $message);
     }
 
     public function verify(Ticket $ticket, VerificationService $verification): RedirectResponse

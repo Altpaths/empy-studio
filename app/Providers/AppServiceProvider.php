@@ -11,10 +11,20 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->singleton(ProviderManager::class, static fn (): ProviderManager => new ProviderManager([
-            new OllamaProvider(),
-            new OpenAiCompatibleProvider(),
-        ]));
+        $this->app->singleton(ProviderManager::class, static function (): ProviderManager {
+            $adapters = [
+                'ollama' => new OllamaProvider(),
+                'openai_compatible' => new OpenAiCompatibleProvider(),
+            ];
+            $ordered = [];
+            foreach ((array) config('empy.provider_order', []) as $provider) {
+                if (isset($adapters[$provider])) {
+                    $ordered[] = $adapters[$provider];
+                }
+            }
+
+            return new ProviderManager($ordered);
+        });
     }
 
     public function boot(): void

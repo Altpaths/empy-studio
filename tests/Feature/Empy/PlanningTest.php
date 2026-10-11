@@ -83,6 +83,26 @@ class PlanningTest extends TestCase
         }
     }
 
+    public function test_creation_ticket_can_plan_a_new_explicit_file_without_reading_it(): void
+    {
+        Storage::fake('local');
+        $project = app(ProjectImportService::class)->import($this->archive([
+            'index.html' => '<main>Home</main>',
+        ]), 'site');
+        $ticket = Ticket::create([
+            'project_id' => $project->id,
+            'title' => 'Add stylesheet',
+            'request_text' => 'Create public/new.css and add the new style',
+        ]);
+
+        $plan = app(TicketPlanner::class)->plan($ticket);
+        $context = app(ContextLedger::class)->build($project, $plan);
+
+        $this->assertSame('public/new.css', $plan['nodes'][0]['writer']);
+        $this->assertSame('create', $plan['nodes'][0]['action']);
+        $this->assertSame(0, $context['stats']['files']);
+    }
+
     /** @param array<string, string> $files */
     private function archive(array $files): string
     {

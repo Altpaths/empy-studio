@@ -20,9 +20,13 @@ final class ContextLedger
         $manifest = array_fill_keys(array_column($project->manifest['files'] ?? [], 'path'), true);
         $paths = [];
         foreach ($plan['nodes'] ?? [] as $node) {
+            $writer = $this->paths->normalize((string) ($node['writer'] ?? ''));
             foreach (($node['files'] ?? []) as $path) {
                 $path = $this->paths->normalize((string) $path);
                 if (!isset($manifest[$path])) {
+                    if (($node['action'] ?? 'modify') === 'create' && $path === $writer) {
+                        continue;
+                    }
                     throw new RuntimeException("Context path {$path} is not in the project manifest.");
                 }
                 $paths[$path] = true;

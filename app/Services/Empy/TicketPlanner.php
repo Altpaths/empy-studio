@@ -28,11 +28,15 @@ final class TicketPlanner
                 $targets[] = $matches[0];
             }
         }
-        if ($explicit !== [] && $targets === []) {
+        $creationRequest = $this->isCreationRequest($lower);
+        if ($explicit !== [] && $targets === [] && !$creationRequest) {
             throw new EmpyPlanningException(
                 'The requested file is not present in the project manifest.',
                 'target_not_found',
             );
+        }
+        if ($explicit !== [] && $targets === [] && $creationRequest) {
+            $targets = $explicit;
         }
         if ($targets === []) {
             $targets = $this->heuristicTargets($files, $manifest['entry_points'] ?? [], $lower);
@@ -44,7 +48,7 @@ final class TicketPlanner
             );
         }
 
-        $action = $this->isCreationRequest($lower) ? 'create' : 'modify';
+        $action = $creationRequest ? 'create' : 'modify';
         $nodes = [];
         foreach (array_values(array_unique($targets)) as $index => $target) {
             $nodes[] = [

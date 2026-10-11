@@ -88,6 +88,7 @@ final class ExecutionService
     private function messages(Ticket $ticket, array $node, array $items): array
     {
         $context = collect($items)->map(fn (array $item): string => "FILE: {$item['path']}\n{$item['content']}")->implode("\n\n---\n\n");
+        $recoveryHint = is_string($ticket->plan['recovery_hint'] ?? null) ? "\nRecovery instruction: {$ticket->plan['recovery_hint']}" : '';
         return [
             [
                 'role' => 'system',
@@ -95,7 +96,7 @@ final class ExecutionService
             ],
             [
                 'role' => 'user',
-                'content' => "Objective: {$ticket->request_text}\nAssigned role: {$node['role']}\nAssigned writer: {$node['writer']}\nAction: {$node['action']}\nCurrent context:\n{$context}",
+                'content' => "Objective: {$ticket->request_text}\nAssigned role: {$node['role']}\nAssigned writer: {$node['writer']}\nAction: {$node['action']}{$recoveryHint}\nCurrent context:\n{$context}",
             ],
         ];
     }
