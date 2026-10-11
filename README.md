@@ -19,9 +19,12 @@ tests and extraction smoke test pass.
 composer install
 cp .env.example .env
 php artisan key:generate
+touch database/database.sqlite
 php artisan migrate
 php artisan serve
 ```
+
+The same steps can be run with `composer run setup` when Node/npm is available.
 
 The default local mode can build a project index without a model provider. To
 execute model-backed changes, configure a local Ollama model or an
