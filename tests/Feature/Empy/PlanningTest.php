@@ -55,9 +55,12 @@ class PlanningTest extends TestCase
             'request_text' => 'Change missing/page.html',
         ]);
 
-        $this->expectException(EmpyPlanningException::class);
-        $this->expectExceptionCode('target_not_found');
-        app(TicketPlanner::class)->plan($ticket);
+        try {
+            app(TicketPlanner::class)->plan($ticket);
+            $this->fail('The planner accepted an explicit target that is not in the manifest.');
+        } catch (EmpyPlanningException $exception) {
+            $this->assertSame('target_not_found', $exception->errorCode);
+        }
     }
 
     public function test_validator_rejects_duplicate_writers(): void
@@ -67,13 +70,17 @@ class PlanningTest extends TestCase
             'index.html' => '<main>Home</main>',
         ]), 'site');
 
-        $this->expectExceptionCode('duplicate_writer');
-        app(AgentPlanValidator::class)->validate($project, [
-            'nodes' => [
-                ['id' => 'one', 'writer' => 'index.html', 'files' => ['index.html']],
-                ['id' => 'two', 'writer' => 'index.html', 'files' => ['index.html']],
-            ],
-        ]);
+        try {
+            app(AgentPlanValidator::class)->validate($project, [
+                'nodes' => [
+                    ['id' => 'one', 'writer' => 'index.html', 'files' => ['index.html']],
+                    ['id' => 'two', 'writer' => 'index.html', 'files' => ['index.html']],
+                ],
+            ]);
+            $this->fail('The validator accepted duplicate writers.');
+        } catch (EmpyPlanningException $exception) {
+            $this->assertSame('duplicate_writer', $exception->errorCode);
+        }
     }
 
     /** @param array<string, string> $files */

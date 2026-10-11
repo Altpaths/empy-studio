@@ -28,6 +28,12 @@ final class TicketPlanner
                 $targets[] = $matches[0];
             }
         }
+        if ($explicit !== [] && $targets === []) {
+            throw new EmpyPlanningException(
+                'The requested file is not present in the project manifest.',
+                'target_not_found',
+            );
+        }
         if ($targets === []) {
             $targets = $this->heuristicTargets($files, $manifest['entry_points'] ?? [], $lower);
         }
