@@ -122,11 +122,15 @@ final class CodexCliProvider implements ProviderAdapter
         if ($exitCode !== 0 && $content === '') {
             $code = str_contains($stderr, 'log in') || str_contains($stderr, 'authentication')
                 ? 'provider_auth'
-                : 'provider_execution';
+                : (preg_match('/\b(quota|rate limit|rate-limit|context window|token limit|tokens remaining)\b/i', $stderr) === 1
+                    ? 'provider_quota'
+                    : 'provider_execution');
             throw new EmpyProviderException(
-                $code === 'provider_auth'
-                    ? 'Codex is not signed in. Connect the ChatGPT account once, then retry.'
-                    : 'Codex stopped before returning a structured patch.',
+                match ($code) {
+                    'provider_auth' => 'Codex is not signed in. Connect the ChatGPT account once, then retry.',
+                    'provider_quota' => 'Codex quota or context limit was reached; trying the next configured provider.',
+                    default => 'Codex stopped before returning a structured patch.',
+                },
                 $code,
             );
         }

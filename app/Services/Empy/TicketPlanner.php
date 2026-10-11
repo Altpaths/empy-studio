@@ -19,14 +19,19 @@ final class TicketPlanner
         $text = trim($ticket->request_text);
         $lower = Str::lower($text);
         $explicit = $this->explicitPaths($text);
+        $creationRequest = $this->isCreationRequest($lower);
         $targets = [];
         foreach ($explicit as $candidate) {
-            $matches = array_values(array_filter($files, static fn (string $path): bool => Str::lower($path) === Str::lower($candidate)));
-            if ($matches !== []) {
-                $targets[] = $matches[0];
+            try {
+                $targets[] = $this->resolveExplicitPath($candidate, $files);
+            } catch (EmpyPlanningException $exception) {
+                if (! $creationRequest || $exception->errorCode !== 'target_not_found') {
+                    throw $exception;
+                }
+
+                $targets[] = ltrim(str_replace('\\', '/', trim($candidate)), './');
             }
         }
-        $creationRequest = $this->isCreationRequest($lower);
         if ($explicit !== [] && $targets === [] && ! $creationRequest) {
             throw new EmpyPlanningException(
                 'The requested file is not present in the project manifest.',
@@ -79,6 +84,60 @@ final class TicketPlanner
         ]);
 
         return $plan;
+    }
+
+    /**
+     * Resolve a ticket's user-facing file reference against the path stored in
+     * the manifest. ZIPs commonly contain one top-level directory, while users
+     * naturally refer to the file relative to that directory (for example
+     * `index.html` instead of `my-site/index.html`). Resolve that case only
+     * when it is unambiguous; silently picking one of several matches would
+     * send a writer to the wrong file.
+     *
+     * @param  list<string>  $files
+     */
+    private function resolveExplicitPath(string $candidate, array $files): string
+    {
+        $normalizedCandidate = ltrim(str_replace('\\', '/', trim($candidate)), './');
+        $exact = array_values(array_filter(
+            $files,
+            static fn (string $path): bool => Str::lower($path) === Str::lower($normalizedCandidate),
+        ));
+        if (count($exact) === 1) {
+            return $exact[0];
+        }
+
+        $suffix = '/'.Str::lower($normalizedCandidate);
+        $suffixMatches = array_values(array_filter(
+            $files,
+            static fn (string $path): bool => str_ends_with('/'.Str::lower($path), $suffix),
+        ));
+        if (count($suffixMatches) === 1) {
+            return $suffixMatches[0];
+        }
+
+        if (! str_contains($normalizedCandidate, '/')) {
+            $basenameMatches = array_values(array_filter(
+                $files,
+                static fn (string $path): bool => Str::lower(basename($path)) === Str::lower($normalizedCandidate),
+            ));
+            if (count($basenameMatches) === 1) {
+                return $basenameMatches[0];
+            }
+            $suffixMatches = $basenameMatches;
+        }
+
+        if (count($suffixMatches) > 1) {
+            throw new EmpyPlanningException(
+                'برای «'.$candidate.'» چند فایل پیدا شد؛ مسیر کامل را وارد کنید: '.implode('، ', $suffixMatches),
+                'target_ambiguous',
+            );
+        }
+
+        throw new EmpyPlanningException(
+            'فایل «'.$candidate.'» در پروژه پیدا نشد. مسیر فایل را مطابق ZIP وارد کنید.',
+            'target_not_found',
+        );
     }
 
     /** @return list<string> */

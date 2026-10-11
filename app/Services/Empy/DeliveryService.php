@@ -34,7 +34,11 @@ final class DeliveryService
         if ($zip->open($absoluteZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             throw new EmpyVerificationException('Delivery ZIP could not be opened.', 'delivery_failed');
         }
-        $prefix = Str::slug($project->name) ?: 'project';
+        $configuredPrefix = trim((string) config('empy.delivery_prefix', ''));
+        $prefix = $configuredPrefix === '' ? '' : $this->paths->normalize($configuredPrefix);
+        $sourceRoot = filter_var(config('empy.delivery_strip_root', true), FILTER_VALIDATE_BOOL)
+            ? $this->singleWrapperPrefix($root)
+            : null;
         $manifest = [];
         try {
             $iterator = new RecursiveIteratorIterator(
@@ -48,15 +52,19 @@ final class DeliveryService
                 if ($this->excluded($relative)) {
                     continue;
                 }
+                if ($sourceRoot !== null) {
+                    $relative = substr($relative, strlen($sourceRoot) + 1);
+                }
                 $safe = $this->paths->normalize($relative);
-                $zipPath = $prefix.'/'.$safe;
+                $zipPath = $prefix === '' ? $safe : $prefix.'/'.$safe;
                 if (! $zip->addFile($file->getPathname(), $zipPath)) {
                     throw new EmpyVerificationException("Could not add {$safe} to delivery ZIP.", 'delivery_failed');
                 }
                 $manifest[] = ['path' => $safe, 'sha256' => hash_file('sha256', $file->getPathname()), 'size' => $file->getSize()];
             }
             sort($manifest);
-            $zip->addFromString($prefix.'/EMPy-MANIFEST.json', json_encode([
+            $manifestPath = $prefix === '' ? 'EMPy-MANIFEST.json' : $prefix.'/EMPy-MANIFEST.json';
+            $zip->addFromString($manifestPath, json_encode([
                 'project' => $project->name,
                 'ticket_id' => $ticket->id,
                 'files' => $manifest,
@@ -85,7 +93,7 @@ final class DeliveryService
             'path' => $deliveryPath,
             'sha256' => hash_file('sha256', $absoluteZip),
             'size' => filesize($absoluteZip) ?: 0,
-            'manifest' => ['root' => $prefix, 'files' => $manifest],
+            'manifest' => ['root' => $prefix === '' ? '.' : $prefix, 'files' => $manifest],
         ]);
         $ticket->update(['status' => 'delivered', 'result' => array_merge($ticket->result ?? [], ['artifact_id' => $artifact->id])]);
 
@@ -103,5 +111,38 @@ final class DeliveryService
 
         return $basename === '.env' || str_starts_with($basename, '.env.')
             || str_starts_with($normalized, 'storage/logs/');
+    }
+
+    private function singleWrapperPrefix(string $root): ?string
+    {
+        $topLevel = [];
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+        );
+        foreach ($iterator as $file) {
+            if (! $file->isFile() || $file->isLink()) {
+                continue;
+            }
+            $relative = ltrim(str_replace('\\', '/', substr($file->getPathname(), strlen($root))), '/');
+            if ($this->excluded($relative)) {
+                continue;
+            }
+            $parts = explode('/', $relative, 2);
+            $topLevel[$parts[0]] = true;
+        }
+        if (count($topLevel) !== 1) {
+            return null;
+        }
+
+        $prefix = array_key_first($topLevel);
+        if (! is_string($prefix) || in_array(strtolower($prefix), [
+            'app', 'bootstrap', 'config', 'database', 'dist', 'node_modules',
+            'public', 'public_html', 'resources', 'routes', 'src', 'storage',
+            'tests', 'vendor',
+        ], true)) {
+            return null;
+        }
+
+        return $prefix;
     }
 }

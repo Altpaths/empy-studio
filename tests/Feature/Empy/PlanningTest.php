@@ -62,6 +62,41 @@ class PlanningTest extends TestCase
         }
     }
 
+    public function test_explicit_basename_resolves_a_unique_nested_zip_path(): void
+    {
+        Storage::fake('local');
+        $project = app(ProjectImportService::class)->import($this->archive([
+            'demo-site/index.html' => '<main>Home</main>',
+        ]), 'site');
+        $ticket = Ticket::create([
+            'project_id' => $project->id,
+            'title' => 'Change homepage',
+            'request_text' => 'Change index.html heading',
+        ]);
+
+        $plan = app(TicketPlanner::class)->plan($ticket);
+
+        $this->assertSame('demo-site/index.html', $plan['nodes'][0]['writer']);
+    }
+
+    public function test_ambiguous_basename_requires_the_full_path(): void
+    {
+        Storage::fake('local');
+        $project = app(ProjectImportService::class)->import($this->archive([
+            'first/index.html' => '<main>First</main>',
+            'second/index.html' => '<main>Second</main>',
+        ]), 'site');
+        $ticket = Ticket::create([
+            'project_id' => $project->id,
+            'title' => 'Change homepage',
+            'request_text' => 'Change index.html heading',
+        ]);
+
+        $this->expectException(EmpyPlanningException::class);
+        $this->expectExceptionMessage('چند فایل پیدا شد');
+        app(TicketPlanner::class)->plan($ticket);
+    }
+
     public function test_validator_rejects_duplicate_writers(): void
     {
         Storage::fake('local');

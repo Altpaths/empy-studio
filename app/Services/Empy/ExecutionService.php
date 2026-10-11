@@ -44,8 +44,9 @@ final class ExecutionService
                 'payload' => $context['stats'],
             ]);
             foreach ($plan['nodes'] as $node) {
+                $nodeItems = $context['items_by_node'][$node['id']] ?? [];
                 $providerRun = $this->providers->execute([
-                    'messages' => $this->messages($ticket, $node, $context['items']),
+                    'messages' => $this->messages($ticket, $node, $nodeItems),
                     'workspace_path' => Storage::disk($ticket->project->source_disk)->path($ticket->project->source_path),
                 ]);
                 $providers[] = $providerRun->provider;

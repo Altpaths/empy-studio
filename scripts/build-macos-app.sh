@@ -177,9 +177,13 @@ set_env() {
 
 set_env APP_ENV local
 set_env APP_URL http://127.0.0.1:18765
+set_env APP_STORAGE_PATH "$DATA_ROOT/storage"
 set_env DB_CONNECTION sqlite
 set_env DB_DATABASE "$DATA_ROOT/database.sqlite"
-set_env EMPY_PROVIDER_ORDER codex,ollama,openai_compatible
+if ! grep -q '^EMPY_PROVIDER_ORDER=' "$ENV_FILE" 2>/dev/null; then
+    set_env EMPY_PROVIDER_ORDER codex,gemini,ollama,openai_compatible
+fi
+set_env EMPY_VERSION "__EMPY_VERSION__"
 if [ -x "$RUNTIME/codex" ]; then set_env EMPY_CODEX_BIN "$RUNTIME/codex"; fi
 
 PHP="$RUNTIME/php"
@@ -190,9 +194,11 @@ cd "$APP_ROOT"
 touch "$DATA_ROOT/database.sqlite"
 export APP_ENV=local
 export APP_KEY=$(sed -n 's/^APP_KEY=//p' "$ENV_FILE" | tail -1)
+export APP_STORAGE_PATH="$DATA_ROOT/storage"
 export DB_CONNECTION=sqlite
 export DB_DATABASE="$DATA_ROOT/database.sqlite"
-export EMPY_PROVIDER_ORDER=codex,ollama,openai_compatible
+export EMPY_PROVIDER_ORDER=$(sed -n 's/^EMPY_PROVIDER_ORDER=//p' "$ENV_FILE" | tail -1)
+export EMPY_VERSION=$(sed -n 's/^EMPY_VERSION=//p' "$ENV_FILE" | tail -1)
 export EMPY_CODEX_BIN="${RUNTIME}/codex"
 
 MIGRATION_LOG="$DATA_ROOT/migrate.log"
@@ -219,6 +225,7 @@ fi
 open "http://127.0.0.1:${PORT}"
 LAUNCHER
 chmod 755 "$CONTENTS/MacOS/Empy Studio"
+sed -i '' "s/__EMPY_VERSION__/$VERSION/g" "$CONTENTS/MacOS/Empy Studio"
 
 if command -v xattr >/dev/null 2>&1; then
     # Finder provenance/resource-fork metadata makes an otherwise valid

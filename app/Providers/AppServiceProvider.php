@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Services\Empy\CodexCliProvider;
+use App\Services\Empy\GeminiProvider;
 use App\Services\Empy\OllamaProvider;
 use App\Services\Empy\OpenAiCompatibleProvider;
 use App\Services\Empy\ProviderManager;
@@ -15,6 +16,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(ProviderManager::class, static function (): ProviderManager {
             $adapters = [
                 'codex' => new CodexCliProvider,
+                'gemini' => new GeminiProvider,
                 'ollama' => new OllamaProvider,
                 'openai_compatible' => new OpenAiCompatibleProvider,
             ];

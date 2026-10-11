@@ -38,9 +38,23 @@ final class ProviderManager
 
         $code = $configured === [] ? 'provider_unavailable' : 'all_providers_failed';
         $message = $configured === []
-            ? 'Provider آماده نیست: هیچ موتور مدلی فعال نیست. اتصال ChatGPT/Codex، Ollama یا یک endpoint سازگار را فعال کنید.'
-            : 'همهٔ Providerهای تنظیم‌شده شکست خوردند؛ جزئیات تلاش‌ها ثبت شده است.';
+            ? 'Provider آماده نیست: هیچ موتور مدلی فعال نیست. اتصال Codex، Gemini، Ollama یا یک endpoint سازگار را در تنظیمات فعال کنید.'
+            : 'همهٔ Providerهای تنظیم‌شده شکست خوردند: '.$this->failureSummary($attempts);
         throw new EmpyProviderException($message, $code, $attempts);
+    }
+
+    /** @param list<array<string, mixed>> $attempts */
+    private function failureSummary(array $attempts): string
+    {
+        $failures = array_values(array_filter($attempts, static fn (array $attempt): bool => ($attempt['status'] ?? null) === 'failed'));
+        if ($failures === []) {
+            return 'هیچ تلاش قابل اجرایی ثبت نشد.';
+        }
+
+        return implode('؛ ', array_map(
+            static fn (array $attempt): string => (string) ($attempt['provider'] ?? 'unknown').' → '.(string) ($attempt['reason'] ?? 'unknown'),
+            $failures,
+        )).'.';
     }
 
     /** @return list<string> */

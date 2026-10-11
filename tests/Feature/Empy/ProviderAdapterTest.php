@@ -4,6 +4,7 @@ namespace Tests\Feature\Empy;
 
 use App\Exceptions\EmpyProviderException;
 use App\Services\Empy\CodexCliProvider;
+use App\Services\Empy\GeminiProvider;
 use App\Services\Empy\OllamaProvider;
 use App\Services\Empy\OpenAiCompatibleProvider;
 use App\Services\Empy\ProviderManager;
@@ -72,6 +73,47 @@ SH
         $this->assertSame('ollama', $run->provider);
         $this->assertSame('index.html', $run->response->files[0]['path']);
         $this->assertSame(12, $run->response->usage['prompt_tokens']);
+    }
+
+    public function test_gemini_adapter_parses_structured_json_and_usage(): void
+    {
+        config()->set('empy.gemini.api_key', 'test-key');
+        config()->set('empy.gemini.model', 'gemini-test');
+        config()->set('empy.gemini.base_url', 'https://gemini.test/v1beta');
+        Http::fake([
+            'https://gemini.test/v1beta/models/gemini-test:generateContent' => Http::response([
+                'candidates' => [[
+                    'content' => ['parts' => [['text' => '{"summary":"gemini","files":[{"path":"index.html","content":"ok"}]}']]],
+                ]],
+                'usageMetadata' => ['promptTokenCount' => 14, 'candidatesTokenCount' => 8, 'totalTokenCount' => 22],
+            ], 200),
+        ]);
+
+        $response = (new GeminiProvider)->execute([
+            'messages' => [
+                ['role' => 'system', 'content' => 'Return JSON.'],
+                ['role' => 'user', 'content' => 'Change the assigned file.'],
+            ],
+        ]);
+
+        $this->assertSame('index.html', $response->files[0]['path']);
+        $this->assertSame(14, $response->usage['prompt_tokens']);
+        Http::assertSent(fn ($request): bool => $request->hasHeader('x-goog-api-key', 'test-key'));
+    }
+
+    public function test_gemini_quota_failure_is_classified_for_fallback(): void
+    {
+        config()->set('empy.gemini.api_key', 'test-key');
+        config()->set('empy.gemini.model', 'gemini-test');
+        config()->set('empy.gemini.base_url', 'https://gemini.test/v1beta');
+        Http::fake(['https://gemini.test/v1beta/models/gemini-test:generateContent' => Http::response([], 429)]);
+
+        try {
+            (new GeminiProvider)->execute(['messages' => [['role' => 'user', 'content' => 'Change it.']]]);
+            $this->fail('Expected a quota failure.');
+        } catch (EmpyProviderException $exception) {
+            $this->assertSame('provider_quota', $exception->errorCode);
+        }
     }
 
     public function test_manager_records_failed_provider_then_uses_the_next_configured_adapter(): void

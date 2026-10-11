@@ -8,7 +8,9 @@
         <label for="name">نام اختیاری پروژه</label>
         <input id="name" name="name" value="{{ old('name') }}" placeholder="مثلاً سایت اصلی">
         <label for="archive">فایل ZIP پروژه</label>
-        <input id="archive" type="file" name="archive" accept=".zip" required>
+        <input id="archive" type="file" name="archive" accept=".zip" required
+            oninvalid="this.setCustomValidity('لطفاً ابتدا فایل ZIP پروژه را انتخاب کنید.')"
+            oninput="this.setCustomValidity('')">
         @error('archive') <p class="flash error">{{ $message }}</p> @enderror
         <div class="actions"><button type="submit">وارد کردن پروژه</button></div>
     </form>

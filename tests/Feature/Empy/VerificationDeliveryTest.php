@@ -57,10 +57,10 @@ class VerificationDeliveryTest extends TestCase
         for ($index = 0; $index < $zip->numFiles; $index++) {
             $names[] = $zip->getNameIndex($index);
         }
-        $this->assertContains('demo-site/index.html', $names);
-        $this->assertContains('demo-site/public/app.css', $names);
-        $this->assertNotContains('demo-site/.env', $names);
-        $this->assertContains('demo-site/EMPy-MANIFEST.json', $names);
+        $this->assertContains('index.html', $names);
+        $this->assertContains('public/app.css', $names);
+        $this->assertNotContains('.env', $names);
+        $this->assertContains('EMPy-MANIFEST.json', $names);
         $zip->close();
         $this->assertSame($artifact->sha256, hash_file('sha256', Storage::disk('local')->path($artifact->path)));
     }
@@ -96,6 +96,41 @@ class VerificationDeliveryTest extends TestCase
         $this->assertSame(['public/index.php'], $verification['changed_files']);
         $this->assertSame('php_syntax', $verification['checks'][1]['check']);
         $this->assertTrue($verification['checks'][1]['passed']);
+    }
+
+    public function test_single_archive_wrapper_is_removed_for_directadmin_delivery(): void
+    {
+        Storage::fake('local');
+        $project = app(ProjectImportService::class)->import($this->archive([
+            'demo-site/index.html' => '<main>Home</main>',
+        ]), 'Demo Site');
+        $ticket = Ticket::create([
+            'project_id' => $project->id,
+            'title' => 'Update wrapped home',
+            'request_text' => 'Change index.html heading',
+        ]);
+        app(TicketPlanner::class)->plan($ticket);
+        (new ExecutionService(
+            app(ContextLedger::class),
+            new ProviderManager([new VerificationFakeProvider(new ProviderResponse([
+                ['path' => 'demo-site/index.html', 'content' => '<main>Updated</main>'],
+            ], 'updated'))]),
+            app(PatchApplier::class),
+        ))->execute($ticket->fresh());
+        app(VerificationService::class)->verify($ticket->fresh());
+
+        $artifact = app(DeliveryService::class)->deliver($ticket->fresh());
+        $zip = new ZipArchive;
+        $this->assertTrue($zip->open(Storage::disk('local')->path($artifact->path)));
+        $names = [];
+        for ($index = 0; $index < $zip->numFiles; $index++) {
+            $names[] = $zip->getNameIndex($index);
+        }
+        $zip->close();
+
+        $this->assertContains('index.html', $names);
+        $this->assertNotContains('demo-site/index.html', $names);
+        $this->assertContains('EMPy-MANIFEST.json', $names);
     }
 
     /** @param array<string, string> $files */

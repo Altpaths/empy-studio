@@ -43,7 +43,16 @@ final class OpenAiCompatibleProvider implements ProviderAdapter
             throw new EmpyProviderException('OpenAI-compatible provider could not be reached.', 'provider_transport');
         }
         if (! $response->successful()) {
-            throw new EmpyProviderException('OpenAI-compatible provider returned HTTP '.$response->status().'.', 'provider_http');
+            $status = $response->status();
+            $code = in_array($status, [401, 403], true)
+                ? 'provider_auth'
+                : ($status === 429 ? 'provider_quota' : 'provider_http');
+            throw new EmpyProviderException(
+                $code === 'provider_quota'
+                    ? 'OpenAI-compatible provider quota or rate limit was reached; trying the next configured provider.'
+                    : 'OpenAI-compatible provider returned HTTP '.$status.'.',
+                $code,
+            );
         }
         $content = data_get($response->json(), 'choices.0.message.content');
         if (! is_string($content)) {

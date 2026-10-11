@@ -109,7 +109,7 @@ class TicketController extends Controller
     private function executionError(Ticket $ticket): string
     {
         return match ($ticket->failure_code) {
-            'provider_unavailable' => 'Provider آماده نیست: هیچ موتور مدلی فعال نیست. اتصال ChatGPT/Codex، Ollama یا یک endpoint سازگار را فعال کنید.',
+            'provider_unavailable' => 'Provider آماده نیست: هیچ موتور مدلی فعال نیست. اتصال Codex، Gemini، Ollama یا یک endpoint سازگار را فعال کنید.',
             'all_providers_failed' => 'همهٔ Providerهای تنظیم‌شده شکست خوردند؛ جزئیات تلاش‌ها در گزارش همین Ticket ثبت شده است.',
             'no_project_change' => 'هیچ فایل پروژه‌ای تغییر نکرد؛ برنامه همان گراف را کورکورانه تکرار نکرده است.',
             'out_of_scope_write' => 'Provider خواست خارج از فایل مالک بنویسد؛ تغییر برای حفاظت از پروژه rollback شد.',

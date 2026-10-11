@@ -38,7 +38,13 @@ final class OllamaProvider implements ProviderAdapter
             throw new EmpyProviderException('Ollama could not be reached.', 'provider_transport');
         }
         if (! $response->successful()) {
-            throw new EmpyProviderException('Ollama returned HTTP '.$response->status().'.', 'provider_http');
+            $status = $response->status();
+            throw new EmpyProviderException(
+                $status === 429
+                    ? 'Ollama rate limit was reached; trying the next configured provider.'
+                    : 'Ollama returned HTTP '.$status.'.',
+                $status === 429 ? 'provider_quota' : 'provider_http',
+            );
         }
 
         $content = data_get($response->json(), 'message.content');

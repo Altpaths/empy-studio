@@ -101,6 +101,33 @@ class ExecutionTest extends TestCase
         $this->assertSame('unchanged', Storage::disk('local')->get($project->source_path.'/secret.txt'));
     }
 
+    public function test_each_agent_receives_only_its_own_context_slice(): void
+    {
+        Storage::fake('local');
+        $project = app(ProjectImportService::class)->import($this->archive([
+            'first.html' => '<main>First</main>',
+            'second.html' => '<main>Second</main>',
+        ]), 'site');
+        $ticket = Ticket::create([
+            'project_id' => $project->id,
+            'title' => 'Change two pages',
+            'request_text' => 'Change first.html and second.html headings',
+        ]);
+        app(TicketPlanner::class)->plan($ticket);
+        $provider = new ContextRecordingProvider;
+
+        $run = $this->executor(new ProviderManager([$provider]))->execute($ticket->fresh());
+
+        $this->assertSame('succeeded', $run->status);
+        $this->assertCount(2, $provider->requests);
+        $this->assertStringContainsString('first.html', $provider->requests[0]['messages'][1]['content']);
+        $this->assertStringNotContainsString('Second', $provider->requests[0]['messages'][1]['content']);
+        $this->assertStringContainsString('second.html', $provider->requests[1]['messages'][1]['content']);
+        $this->assertStringNotContainsString('First', $provider->requests[1]['messages'][1]['content']);
+        $this->assertSame(2, $run->context_stats['nodes']);
+        $this->assertGreaterThan(0, $run->context_stats['saved_prompt_tokens']);
+    }
+
     private function executor(ProviderManager $providers): ExecutionService
     {
         return new ExecutionService(
@@ -147,5 +174,33 @@ final class FakeProvider implements ProviderAdapter
         $this->requests[] = $request;
 
         return $this->response;
+    }
+}
+
+final class ContextRecordingProvider implements ProviderAdapter
+{
+    /** @var list<array<string, mixed>> */
+    public array $requests = [];
+
+    private int $index = 0;
+
+    public function id(): string
+    {
+        return 'context-recording';
+    }
+
+    public function configured(): bool
+    {
+        return true;
+    }
+
+    public function execute(array $request): ProviderResponse
+    {
+        $this->requests[] = $request;
+        $path = $this->index++ === 0 ? 'first.html' : 'second.html';
+
+        return new ProviderResponse([
+            ['path' => $path, 'content' => '<main>Updated</main>'],
+        ], 'Updated');
     }
 }
