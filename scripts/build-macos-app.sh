@@ -105,6 +105,10 @@ rm -f "$seen" "$queue"
 cat > "$RUNTIME/php.ini" <<'INI'
 date.timezone=UTC
 memory_limit=512M
+upload_max_filesize=110M
+post_max_size=120M
+max_input_time=300
+max_execution_time=300
 display_errors=0
 log_errors=1
 error_log=/dev/stderr

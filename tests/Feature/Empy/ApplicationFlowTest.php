@@ -17,7 +17,13 @@ class ApplicationFlowTest extends TestCase
     public function test_dashboard_and_import_flow_are_available_without_a_provider(): void
     {
         Storage::fake('local');
-        $this->get('/')->assertOk()->assertSee('پروژهٔ جدید');
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('پروژهٔ جدید')
+            ->assertSee('project-import-form')
+            ->assertSee('آن را در Downloads کپی کنید', false)
+            ->assertSee('در حال بررسی خوانا بودن فایل', false)
+            ->assertSee('ارسال فایل بیش از ۹۰ ثانیه', false);
 
         $response = $this->post('/projects', [
             'name' => 'Flow Site',

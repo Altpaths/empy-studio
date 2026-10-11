@@ -26,6 +26,12 @@ class ProjectController extends Controller
         $data = $request->validate([
             'name' => ['nullable', 'string', 'max:120'],
             'archive' => ['required', 'file', 'mimes:zip', 'max:102400'],
+        ], [
+            'archive.required' => 'لطفاً یک فایل ZIP انتخاب کنید.',
+            'archive.uploaded' => 'بارگذاری فایل ناقص شد؛ اتصال فایل را بررسی کنید و دوباره تلاش کنید.',
+            'archive.file' => 'فایل انتخاب‌شده قابل خواندن نیست.',
+            'archive.mimes' => 'فایل انتخاب‌شده ZIP نیست.',
+            'archive.max' => 'حجم فایل از سقف امن ۱۰۰ مگابایت بیشتر است.',
         ]);
         try {
             $project = $imports->import($request->file('archive'), $data['name'] ?? null);
