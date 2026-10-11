@@ -71,12 +71,17 @@ final class ProjectIndexer
 
         usort($files, static fn (array $left, array $right): int => strcmp($left['path'], $right['path']));
 
+        $frameworks = array_values(array_unique($frameworks));
+        $entryPoints = array_values(array_unique($entryPoints));
+        sort($frameworks);
+        sort($entryPoints);
+
         return [
             'files' => $files,
             'total_files' => count($files),
             'total_bytes' => $totalBytes,
-            'frameworks' => array_values(array_unique($frameworks)),
-            'entry_points' => array_values(array_unique($entryPoints)),
+            'frameworks' => $frameworks,
+            'entry_points' => $entryPoints,
         ];
     }
 
