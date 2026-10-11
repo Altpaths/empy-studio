@@ -12,6 +12,14 @@ class ProjectImportTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_projects_collection_url_returns_the_dashboard(): void
+    {
+        $response = $this->get('/projects');
+
+        $response->assertOk();
+        $response->assertSee('پروژهٔ جدید');
+    }
+
     public function test_import_isolated_project_builds_manifest_without_unrelated_files(): void
     {
         $archive = $this->archive([
