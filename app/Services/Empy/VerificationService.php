@@ -14,7 +14,11 @@ final class VerificationService
     /** @return array{changed_files: list<string>, checks: list<array<string, mixed>>, verified_at: string} */
     public function verify(Ticket $ticket): array
     {
-        if ($ticket->status !== 'executed' || ! is_array($ticket->result)) {
+        $retryableVerificationFailure = $ticket->status === 'failed'
+            && $ticket->failure_code === 'verification_error'
+            && is_array($ticket->result)
+            && ($ticket->result['changed_files'] ?? []) !== [];
+        if (($ticket->status !== 'executed' && ! $retryableVerificationFailure) || ! is_array($ticket->result)) {
             throw new EmpyVerificationException('Ticket must finish execution before verification.', 'execution_required');
         }
         $project = $ticket->project;
@@ -61,7 +65,8 @@ final class VerificationService
             }
             $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
             if ($extension === 'php') {
-                $process = Process::run(['php', '-l', $absolute]);
+                $process = new Process(['php', '-l', $absolute]);
+                $process->run();
                 $checks[] = ['path' => $path, 'check' => 'php_syntax', 'passed' => $process->isSuccessful()];
                 if (! $process->isSuccessful()) {
                     throw new EmpyVerificationException("PHP syntax verification failed for {$path}.", 'syntax_failed');
@@ -80,7 +85,12 @@ final class VerificationService
             'checks' => $checks,
             'verified_at' => now()->toIso8601String(),
         ];
-        $ticket->update(['status' => 'verified', 'result' => array_merge($ticket->result, ['verification' => $result])]);
+        $ticket->update([
+            'status' => 'verified',
+            'result' => array_merge($ticket->result, ['verification' => $result]),
+            'failure_code' => null,
+            'failure_detail' => null,
+        ]);
 
         return $result;
     }

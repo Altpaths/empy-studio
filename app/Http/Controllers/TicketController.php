@@ -67,9 +67,20 @@ class TicketController extends Controller
 
             return back()->with('error', 'Verification شکست خورد: '.$exception->getMessage());
         } catch (\Throwable $exception) {
-            $ticket->update(['status' => 'failed', 'failure_code' => 'verification_error', 'failure_detail' => $exception->getMessage()]);
+            $result = is_array($ticket->result) ? $ticket->result : [];
+            $ticket->update([
+                'status' => 'failed',
+                'failure_code' => 'verification_error',
+                'failure_detail' => 'بررسی فنی کامل نشد؛ فایل‌های پروژه دست‌نخورده مانده‌اند و می‌توانید Verification را دوباره اجرا کنید.',
+                'result' => array_merge($result, [
+                    'verification_error' => [
+                        'message' => $exception->getMessage(),
+                        'recorded_at' => now()->toIso8601String(),
+                    ],
+                ]),
+            ]);
 
-            return back()->with('error', 'Verification انجام نشد: '.$exception->getMessage());
+            return back()->with('error', 'Verification کامل نشد؛ تغییرات اجرا نشده‌اند. دوباره Verification را اجرا کنید.');
         }
 
         return back()->with('success', 'Verification پاس شد: '.count($result['changed_files']).' فایل تغییر معتبر دارد. حالا ZIP را بسازید.');

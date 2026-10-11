@@ -40,6 +40,8 @@
                     <form method="post" action="{{ route('tickets.execute', $ticket) }}">@csrf<button type="submit">اجرای Agent</button></form>
                 @elseif($ticket->status === 'executed')
                     <form method="post" action="{{ route('tickets.verify', $ticket) }}">@csrf<button class="success" type="submit">Verification</button></form>
+                @elseif($ticket->status === 'failed' && $ticket->failure_code === 'verification_error' && is_array($ticket->result) && ($ticket->result['changed_files'] ?? []) !== [])
+                    <form method="post" action="{{ route('tickets.verify', $ticket) }}">@csrf<button class="success" type="submit">تلاش دوباره Verification</button></form>
                 @elseif($ticket->status === 'verified')
                     <form method="post" action="{{ route('tickets.deliver', $ticket) }}">@csrf<button class="success" type="submit">ساخت ZIP نهایی</button></form>
                 @elseif($ticket->status === 'delivered' && ($ticket->result['artifact_id'] ?? null))

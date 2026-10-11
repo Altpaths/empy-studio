@@ -8,6 +8,7 @@ use App\Services\Empy\DeliveryService;
 use App\Services\Empy\ExecutionService;
 use App\Services\Empy\PatchApplier;
 use App\Services\Empy\ProjectImportService;
+use App\Services\Empy\ProviderAdapter;
 use App\Services\Empy\ProviderManager;
 use App\Services\Empy\ProviderResponse;
 use App\Services\Empy\TicketPlanner;
@@ -37,7 +38,7 @@ class VerificationDeliveryTest extends TestCase
         app(TicketPlanner::class)->plan($ticket);
         $run = (new ExecutionService(
             app(ContextLedger::class),
-            new ProviderManager([new FakeProvider(new ProviderResponse([
+            new ProviderManager([new VerificationFakeProvider(new ProviderResponse([
                 ['path' => 'index.html', 'content' => '<main>Updated</main>'],
             ], 'updated'))]),
             app(PatchApplier::class),
@@ -64,6 +65,39 @@ class VerificationDeliveryTest extends TestCase
         $this->assertSame($artifact->sha256, hash_file('sha256', Storage::disk('local')->path($artifact->path)));
     }
 
+    public function test_php_changes_are_checked_with_the_process_instance_api(): void
+    {
+        Storage::fake('local');
+        $project = app(ProjectImportService::class)->import($this->archive([
+            'public/index.php' => '<?php echo "Before"; ?>',
+        ]), 'PHP Site');
+        $ticket = Ticket::create([
+            'project_id' => $project->id,
+            'title' => 'Update PHP home',
+            'request_text' => 'Change public/index.php while preserving the rest of the file.',
+        ]);
+        app(TicketPlanner::class)->plan($ticket);
+        (new ExecutionService(
+            app(ContextLedger::class),
+            new ProviderManager([new VerificationFakeProvider(new ProviderResponse([
+                ['path' => 'public/index.php', 'content' => '<?php echo "After"; ?>'],
+            ], 'updated'))]),
+            app(PatchApplier::class),
+        ))->execute($ticket->fresh());
+
+        $ticket->update([
+            'status' => 'failed',
+            'failure_code' => 'verification_error',
+            'failure_detail' => 'simulated transient checker failure',
+        ]);
+
+        $verification = app(VerificationService::class)->verify($ticket->fresh());
+
+        $this->assertSame(['public/index.php'], $verification['changed_files']);
+        $this->assertSame('php_syntax', $verification['checks'][1]['check']);
+        $this->assertTrue($verification['checks'][1]['passed']);
+    }
+
     /** @param array<string, string> $files */
     private function archive(array $files): string
     {
@@ -76,5 +110,25 @@ class VerificationDeliveryTest extends TestCase
         $zip->close();
 
         return $path;
+    }
+}
+
+final class VerificationFakeProvider implements ProviderAdapter
+{
+    public function __construct(private readonly ProviderResponse $response) {}
+
+    public function id(): string
+    {
+        return 'verification-fake';
+    }
+
+    public function configured(): bool
+    {
+        return true;
+    }
+
+    public function execute(array $request): ProviderResponse
+    {
+        return $this->response;
     }
 }

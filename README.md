@@ -7,11 +7,22 @@ that preserves the original project paths.
 This repository is the clean Laravel rebuild. Historical Empy releases and
 unrelated acceptance fixtures are not dependencies of this product.
 
-## Current state
+## Product workflow
 
-The implementation is being delivered in gated stages. See `.empy/` for the
-approved product contract and execution plan. A release is valid only when the
-tests and extraction smoke test pass.
+1. Import a project ZIP into an isolated workspace. The original archive and
+   unrelated test projects are never used as writable state.
+2. Enter one concrete Ticket. Empy indexes the project once, assigns each
+   writable path to one agent role, and stores a fingerprinted plan.
+3. Run the configured model provider. The provider returns structured file
+   content; Empy is the only writer and rejects out-of-scope paths.
+4. Verify the real diff and syntax. A transient checker failure can be retried
+   on the same Ticket without invoking the model again.
+5. Deliver a ZIP only after Verification passes. The archive contains the
+   project files and manifest, preserves paths, excludes secrets, and records a
+   SHA-256 checksum.
+
+The release process includes Laravel tests, lint and packaging checks, a clean
+macOS runtime smoke test, and a live Ticket from import through extracted ZIP.
 
 ## Development
 
@@ -35,4 +46,6 @@ paid services are never enabled silently.
 
 The desktop packaging script builds an application bundle with the Laravel
 runtime and a first-run launcher. It does not copy credentials into the bundle;
-the user's existing ChatGPT/Codex sign-in remains in the OS profile.
+the user's existing ChatGPT/Codex sign-in remains in the OS profile. The first
+launch creates the local database and storage directories; a one-time Codex
+sign-in is the only model setup when no session already exists.

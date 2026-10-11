@@ -3,6 +3,7 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 OUT=${1:-"$ROOT/dist"}
+VERSION=${EMPY_DESKTOP_VERSION:-1.1.1}
 APP="$OUT/Empy Studio.app"
 CONTENTS="$APP/Contents"
 RESOURCES="$CONTENTS/Resources"
@@ -46,6 +47,26 @@ queue="$RUNTIME/.queue"
 seen="$RUNTIME/.seen"
 printf '%s\n' "$RUNTIME/php" > "$queue"
 : > "$seen"
+
+# Homebrew libraries sometimes refer to a sibling dependency through
+# @loader_path/lib or @rpath. Once the library is moved into the single
+# runtime/lib directory those paths no longer point at the sibling. Resolve
+# those references from the builder's Homebrew prefixes, copy the dependency,
+# and rewrite the reference relative to the bundled library directory.
+find_homebrew_library() {
+    library_name=$1
+    for prefix in /opt/homebrew/opt /usr/local/opt; do
+        [ -d "$prefix" ] || continue
+        candidate=$(find -L "$prefix" -type f -name "$library_name" -print -quit 2>/dev/null || true)
+        if [ -n "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 while [ -s "$queue" ]; do
     file=$(head -n 1 "$queue")
     tail -n +2 "$queue" > "$queue.next"
@@ -54,16 +75,29 @@ while [ -s "$queue" ]; do
     grep -Fqx "$file" "$seen" 2>/dev/null && continue
     printf '%s\n' "$file" >> "$seen"
     otool -L "$file" 2>/dev/null | tail -n +2 | sed 's/^[[:space:]]*//' | sed 's/ (.*$//' | while IFS= read -r dep; do
+        [ -n "$dep" ] || continue
+        name=$(basename "$dep")
+        source="$dep"
         case "$dep" in
             /opt/homebrew/*|/usr/local/*)
-                [ -f "$dep" ] || continue
-                name=$(basename "$dep")
-                target="$RUNTIME/lib/$name"
-                if [ ! -f "$target" ]; then cp "$dep" "$target"; chmod 755 "$target"; fi
-                install_name_tool -change "$dep" "@loader_path/lib/$name" "$file" 2>/dev/null || true
-                printf '%s\n' "$target" >> "$queue"
+                [ -f "$source" ] || continue
                 ;;
+            @loader_path/lib/*|@loader_path/*|@rpath/*)
+                source=$(find_homebrew_library "$name" || true)
+                [ -n "$source" ] || continue
+                ;;
+            *) continue ;;
         esac
+
+        target="$RUNTIME/lib/$name"
+        if [ ! -f "$target" ]; then cp "$source" "$target"; chmod 755 "$target"; fi
+        if [ "$file" = "$RUNTIME/php" ]; then
+            reference="@loader_path/lib/$name"
+        else
+            reference="@loader_path/$name"
+        fi
+        install_name_tool -change "$dep" "$reference" "$file" 2>/dev/null || true
+        printf '%s\n' "$target" >> "$queue"
     done
 done
 rm -f "$seen" "$queue"
@@ -97,7 +131,7 @@ if [ "${EMPY_REQUIRE_CODEX:-false}" = "true" ] && [ ! -x "$RUNTIME/codex" ]; the
     exit 1
 fi
 
-cat > "$CONTENTS/Info.plist" <<'PLIST'
+cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -106,8 +140,8 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
     <key>CFBundleIdentifier</key><string>dev.altpaths.empy-studio</string>
     <key>CFBundleName</key><string>Empy Studio</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.1.0</string>
-    <key>CFBundleVersion</key><string>1.1.0</string>
+    <key>CFBundleShortVersionString</key><string>$VERSION</string>
+    <key>CFBundleVersion</key><string>$VERSION</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
 </dict></plist>
 PLIST
@@ -170,7 +204,7 @@ fi
 PORT=18765
 while /usr/bin/nc -z 127.0.0.1 "$PORT" >/dev/null 2>&1; do PORT=$((PORT + 1)); done
 export APP_URL="http://127.0.0.1:${PORT}"
-"$PHP" -c "$RUNTIME/php.ini" artisan serve --host=127.0.0.1 --port="$PORT" >> "$DATA_ROOT/server.log" 2>&1 &
+nohup "$PHP" -c "$RUNTIME/php.ini" artisan serve --host=127.0.0.1 --port="$PORT" >> "$DATA_ROOT/server.log" 2>&1 </dev/null &
 printf '%s\n' "$!" > "$DATA_ROOT/server.pid"
 ready=0
 for attempt in $(jot 30 1); do
@@ -195,14 +229,24 @@ if command -v xattr >/dev/null 2>&1; then
     done
 fi
 if command -v codesign >/dev/null 2>&1; then
+    # install_name_tool invalidates the original Homebrew signatures. These
+    # runtime binaries live under Resources rather than a nested framework, so
+    # codesign --deep does not reliably re-sign them. Sign and verify every
+    # Mach-O first, then sign and verify the enclosing app.
+    find "$RUNTIME" -type f -print | while IFS= read -r binary; do
+        if file "$binary" 2>/dev/null | grep -q 'Mach-O'; then
+            codesign --force --sign - "$binary" >/dev/null 2>&1
+            codesign --verify --strict "$binary" >/dev/null 2>&1
+        fi
+    done
     codesign --force --deep --sign - "$APP" >/dev/null 2>&1
     codesign --verify --deep --strict "$APP" >/dev/null 2>&1
 fi
 
 mkdir -p "$OUT"
-ARCHIVE="$OUT/empy-studio-macos-arm64-1.1.0.zip"
+ARCHIVE="$OUT/empy-studio-macos-arm64-$VERSION.zip"
 APP_NAME=$(basename "$APP")
 rm -f "$ARCHIVE"
 (cd "$OUT" && COPYFILE_DISABLE=1 zip -qry -X "$ARCHIVE" "$APP_NAME")
-shasum -a 256 "$OUT/empy-studio-macos-arm64-1.1.0.zip" > "$OUT/empy-studio-macos-arm64-1.1.0.zip.sha256"
-printf '%s\n' "$OUT/empy-studio-macos-arm64-1.1.0.zip"
+shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
+printf '%s\n' "$ARCHIVE"
