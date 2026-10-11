@@ -40,7 +40,7 @@
 <div class="wrap">
     <div class="row" style="margin-bottom: 20px">
         <a href="{{ route('dashboard') }}" style="text-decoration:none;color:inherit"><h1>Empy Studio</h1></a>
-        <span class="muted">مسیر ساده: پروژه ← Ticket ← اجرا ← Verification ← ZIP</span>
+        <span class="muted">نسخه {{ config('empy.version') }} · پروژه ← Ticket ← اجرا ← Verification ← ZIP</span>
     </div>
     @if(session('success')) <div class="flash success">{{ session('success') }}</div> @endif
     @if(session('error')) <div class="flash error">{{ session('error') }}</div> @endif

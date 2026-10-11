@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'version' => (string) env('EMPY_VERSION', '1.0.0'),
     'max_archive_bytes' => (int) env('EMPY_MAX_ARCHIVE_BYTES', 100 * 1024 * 1024),
     'max_file_bytes' => (int) env('EMPY_MAX_FILE_BYTES', 25 * 1024 * 1024),
     'provider_order' => array_values(array_filter(array_map(
