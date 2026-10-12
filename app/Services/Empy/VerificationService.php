@@ -24,7 +24,10 @@ final class VerificationService
         $project = $ticket->project;
         $root = Storage::disk($project->source_disk)->path($project->source_path);
         $current = $this->indexer->index($root);
-        $before = array_column($project->manifest['files'] ?? [], 'sha256', 'path');
+        $baseline = is_array($ticket->baseline_manifest)
+            ? $ticket->baseline_manifest
+            : ($project->manifest ?? []);
+        $before = array_column($baseline['files'] ?? [], 'sha256', 'path');
         $after = array_column($current['files'], 'sha256', 'path');
         $declared = array_fill_keys($ticket->result['changed_files'] ?? [], true);
         if ($declared === []) {
@@ -85,6 +88,13 @@ final class VerificationService
             'checks' => $checks,
             'verified_at' => now()->toIso8601String(),
         ];
+        $project->update([
+            'manifest' => $current,
+            'detected_stack' => [
+                'frameworks' => $current['frameworks'],
+                'entry_points' => $current['entry_points'],
+            ],
+        ]);
         $ticket->update([
             'status' => 'verified',
             'result' => array_merge($ticket->result, ['verification' => $result]),

@@ -13,14 +13,14 @@ class Ticket extends Model
 
     protected $fillable = [
         'project_id', 'title', 'request_text', 'status', 'plan',
-        'plan_fingerprint', 'result', 'failure_code', 'failure_detail',
+        'plan_fingerprint', 'baseline_manifest', 'result', 'failure_code', 'failure_detail',
         'attempts', 'started_at', 'finished_at',
     ];
 
     protected function casts(): array
     {
         return [
-            'plan' => 'array', 'result' => 'array', 'started_at' => 'datetime',
+            'plan' => 'array', 'baseline_manifest' => 'array', 'result' => 'array', 'started_at' => 'datetime',
             'finished_at' => 'datetime',
         ];
     }

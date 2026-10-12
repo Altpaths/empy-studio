@@ -78,6 +78,7 @@ final class TicketPlanner
         $ticket->update([
             'plan' => $plan,
             'plan_fingerprint' => $plan['fingerprint'],
+            'baseline_manifest' => $manifest,
             'status' => 'planned',
             'failure_code' => null,
             'failure_detail' => null,

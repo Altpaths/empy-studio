@@ -59,6 +59,7 @@ class PlanningTest extends TestCase
             $this->fail('The planner accepted an explicit target that is not in the manifest.');
         } catch (EmpyPlanningException $exception) {
             $this->assertSame('target_not_found', $exception->errorCode);
+            $this->assertNull($ticket->fresh()->baseline_manifest);
         }
     }
 
