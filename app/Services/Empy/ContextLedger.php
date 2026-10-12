@@ -27,6 +27,7 @@ final class ContextLedger
         $allItems = [];
         $totalNodeFiles = 0;
         $totalNodeTokens = 0;
+        $totalWorkspaceTokens = 0;
 
         foreach ($plan['nodes'] ?? [] as $node) {
             $nodeId = (string) ($node['id'] ?? 'unknown');
@@ -37,6 +38,7 @@ final class ContextLedger
                 static fn (array $item): int => (int) $item['estimated_tokens'],
                 $nodeItems,
             ));
+            $totalWorkspaceTokens += $this->workspaceTokens($nodeItems);
             foreach ($nodeItems as $item) {
                 $allItems[$item['path']] ??= $item;
             }
@@ -81,9 +83,23 @@ final class ContextLedger
                 'total_node_tokens' => $totalNodeTokens,
                 'naive_prompt_tokens' => $naivePromptTokens,
                 'saved_prompt_tokens' => max(0, $naivePromptTokens - $totalNodeTokens),
+                'inline_estimated_tokens' => $totalNodeTokens,
+                'workspace_estimated_tokens' => $totalWorkspaceTokens,
+                'workspace_saved_tokens' => max(0, $totalNodeTokens - $totalWorkspaceTokens),
                 'node_stats' => $nodeStats,
             ],
         ];
+    }
+
+    /** @param list<array<string, mixed>> $items */
+    private function workspaceTokens(array $items): int
+    {
+        return array_sum(array_map(static function (array $item): int {
+            $path = is_string($item['path'] ?? null) ? $item['path'] : '';
+            $hash = is_string($item['sha256'] ?? null) ? $item['sha256'] : '';
+
+            return (int) ceil((strlen($path) + strlen($hash) + 32) / 4);
+        }, $items));
     }
 
     /**

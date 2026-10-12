@@ -9,5 +9,6 @@ final readonly class ProviderRun
         public ProviderResponse $response,
         public string $provider,
         public array $attempts,
+        public string $contextMode = 'inline',
     ) {}
 }

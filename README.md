@@ -41,8 +41,12 @@ The default local mode can build a project index without a model provider. For
 the lowest-friction macOS setup, install/sign in to the Codex CLI with your
 ChatGPT account and leave `EMPY_PROVIDER_ORDER=codex,ollama,openai_compatible`.
 Empy invokes Codex in an ephemeral, read-only workspace and remains the only
-writer. Ollama and OpenAI-compatible endpoints are explicit fallback options;
-paid services are never enabled silently.
+writer. When Codex is used, the prompt contains only the assigned paths and
+their SHA-256 values; Codex reads those files from the mounted workspace. If a
+file changes after planning, the run stops safely instead of sending stale
+content to a fallback provider. Ollama and OpenAI-compatible endpoints are
+explicit inline-context fallback options; paid services are never enabled
+silently.
 
 The desktop packaging script builds an application bundle with the Laravel
 runtime and a first-run launcher. It does not copy credentials into the bundle;

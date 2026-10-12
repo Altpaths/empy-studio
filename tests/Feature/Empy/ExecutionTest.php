@@ -13,6 +13,7 @@ use App\Services\Empy\ProviderAdapter;
 use App\Services\Empy\ProviderManager;
 use App\Services\Empy\ProviderResponse;
 use App\Services\Empy\TicketPlanner;
+use App\Services\Empy\WorkspaceReadableProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -45,10 +46,44 @@ class ExecutionTest extends TestCase
         $this->assertSame(['index.html'], $ticket->fresh()->result['changed_files']);
         $this->assertSame('<main>Updated</main>', Storage::disk('local')->get($project->source_path.'/index.html'));
         $this->assertSame(1, $run->context_stats['unique_files']);
+        $this->assertSame('inline', $run->context_stats['mode']);
+        $this->assertSame('inline', $run->context_stats['provider_modes']['agent-1'] ?? null);
+        $this->assertGreaterThan(0, $run->context_stats['inline_estimated_tokens']);
+        $this->assertGreaterThan(0, $run->context_stats['workspace_estimated_tokens']);
+        $providerEvent = $run->events()->where('kind', 'provider_attempts')->firstOrFail();
+        $this->assertSame('inline', $providerEvent->payload['context_mode']);
         $this->assertSame(
             Storage::disk('local')->path($project->source_path),
             $provider->requests[0]['workspace_path'],
         );
+    }
+
+    public function test_workspace_read_provider_gets_metadata_only_and_records_the_savings(): void
+    {
+        Storage::fake('local');
+        $original = '<main>'.str_repeat('Home ', 80).'</main>';
+        $project = app(ProjectImportService::class)->import($this->archive([
+            'index.html' => $original,
+        ]), 'site');
+        $ticket = Ticket::create([
+            'project_id' => $project->id,
+            'title' => 'Change heading with workspace read',
+            'request_text' => 'Change index.html heading',
+        ]);
+        app(TicketPlanner::class)->plan($ticket);
+        $provider = new WorkspaceRecordingProvider;
+
+        $run = $this->executor(new ProviderManager([$provider]))->execute($ticket->fresh());
+
+        $this->assertSame('succeeded', $run->status);
+        $this->assertSame('workspace-read', $run->context_stats['mode']);
+        $this->assertSame('workspace-read', $run->context_stats['provider_modes']['agent-1']);
+        $this->assertGreaterThan(0, $run->context_stats['workspace_estimated_tokens']);
+        $this->assertLessThan($run->context_stats['inline_estimated_tokens'], $run->context_stats['workspace_estimated_tokens']);
+        $this->assertSame('workspace-read', $provider->requests[0]['context_mode']);
+        $this->assertStringContainsString('index.html', $provider->requests[0]['messages'][1]['content']);
+        $this->assertStringNotContainsString($original, $provider->requests[0]['messages'][1]['content']);
+        $this->assertStringContainsString('read from the assigned workspace only', $provider->requests[0]['messages'][1]['content']);
     }
 
     public function test_no_configured_provider_is_a_clear_failure_without_a_file_change(): void
@@ -121,6 +156,7 @@ class ExecutionTest extends TestCase
         $this->assertSame('succeeded', $run->status);
         $this->assertCount(2, $provider->requests);
         $this->assertStringContainsString('first.html', $provider->requests[0]['messages'][1]['content']);
+        $this->assertStringContainsString('<main>First</main>', $provider->requests[0]['messages'][1]['content']);
         $this->assertStringNotContainsString('Second', $provider->requests[0]['messages'][1]['content']);
         $this->assertStringContainsString('second.html', $provider->requests[1]['messages'][1]['content']);
         $this->assertStringNotContainsString('First', $provider->requests[1]['messages'][1]['content']);
@@ -202,5 +238,35 @@ final class ContextRecordingProvider implements ProviderAdapter
         return new ProviderResponse([
             ['path' => $path, 'content' => '<main>Updated</main>'],
         ], 'Updated');
+    }
+}
+
+final class WorkspaceRecordingProvider implements ProviderAdapter, WorkspaceReadableProvider
+{
+    /** @var list<array<string, mixed>> */
+    public array $requests = [];
+
+    public function id(): string
+    {
+        return 'workspace-recording';
+    }
+
+    public function configured(): bool
+    {
+        return true;
+    }
+
+    public function supportsWorkspaceRead(): bool
+    {
+        return true;
+    }
+
+    public function execute(array $request): ProviderResponse
+    {
+        $this->requests[] = $request;
+
+        return new ProviderResponse([
+            ['path' => 'index.html', 'content' => '<main>Workspace updated</main>'],
+        ], 'Updated through workspace read');
     }
 }

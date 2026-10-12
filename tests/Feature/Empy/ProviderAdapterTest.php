@@ -7,7 +7,10 @@ use App\Services\Empy\CodexCliProvider;
 use App\Services\Empy\GeminiProvider;
 use App\Services\Empy\OllamaProvider;
 use App\Services\Empy\OpenAiCompatibleProvider;
+use App\Services\Empy\ProviderAdapter;
 use App\Services\Empy\ProviderManager;
+use App\Services\Empy\ProviderResponse;
+use App\Services\Empy\WorkspaceReadableProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -50,6 +53,71 @@ SH
             $this->assertSame('<main>codex</main>', $response->files[0]['content']);
         } finally {
             @unlink($script);
+        }
+    }
+
+    public function test_codex_workspace_read_prompt_uses_only_allowlisted_metadata_and_ephemeral_runs(): void
+    {
+        $script = tempnam(sys_get_temp_dir(), 'empy-codex-workspace-');
+        $captureDirectory = sys_get_temp_dir().'/empy-codex-capture-'.bin2hex(random_bytes(6));
+        $workspace = sys_get_temp_dir().'/empy-codex-workspace-'.bin2hex(random_bytes(6));
+        $this->assertNotFalse($script);
+        $this->assertTrue(mkdir($captureDirectory, 0700, true));
+        $this->assertTrue(mkdir($workspace, 0700, true));
+        $workspaceContent = '<main>workspace</main>';
+        file_put_contents($workspace.'/index.html', $workspaceContent);
+        $workspaceHash = hash('sha256', $workspaceContent);
+        $scriptContents = str_replace('__CAPTURE__', $captureDirectory, <<<'SH'
+#!/bin/sh
+out=""
+previous=""
+for argument in "$@"; do
+  if [ "$previous" = "--output-last-message" ]; then out="$argument"; fi
+  previous="$argument"
+done
+capture="__CAPTURE__/$(basename "$(dirname "$out")").prompt"
+cat > "$capture"
+cat > "$out" <<'JSON'
+{"summary":"codex patch","files":[{"path":"index.html","content":"<main>codex</main>"}]}
+JSON
+exit 0
+SH
+        );
+        file_put_contents($script, $scriptContents);
+        chmod($script, 0700);
+        config()->set('empy.codex.enabled', true);
+        config()->set('empy.codex.binary', $script);
+        config()->set('empy.codex.timeout', 10);
+
+        try {
+            $manager = new ProviderManager([new CodexCliProvider]);
+            $request = [
+                'workspace_path' => $workspace,
+                'inline_messages' => [['role' => 'user', 'content' => 'INLINE SECRET FILE CONTENT']],
+                'workspace_messages' => [['role' => 'user', 'content' => 'Change the assigned file.']],
+                'workspace_allowlist' => [['path' => 'index.html', 'sha256' => $workspaceHash]],
+            ];
+
+            $first = $manager->execute($request);
+            $second = $manager->execute($request);
+
+            $this->assertSame('workspace-read', $first->contextMode);
+            $this->assertSame('workspace-read', $second->contextMode);
+            $this->assertCount(2, glob($captureDirectory.'/*.prompt') ?: []);
+            foreach (glob($captureDirectory.'/*.prompt') ?: [] as $promptPath) {
+                $prompt = (string) file_get_contents($promptPath);
+                $this->assertStringContainsString('index.html', $prompt);
+                $this->assertStringContainsString('sha256: '.$workspaceHash, $prompt);
+                $this->assertStringNotContainsString('INLINE SECRET FILE CONTENT', $prompt);
+            }
+        } finally {
+            @unlink($script);
+            foreach (glob($captureDirectory.'/*') ?: [] as $path) {
+                @unlink($path);
+            }
+            @rmdir($captureDirectory);
+            @unlink($workspace.'/index.html');
+            @rmdir($workspace);
         }
     }
 
@@ -146,6 +214,68 @@ SH
             $this->assertSame('provider_unavailable', $exception->errorCode);
             $this->assertCount(2, $exception->attempts);
             Http::assertNothingSent();
+        }
+    }
+
+    public function test_stale_workspace_context_stops_before_an_inline_fallback_can_use_old_bytes(): void
+    {
+        $stale = new class implements ProviderAdapter, WorkspaceReadableProvider
+        {
+            public function id(): string
+            {
+                return 'stale-workspace';
+            }
+
+            public function configured(): bool
+            {
+                return true;
+            }
+
+            public function supportsWorkspaceRead(): bool
+            {
+                return true;
+            }
+
+            public function execute(array $request): ProviderResponse
+            {
+                throw new EmpyProviderException('stale workspace', 'provider_workspace_stale');
+            }
+        };
+        $fallback = new class implements ProviderAdapter
+        {
+            public bool $called = false;
+
+            public function id(): string
+            {
+                return 'inline-fallback';
+            }
+
+            public function configured(): bool
+            {
+                return true;
+            }
+
+            public function execute(array $request): ProviderResponse
+            {
+                $this->called = true;
+
+                return new ProviderResponse([
+                    ['path' => 'index.html', 'content' => 'stale'],
+                ]);
+            }
+        };
+
+        try {
+            (new ProviderManager([$stale, $fallback]))->execute([
+                'inline_messages' => [['role' => 'user', 'content' => 'old bytes']],
+                'workspace_messages' => [['role' => 'user', 'content' => 'metadata']],
+                'workspace_allowlist' => [['path' => 'index.html', 'sha256' => str_repeat('a', 64)]],
+            ]);
+            $this->fail('Expected a stale workspace failure.');
+        } catch (EmpyProviderException $exception) {
+            $this->assertSame('provider_workspace_stale', $exception->errorCode);
+            $this->assertCount(1, $exception->attempts);
+            $this->assertFalse($fallback->called);
         }
     }
 }

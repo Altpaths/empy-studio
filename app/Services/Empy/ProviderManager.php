@@ -21,18 +21,34 @@ final class ProviderManager
                 continue;
             }
             $configured[] = $provider;
+            $contextMode = 'inline';
             try {
-                $response = $provider->execute($request);
-                $attempts[] = ['provider' => $provider->id(), 'status' => 'succeeded', 'reason' => 'completed'];
+                $providerRequest = $this->requestFor($provider, $request);
+                $contextMode = (string) ($providerRequest['context_mode'] ?? 'inline');
+                $response = $provider->execute($providerRequest);
+                $attempts[] = [
+                    'provider' => $provider->id(),
+                    'status' => 'succeeded',
+                    'reason' => 'completed',
+                    'context_mode' => $contextMode,
+                ];
 
-                return new ProviderRun($response, $provider->id(), $attempts);
+                return new ProviderRun($response, $provider->id(), $attempts, $contextMode);
             } catch (EmpyProviderException $exception) {
                 $attempts[] = [
                     'provider' => $provider->id(),
                     'status' => 'failed',
                     'reason' => $exception->errorCode,
                     'message' => $exception->getMessage(),
+                    'context_mode' => $contextMode,
                 ];
+                // A workspace hash mismatch means the context was built from
+                // stale bytes. Falling back to an inline provider would send
+                // that stale content and could overwrite a newer user edit.
+                // Stop safely so the caller can rebuild the ticket context.
+                if ($exception->errorCode === 'provider_workspace_stale') {
+                    throw new EmpyProviderException($exception->getMessage(), $exception->errorCode, $attempts);
+                }
             }
         }
 
@@ -41,6 +57,23 @@ final class ProviderManager
             ? 'Provider آماده نیست: هیچ موتور مدلی فعال نیست. اتصال Codex، Gemini، Ollama یا یک endpoint سازگار را در تنظیمات فعال کنید.'
             : 'همهٔ Providerهای تنظیم‌شده شکست خوردند: '.$this->failureSummary($attempts);
         throw new EmpyProviderException($message, $code, $attempts);
+    }
+
+    /** @param array<string, mixed> $request @return array<string, mixed> */
+    private function requestFor(ProviderAdapter $provider, array $request): array
+    {
+        $workspaceRead = $provider instanceof WorkspaceReadableProvider
+            && $provider->supportsWorkspaceRead()
+            && array_key_exists('workspace_allowlist', $request);
+        $request['context_mode'] = $workspaceRead ? 'workspace-read' : 'inline';
+        if ($workspaceRead) {
+            $request['messages'] = $request['workspace_messages'] ?? $request['messages'] ?? [];
+        } else {
+            $request['messages'] = $request['inline_messages'] ?? $request['messages'] ?? [];
+        }
+        unset($request['inline_messages'], $request['workspace_messages']);
+
+        return $request;
     }
 
     /** @param list<array<string, mixed>> $attempts */

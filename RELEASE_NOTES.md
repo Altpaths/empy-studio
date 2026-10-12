@@ -1,4 +1,4 @@
-# Empy Studio Laravel 1.0.0
+# Empy Studio Laravel 1.1.8
 
 ## Delivered behavior
 
@@ -7,6 +7,11 @@
 - Builds a compact manifest with hashes, framework hints, and entry points.
 - Creates a one-writer-per-file plan before any provider call.
 - Sends only planned file context and records provider attempts and usage.
+- Uses an explicit workspace-read capability for Codex: only assigned paths and
+  hashes enter the prompt, while adapters without that capability retain the
+  inline fallback.
+- Stops on a stale workspace hash rather than routing old file bytes to another
+  provider.
 - Supports a signed-in local Codex CLI, local Ollama, and OpenAI-compatible
   endpoints with ordered fallback. Codex runs ephemeral and read-only; Empy
   remains the only writer.

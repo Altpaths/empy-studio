@@ -35,9 +35,11 @@ final class ExecutionService
         $run->events()->create(['kind' => 'run_started', 'message' => 'Execution started with a validated graph.']);
         $applied = [];
         $providers = [];
+        $contextModes = [];
         try {
             $context = $this->context->build($ticket->project, $plan);
-            $run->update(['context_stats' => $context['stats']]);
+            $contextStats = $context['stats'] + ['mode' => 'pending', 'provider_modes' => []];
+            $run->update(['context_stats' => $contextStats]);
             $run->events()->create([
                 'kind' => 'context_built',
                 'message' => 'Only unique planned files entered provider context.',
@@ -46,14 +48,29 @@ final class ExecutionService
             foreach ($plan['nodes'] as $node) {
                 $nodeItems = $context['items_by_node'][$node['id']] ?? [];
                 $providerRun = $this->providers->execute([
-                    'messages' => $this->messages($ticket, $node, $nodeItems),
+                    'inline_messages' => $this->messages($ticket, $node, $nodeItems, true),
+                    'workspace_messages' => $this->messages($ticket, $node, $nodeItems, false),
+                    'workspace_allowlist' => array_map(
+                        static fn (array $item): array => ['path' => $item['path'], 'sha256' => $item['sha256']],
+                        $nodeItems,
+                    ),
                     'workspace_path' => Storage::disk($ticket->project->source_disk)->path($ticket->project->source_path),
                 ]);
                 $providers[] = $providerRun->provider;
+                $contextModes[$node['id']] = $providerRun->contextMode;
+                $contextStats['provider_modes'][$node['id']] = $providerRun->contextMode;
+                $contextStats['mode'] = count(array_unique($contextModes)) === 1
+                    ? $providerRun->contextMode
+                    : 'mixed';
+                $run->update(['context_stats' => $contextStats]);
                 $run->events()->create([
                     'kind' => 'provider_attempts',
                     'message' => 'Provider routing completed for '.$node['id'].'.',
-                    'payload' => ['attempts' => $providerRun->attempts, 'provider' => $providerRun->provider],
+                    'payload' => [
+                        'attempts' => $providerRun->attempts,
+                        'provider' => $providerRun->provider,
+                        'context_mode' => $providerRun->contextMode,
+                    ],
                 ]);
                 $changes = $this->patches->apply($ticket->project, $node, $providerRun->response);
                 $applied = array_merge($applied, $changes);
@@ -67,7 +84,7 @@ final class ExecutionService
             $result = [
                 'changed_files' => array_values(array_unique(array_column($applied, 'path'))),
                 'providers' => array_values(array_unique($providers)),
-                'context_stats' => $context['stats'],
+                'context_stats' => $contextStats,
             ];
             $run->update(['status' => 'succeeded', 'provider' => implode(',', array_unique($providers)), 'finished_at' => Carbon::now()]);
             $run->events()->create(['kind' => 'run_succeeded', 'message' => 'Execution produced a file diff.', 'payload' => $result]);
@@ -87,9 +104,15 @@ final class ExecutionService
     }
 
     /** @param list<array<string, mixed>> $items @return list<array<string, string>> */
-    private function messages(Ticket $ticket, array $node, array $items): array
+    private function messages(Ticket $ticket, array $node, array $items, bool $includeContent): array
     {
-        $context = collect($items)->map(fn (array $item): string => "FILE: {$item['path']}\n{$item['content']}")->implode("\n\n---\n\n");
+        $context = collect($items)->map(function (array $item) use ($includeContent): string {
+            if (! $includeContent) {
+                return "FILE: {$item['path']}\nSHA256: {$item['sha256']} (read from the assigned workspace only)";
+            }
+
+            return "FILE: {$item['path']}\n{$item['content']}";
+        })->implode("\n\n---\n\n");
         $recoveryHint = is_string($ticket->plan['recovery_hint'] ?? null) ? "\nRecovery instruction: {$ticket->plan['recovery_hint']}" : '';
 
         return [

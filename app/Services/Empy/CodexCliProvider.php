@@ -11,7 +11,7 @@ use App\Exceptions\EmpyProviderException;
  * the only writer: the returned files still pass through PatchApplier and the
  * normal verification/delivery gates.
  */
-final class CodexCliProvider implements ProviderAdapter
+final class CodexCliProvider implements ProviderAdapter, WorkspaceReadableProvider
 {
     public function id(): string
     {
@@ -21,6 +21,11 @@ final class CodexCliProvider implements ProviderAdapter
     public function configured(): bool
     {
         return (bool) config('empy.codex.enabled', true) && $this->binary() !== null;
+    }
+
+    public function supportsWorkspaceRead(): bool
+    {
+        return true;
     }
 
     public function execute(array $request): ProviderResponse
@@ -33,6 +38,9 @@ final class CodexCliProvider implements ProviderAdapter
         }
         if ($workspace === '' || ! is_dir($workspace)) {
             throw new EmpyProviderException('Codex provider received an invalid project workspace.', 'provider_workspace');
+        }
+        if (($request['context_mode'] ?? null) === 'workspace-read') {
+            $this->validateWorkspaceAllowlist($workspace, $request['workspace_allowlist'] ?? []);
         }
 
         $directory = storage_path('framework/cache/empy-codex');
@@ -52,7 +60,7 @@ final class CodexCliProvider implements ProviderAdapter
         $stdoutPath = $runDirectory.'/stdout.log';
         $schema = $this->schema();
 
-        file_put_contents($promptPath, $this->prompt($request['messages'] ?? []));
+        file_put_contents($promptPath, $this->prompt($request));
         file_put_contents($schemaPath, json_encode($schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
         $command = [
@@ -173,9 +181,10 @@ final class CodexCliProvider implements ProviderAdapter
         ];
     }
 
-    /** @param list<array<string, mixed>> $messages */
-    private function prompt(array $messages): string
+    /** @param array<string, mixed> $request */
+    private function prompt(array $request): string
     {
+        $messages = is_array($request['messages'] ?? null) ? $request['messages'] : [];
         $parts = [];
         foreach ($messages as $message) {
             if (! is_array($message) || ! is_string($message['content'] ?? null)) {
@@ -185,7 +194,21 @@ final class CodexCliProvider implements ProviderAdapter
             $parts[] = "[$role]\n{$message['content']}";
         }
 
-        return implode("\n\n---\n\n", $parts)."\n\nProvider contract: use only the context above. Do not perform discovery, do not modify files, do not run commands, and return only the requested structured JSON patch. The assigned writer paths are the only paths that may appear in files. Include complete file contents and set context_summary to an empty string when there is nothing to add.\n";
+        $contract = 'Provider contract: use only the context above. Do not perform discovery, do not modify files, do not run commands, and return only the requested structured JSON patch. The assigned writer paths are the only paths that may appear in files. Include complete file contents and set context_summary to an empty string when there is nothing to add.';
+        if (($request['context_mode'] ?? null) === 'workspace-read') {
+            $allowlist = [];
+            foreach (($request['workspace_allowlist'] ?? []) as $entry) {
+                if (! is_array($entry) || ! is_string($entry['path'] ?? null)) {
+                    continue;
+                }
+                $hash = is_string($entry['sha256'] ?? null) ? $entry['sha256'] : 'unknown';
+                $allowlist[] = '- '.$entry['path'].' (sha256: '.$hash.')';
+            }
+            $allowlistText = $allowlist === [] ? '- No existing files are assigned for reading.' : implode("\n", $allowlist);
+            $contract .= " Workspace-read mode is active. You are running with --cd on the project workspace. Read only the following allowlisted files when needed; do not inspect, discover, or read any other path:\n{$allowlistText}\nUse the listed SHA-256 values to detect a stale workspace. This allowlist is scoped to this run only.";
+        }
+
+        return implode("\n\n---\n\n", $parts)."\n\n{$contract}\n";
     }
 
     /** @return array<string, int|float|null> */
@@ -246,5 +269,34 @@ final class CodexCliProvider implements ProviderAdapter
             }
         }
         @rmdir($directory);
+    }
+
+    private function validateWorkspaceAllowlist(string $workspace, mixed $allowlist): void
+    {
+        if (! is_array($allowlist)) {
+            throw new EmpyProviderException('Codex workspace-read allowlist is invalid.', 'provider_workspace');
+        }
+        $root = realpath($workspace);
+        if ($root === false) {
+            throw new EmpyProviderException('Codex provider received an invalid project workspace.', 'provider_workspace');
+        }
+        $rootPrefix = rtrim($root, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
+        foreach ($allowlist as $entry) {
+            if (! is_array($entry) || ! is_string($entry['path'] ?? null) || ! is_string($entry['sha256'] ?? null)) {
+                throw new EmpyProviderException('Codex workspace-read allowlist is invalid.', 'provider_workspace');
+            }
+            $relative = str_replace('\\', '/', trim($entry['path']));
+            if ($relative === '' || str_starts_with($relative, '/') || str_contains($relative, "\0") || preg_match('#(^|/)\.\.?(/|$)#', $relative) === 1) {
+                throw new EmpyProviderException('Codex workspace-read allowlist contains an unsafe path.', 'provider_workspace');
+            }
+            $absolute = realpath($rootPrefix.$relative);
+            if ($absolute === false || ! str_starts_with($absolute, $rootPrefix) || ! is_file($absolute) || is_link($rootPrefix.$relative)) {
+                throw new EmpyProviderException('Codex workspace-read allowlist contains an unreadable file.', 'provider_workspace');
+            }
+            $hash = hash_file('sha256', $absolute);
+            if (! is_string($hash) || ! hash_equals(strtolower($entry['sha256']), $hash)) {
+                throw new EmpyProviderException('The assigned workspace file changed before Codex could read it; replan this ticket.', 'provider_workspace_stale');
+            }
+        }
     }
 }
